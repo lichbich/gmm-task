@@ -1,0 +1,196 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { Lock, User as UserIcon, CheckCircle, Key, LogIn, Sparkles } from 'lucide-react';
+
+export const LoginModal: React.FC = () => {
+  const { authSession, login, setupFirstTimePassword } = useApp();
+
+  const [accountInput, setAccountInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // First-time setup state
+  const [isFirstTimeSetup, setIsFirstTimeSetup] = useState(false);
+  const [targetUserId, setTargetUserId] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  if (authSession) return null; // Already logged in
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    if (!accountInput.trim()) {
+      setErrorMsg('Vui lòng nhập tên tài khoản.');
+      return;
+    }
+
+    const res = login(accountInput, passwordInput);
+
+    if (!res.success) {
+      setErrorMsg(res.error || 'Đăng nhập thất bại.');
+      return;
+    }
+
+    if (res.firstTime && res.user) {
+      setIsFirstTimeSetup(true);
+      setTargetUserId(res.user.id);
+      setErrorMsg('');
+    }
+  };
+
+  const handleFirstTimeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    if (!newPassword || newPassword.length < 4) {
+      setErrorMsg('Mật khẩu phải có ít nhất 4 ký tự.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setErrorMsg('Xác nhận mật khẩu không trùng khớp.');
+      return;
+    }
+
+    const success = await setupFirstTimePassword(targetUserId, newPassword);
+    if (!success) {
+      setErrorMsg('Không thể lưu mật khẩu. Vui lòng thử lại.');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-100/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl text-slate-800 space-y-6 relative overflow-hidden">
+        {/* Top Glow Background */}
+        <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-200/40 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-violet-200/40 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 mx-auto flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-500/30">
+            G
+          </div>
+          <h2 className="text-xl font-bold text-slate-800 tracking-tight">
+            {isFirstTimeSetup ? 'Tạo Mật Khẩu Lần Đầu' : 'Đăng Nhập GMM Task System'}
+          </h2>
+          <p className="text-xs text-slate-500">
+            {isFirstTimeSetup
+              ? 'Tài khoản của bạn chưa có mật khẩu. Vui lòng tạo mật khẩu mới để đăng nhập các lần sau.'
+              : 'Nhập Account ID được Admin cấp để đăng nhập vào hệ thống.'}
+          </p>
+        </div>
+
+        {errorMsg && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 text-center font-medium">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Login Form */}
+        {!isFirstTimeSetup ? (
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
+                Tên Account (Username):
+              </label>
+              <div className="relative">
+                <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="VD: VuongNT, NhiHT, QuynhNV..."
+                  value={accountInput}
+                  onChange={(e) => setAccountInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
+                Mật Khẩu (Password):
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="password"
+                  placeholder="Nhập mật khẩu (Bỏ trống nếu là lần đầu)..."
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                💡 Nếu là lần đầu tiên đăng nhập, chỉ cần nhập Account ID rồi bấm Đăng nhập.
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2"
+            >
+              <LogIn className="w-4 h-4" />
+              Đăng Nhập
+            </button>
+          </form>
+        ) : (
+          /* First Time Password Setup Form */
+          <form onSubmit={handleFirstTimeSubmit} className="space-y-4">
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-700 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+              <span>
+                Xin chào <strong>{accountInput}</strong>! Vui lòng đặt mật khẩu mới cho tài khoản của bạn.
+              </span>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
+                Mật Khẩu Mới:
+              </label>
+              <div className="relative">
+                <Key className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="password"
+                  placeholder="Nhập mật khẩu mới..."
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
+                Xác Nhận Mật Khẩu Mới:
+              </label>
+              <div className="relative">
+                <CheckCircle className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="password"
+                  placeholder="Nhập lại mật khẩu mới..."
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Hoàn Tất & Đăng Nhập
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};
