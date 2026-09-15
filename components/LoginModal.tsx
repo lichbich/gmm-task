@@ -19,7 +19,7 @@ export const LoginModal: React.FC = () => {
 
   if (authSession) return null; // Already logged in
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -28,7 +28,7 @@ export const LoginModal: React.FC = () => {
       return;
     }
 
-    const res = login(accountInput, passwordInput);
+    const res = await login(accountInput, passwordInput);
 
     if (!res.success) {
       setErrorMsg(res.error || 'Đăng nhập thất bại.');
@@ -63,8 +63,8 @@ export const LoginModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-100/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl text-slate-800 space-y-6 relative overflow-hidden">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 modal-backdrop-animate">
+      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl text-slate-800 space-y-6 relative overflow-hidden modal-content-animate">
         {/* Top Glow Background */}
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-200/40 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-violet-200/40 rounded-full blur-3xl pointer-events-none" />
@@ -95,16 +95,16 @@ export const LoginModal: React.FC = () => {
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
               <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                Tên Account (Username):
+                Staff Code (Username Đăng Nhập):
               </label>
               <div className="relative">
                 <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="text"
-                  placeholder="VD: VuongNT, NhiHT, QuynhNV..."
+                  placeholder="VD: QuynhNV, ThanhNDT, LichDT, NhiHT..."
                   value={accountInput}
                   onChange={(e) => setAccountInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 font-semibold"
                   required
                 />
               </div>

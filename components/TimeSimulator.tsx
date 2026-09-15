@@ -79,7 +79,7 @@ export const TimeSimulator: React.FC<TimeSimulatorProps> = ({ isOpen, onClose })
 
         <div className="py-5 space-y-4">
           <p className="text-sm text-slate-600">
-            Công cụ giả lập thời điểm nộp báo cáo để kiểm thử tính năng <strong className="text-red-600">Báo Đỏ (Nộp sau 10h Tối CN)</strong> và <strong className="text-emerald-600">Báo Xanh (Top Effort)</strong>.
+            Công cụ giả lập thời điểm nộp báo cáo để kiểm thử tính năng <strong className="text-red-600">Phạt (Nộp sau 10h Tối CN)</strong> và <strong className="text-emerald-600">Thưởng (Top Effort)</strong>.
           </p>
 
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
@@ -90,7 +90,7 @@ export const TimeSimulator: React.FC<TimeSimulatorProps> = ({ isOpen, onClose })
             
             {isPastSunday10PM() ? (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-full">
-                <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Trạng thái: Quá 22:00 Chủ Nhật (Kích hoạt Báo Đỏ)
+                <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Trạng thái: Quá 22:00 Chủ Nhật (Kích hoạt Phạt)
               </div>
             ) : (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-full">

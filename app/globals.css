@@ -11,21 +11,130 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
-/* Custom sleek scrollbar */
+/* Custom sleek modern floating scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: rgba(148, 163, 184, 0.35);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: rgba(100, 116, 139, 0.6);
 }
+
+/* Custom utility class for sleek inner scrollbars inside modals & containers */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.6);
+}
+
+/* Smooth modal & tab animations */
+@keyframes modalBackdropIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(10px);
+  }
+}
+
+@keyframes modalContentIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.94) translateY(12px);
+  }
+  70% {
+    transform: scale(1.008) translateY(-1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes tabContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-backdrop-animate {
+  animation: modalBackdropIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.modal-content-animate {
+  animation: modalContentIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.tab-content-animate {
+  animation: tabContentIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Smooth modal open & close transitions */
+.modal-backdrop-transition {
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, backdrop-filter;
+}
+
+.modal-dialog-transition {
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.modal-backdrop-open {
+  opacity: 1;
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+.modal-backdrop-closed {
+  opacity: 0;
+  backdrop-filter: blur(0px);
+  pointer-events: none;
+}
+
+.modal-dialog-open {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+.modal-dialog-closed {
+  opacity: 0;
+  transform: scale(0.95) translateY(10px);
+}
+
+

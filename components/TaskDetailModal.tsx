@@ -3,7 +3,29 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task } from '../types/task';
-import { X, MessageSquare, Clock, AlertTriangle, Award, Save, Lock, CheckCircle, UserCheck } from 'lucide-react';
+import {
+  X,
+  MessageSquare,
+  Clock,
+  AlertTriangle,
+  Award,
+  Save,
+  Send,
+  CheckCircle,
+  UserCheck,
+  Flag,
+  FolderOpen,
+  Trash2,
+  Edit3,
+  FileText,
+  User,
+  Calendar,
+  Sparkles,
+  Flame,
+  Check,
+  Info,
+} from 'lucide-react';
+import { useModalAnimation } from '../hooks/useModalAnimation';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -12,202 +34,553 @@ interface TaskDetailModalProps {
   onOpenReport?: (task: Task) => void;
 }
 
+const formatDateTime = (isoOrStr?: string): string => {
+  if (!isoOrStr) return '';
+  try {
+    const d = new Date(isoOrStr);
+    if (isNaN(d.getTime())) return isoOrStr;
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${hours}:${minutes} • ${day}/${month}/${year}`;
+  } catch {
+    return isoOrStr;
+  }
+};
+
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   task,
   isOpen,
   onClose,
   onOpenReport,
 }) => {
-  const { milestones, updateTaskNotes, canEditTask, weeklyAwards } = useApp();
+  const {
+    milestones,
+    updateTaskNotes,
+    updateTask,
+    canEditTask,
+    weeklyAwards,
+    deleteTask,
+    currentUser,
+    users,
+    confirmDialog,
+    markNoteAsRead,
+  } = useApp();
+  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
+
   const [notesText, setNotesText] = useState('');
+  const [quickComment, setQuickComment] = useState('');
+  const [isEditingRaw, setIsEditingRaw] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+
+  // Task description states
+  const [descText, setDescText] = useState('');
+  const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [isSavedDesc, setIsSavedDesc] = useState(false);
 
   useEffect(() => {
     if (task) {
       setNotesText(task.notes || '');
+      setDescText(task.description || '');
+      setQuickComment('');
       setIsSaved(false);
+      setIsEditingRaw(false);
+      setIsEditingDesc(false);
+      setIsSavedDesc(false);
+      if (task.notes) {
+        markNoteAsRead(task.id, task.notes);
+      }
     }
   }, [task]);
 
-  if (!isOpen || !task) return null;
+  if (!isRendered || !task) return null;
 
   const milestone = milestones.find((m) => m.id === task.milestoneId);
   const isEditable = canEditTask(task);
+  const assigneeUser = users.find(
+    (u) => u.account.toLowerCase() === task.assigneeAccount.toLowerCase()
+  );
 
   const award = weeklyAwards.find((w) => w.account === task.assigneeAccount);
   const isTopEffort = award?.isTopEffort || false;
   const isLate = task.isSubmittedLate;
 
-  const handleSaveNotes = (e: React.FormEvent) => {
+  // Metadata fallbacks
+  const creatorDisplay = task.createdBy || 'QuynhNV (Leader)';
+  const createdDateDisplay = formatDateTime(task.createdAt || '2026-09-14T08:30:00Z');
+  const updatedDateDisplay = task.updatedAt ? formatDateTime(task.updatedAt) : null;
+  const priority = task.priority || 'Medium';
+
+  // Handle saving inline description
+  const handleSaveDescription = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isEditable) return;
-    updateTaskNotes(task.id, notesText);
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    updateTask(task.id, { description: descText.trim() });
+    setIsEditingDesc(false);
+    setIsSavedDesc(true);
+    setTimeout(() => setIsSavedDesc(false), 2500);
   };
 
+  // Handle appending quick discussion / exchange note
+  const handleSendComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickComment.trim()) return;
+
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const userRole = currentUser?.specializations?.[0] || currentUser?.role || 'Member';
+    const senderTag = currentUser ? `${currentUser.name} (${userRole})` : 'Thành viên';
+    const newEntry = `[${senderTag} - ${timeStr}]: ${quickComment.trim()}`;
+    const updated = notesText ? `${notesText}\n${newEntry}` : newEntry;
+
+    setNotesText(updated);
+    updateTaskNotes(task.id, updated);
+    setQuickComment('');
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2500);
+  };
+
+  // Handle direct raw notes update
+  const handleSaveRawNotes = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateTaskNotes(task.id, notesText);
+    setIsEditingRaw(false);
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2500);
+  };
+
+  const handleDelete = () => {
+    if (!task) return;
+    confirmDialog({
+      title: 'Xác nhận xóa đầu việc',
+      message: `Bạn có chắc chắn muốn xóa đầu việc "${task.title}"? Thao tác này không thể hoàn tác.`,
+      confirmText: 'Xác nhận xóa',
+      type: 'danger',
+      onConfirm: () => {
+        deleteTask(task.id);
+        handleClose();
+      },
+    });
+  };
+
+  // Parse lines for rich discussion display
+  const noteLines = notesText
+    ? notesText.split('\n').filter((l) => l.trim().length > 0)
+    : [];
+
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl p-6 sm:p-8 shadow-2xl text-slate-800 space-y-6 max-h-[90vh] overflow-y-auto">
-        {/* Modal Header */}
-        <div className="flex items-start justify-between border-b border-slate-100 pb-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
+        isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
+      }`}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`bg-white border border-slate-200/90 rounded-3xl w-full max-w-2xl shadow-2xl text-slate-800 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
+          isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
+        }`}
+      >
+        {/* Fixed Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5 sm:px-6 sm:py-4 shrink-0 bg-white">
+          <div className="space-y-2 flex-1 pr-2 min-w-0">
+            {/* Status & Category Badges */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">
                 {task.role}
               </span>
-              <span className="text-xs text-slate-400">STT #{task.id.replace('tsk-', '')}</span>
+
+              {/* Priority badge */}
+              {priority === 'High' ? (
+                <span className="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold flex items-center gap-1">
+                  <Flame className="w-3 h-3 text-rose-500" /> Ưu tiên Cao
+                </span>
+              ) : priority === 'Low' ? (
+                <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-xs font-semibold">
+                  Ưu tiên Thấp
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">
+                  Ưu tiên Trung bình
+                </span>
+              )}
+
+              {/* Status badge */}
+              <span
+                className={`px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${
+                  task.status === 'Done'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    : task.status === 'In Progress'
+                    ? 'bg-blue-50 text-blue-700 border-blue-300'
+                    : 'bg-slate-100 text-slate-700 border-slate-300'
+                }`}
+              >
+                {task.status}
+              </span>
+
+              <span className="text-xs text-slate-400 font-mono">#{task.id.replace('tsk-', '')}</span>
+
+              {task.priority === 'High' && (
+                <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                  <Flame className="w-3 h-3 text-red-500 fill-red-500" /> Ưu tiên cao
+                </span>
+              )}
+
               {isLate && (
-                <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[10px] font-bold rounded-full flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" /> BÁO ĐỎ (Nộp muộn)
+                <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                  <AlertTriangle className="w-3 h-3" /> PHẠT (Nộp muộn)
                 </span>
               )}
               {isTopEffort && (
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-300 text-[10px] font-bold rounded-full flex items-center gap-1">
-                  <Award className="w-3 h-3" /> BÁO XANH (Top Effort)
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-300 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                  <Award className="w-3 h-3" /> THƯỞNG (Top Effort)
                 </span>
               )}
             </div>
-            <h3 className="text-lg font-bold text-slate-800 tracking-tight">{task.title}</h3>
+
+            {/* Task Title */}
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-snug break-words">
+              {task.title}
+            </h3>
           </div>
 
           <button
-            onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition"
+            onClick={handleClose}
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 shrink-0"
+            title="Đóng cửa sổ"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Task Grid Summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
-          <div>
-            <span className="text-slate-400 block mb-0.5">Phụ trách:</span>
-            <span className="font-semibold text-indigo-600 flex items-center gap-1">
-              <UserCheck className="w-3.5 h-3.5" />
-              {task.assigneeAccount || 'Chưa gán'}
-            </span>
-          </div>
+        {/* Scrollable Body with custom-scrollbar */}
+        <div className="p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4 min-h-0">
+          {/* Creator & Creation Date Info Banner */}
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-slate-600 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+                <User className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-slate-400">Người tạo:</span>
+                  <span className="font-semibold text-slate-800">{creatorDisplay}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <Calendar className="w-3 h-3 shrink-0" />
+                  <span>Khởi tạo: {createdDateDisplay}</span>
+                  {updatedDateDisplay && (
+                    <>
+                      <span>•</span>
+                      <span>Cập nhật: {updatedDateDisplay}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
 
-          <div>
-            <span className="text-slate-400 block mb-0.5">Milestone:</span>
-            <span className="font-semibold text-slate-700 truncate block">
-              {milestone ? milestone.title : 'Chưa gán'}
-            </span>
-          </div>
-
-          <div>
-            <span className="text-slate-400 block mb-0.5">Effort Thực tế / Ước tính:</span>
-            <span className="font-mono font-bold text-emerald-600">
-              {task.actualEffort}h / {task.estimatedEffort}h
-            </span>
-          </div>
-
-          <div>
-            <span className="text-slate-400 block mb-0.5">Trạng thái:</span>
-            <span
-              className={`font-semibold px-2 py-0.5 rounded-full inline-block text-[10px] ${
-                task.status === 'Done'
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-300'
-                  : task.status === 'In Progress'
-                  ? 'bg-blue-50 text-blue-700 border border-blue-300'
-                  : 'bg-slate-100 text-slate-600 border border-slate-300'
-              }`}
-            >
-              {task.status} ({task.completionPercentage}%)
-            </span>
-          </div>
-        </div>
-
-        {/* Completion Progress Bar */}
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs text-slate-600">
-            <span>Tiến độ hoàn thành:</span>
-            <span className="font-bold text-indigo-600">{task.completionPercentage}%</span>
-          </div>
-          <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden border border-slate-200">
-            <div
-              className={`h-full transition-all duration-300 ${
-                task.completionPercentage === 100
-                  ? 'bg-emerald-500'
-                  : task.completionPercentage > 0
-                  ? 'bg-indigo-500'
-                  : 'bg-slate-300'
-              }`}
-              style={{ width: `${task.completionPercentage}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Section: Notes for Leader */}
-        <form onSubmit={handleSaveNotes} className="space-y-3 pt-2 border-t border-slate-100">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-700 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-indigo-500" />
-              Ghi Chú Gửi Leader (Blockers, Trao đổi, Cập nhật):
-            </label>
-            {!isEditable && (
-              <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                <Lock className="w-3 h-3" /> Chỉ người phụ trách mới được ghi chú
+            <div className="text-right text-[11px] text-slate-500 shrink-0">
+              <span className="font-medium bg-white px-2 py-1 rounded-lg border border-slate-200/80">
+                Tuần {task.weekNumber} / {task.year}
               </span>
+            </div>
+          </div>
+
+          {/* Task Details / Description Section */}
+          <div className="bg-gradient-to-br from-indigo-50/50 to-slate-50 border border-indigo-100/90 rounded-2xl p-4 space-y-2 relative">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-bold text-xs text-indigo-900">
+                <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Mô Tả Chi Tiết & Hướng Dẫn Kỹ Thuật (Leader):</span>
+              </div>
+
+              {!isEditingDesc && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingDesc(true)}
+                  className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline transition"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  {task.description ? 'Chỉnh sửa mô tả' : '+ Thêm mô tả'}
+                </button>
+              )}
+            </div>
+
+            {isEditingDesc ? (
+              <form onSubmit={handleSaveDescription} className="space-y-2 pt-1">
+                <textarea
+                  rows={4}
+                  value={descText}
+                  onChange={(e) => setDescText(e.target.value)}
+                  placeholder="Nhập mô tả chi tiết công việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên..."
+                  className="w-full bg-white border border-indigo-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 transition resize-none leading-relaxed"
+                  autoFocus
+                />
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDescText(task.description || '');
+                      setIsEditingDesc(false);
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl font-medium transition"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    Lưu Mô Tả
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div>
+                {task.description ? (
+                  <p className="text-slate-700 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap pl-1 font-normal">
+                    {task.description}
+                  </p>
+                ) : (
+                  <div
+                    onClick={() => setIsEditingDesc(true)}
+                    className="border border-dashed border-slate-300 rounded-xl p-3.5 text-center text-xs text-slate-400 cursor-pointer hover:bg-indigo-50/40 hover:border-indigo-300 hover:text-indigo-700 transition space-y-1"
+                  >
+                    <div className="font-medium text-slate-500">Chưa có mô tả chi tiết cho task này</div>
+                    <div className="text-[11px] text-slate-400">
+                      Bấm vào đây để thêm nội dung hướng dẫn hoặc yêu cầu nghiệm thu từ Leader.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isSavedDesc && (
+              <div className="text-xs text-emerald-600 font-semibold flex items-center gap-1 animate-fade-in pt-1">
+                <CheckCircle className="w-3.5 h-3.5" /> Đã cập nhật mô tả task thành công!
+              </div>
             )}
           </div>
 
-          <textarea
-            rows={4}
-            disabled={!isEditable}
-            placeholder={
-              isEditable
-                ? 'Nhập nội dung vướng mắc, cập nhật hoặc ghi chú gửi cho Leader...'
-                : 'Bạn không có quyền chỉnh sửa ghi chú task này.'
-            }
-            value={notesText}
-            onChange={(e) => setNotesText(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3 text-xs text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:opacity-60 resize-none"
-          />
+          {/* Comprehensive Metadata Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/90 text-xs">
+            <div>
+              <span className="text-slate-400 block mb-1">Người phụ trách:</span>
+              <span className="font-semibold text-indigo-700 flex items-center gap-1 truncate" title={assigneeUser?.name || task.assigneeAccount}>
+                <UserCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                {assigneeUser ? `${assigneeUser.name} (${task.assigneeAccount})` : task.assigneeAccount || 'Chưa gán'}
+              </span>
+            </div>
 
-          {isEditable && (
-            <div className="flex items-center justify-between">
-              {isSaved ? (
-                <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5" /> Đã lưu ghi chú gửi Leader thành công!
+            <div>
+              <span className="text-slate-400 block mb-1">Cột mốc Milestone:</span>
+              {milestone ? (
+                <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md truncate max-w-full" title={milestone.title}>
+                  <Flag className="w-3 h-3 text-indigo-500 shrink-0" />
+                  <span className="truncate">{milestone.title}</span>
                 </span>
               ) : (
-                <span className="text-[11px] text-slate-400">Ghi chú sẽ được lưu trực tiếp vào task</span>
+                <span className="inline-flex items-center gap-1 text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                  <FolderOpen className="w-3 h-3 text-slate-400 shrink-0" />
+                  Ngoài Milestone
+                </span>
               )}
-
-              <button
-                type="submit"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5"
-              >
-                <Save className="w-3.5 h-3.5" />
-                Lưu Ghi Chú
-              </button>
             </div>
-          )}
-        </form>
 
-        {/* Modal Actions */}
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium rounded-xl transition"
-          >
-            Đóng
-          </button>
+            <div>
+              <span className="text-slate-400 block mb-1">Effort Thực tế / Ước tính:</span>
+              <span className="font-mono font-bold text-emerald-700 text-xs">
+                {task.actualEffort}h <span className="text-slate-400 font-normal">/</span> {task.estimatedEffort}h
+              </span>
+            </div>
 
-          {isEditable && onOpenReport && (
+            <div>
+              <span className="text-slate-400 block mb-1">Tiến độ hoàn thành:</span>
+              <span className="font-bold text-indigo-600 text-xs">
+                {task.completionPercentage}%
+              </span>
+            </div>
+          </div>
+
+          {/* Completion Progress Bar */}
+          <div className="space-y-1.5">
+            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  task.completionPercentage === 100
+                    ? 'bg-emerald-500'
+                    : task.completionPercentage > 0
+                    ? 'bg-indigo-500'
+                    : 'bg-slate-300'
+                }`}
+                style={{ width: `${task.completionPercentage}%` }}
+              />
+            </div>
+          </div>
+
+          {/* SECTION: Collaborative Notes & Discussion Feed (Luồng Trao Đổi Task) */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-indigo-600" />
+                Luồng Trao Đổi & Ghi Chú Task (Notes & Discussion):
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingRaw(!isEditingRaw)}
+                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 hover:underline"
+                >
+                  <Edit3 className="w-3 h-3" />
+                  {isEditingRaw ? 'Quay lại xem trao đổi' : 'Sửa trực tiếp toàn bộ note'}
+                </button>
+              </div>
+            </div>
+
+            {isEditingRaw ? (
+              /* Direct RAW Note Edit */
+              <form onSubmit={handleSaveRawNotes} className="space-y-2">
+                <textarea
+                  rows={5}
+                  value={notesText}
+                  onChange={(e) => setNotesText(e.target.value)}
+                  placeholder="Nhập toàn bộ ghi chú công việc..."
+                  className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3 text-xs text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none font-mono"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingRaw(false)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl transition"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    Lưu Thay Đổi Note
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Rich Thread Display & Quick Discussion Post */
+              <div className="space-y-2.5">
+                {/* Discussion History Container */}
+                <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 max-h-52 overflow-y-auto custom-scrollbar space-y-2">
+                  {noteLines.length === 0 ? (
+                    <div className="text-center py-5 text-slate-400 text-xs flex flex-col items-center gap-1.5">
+                      <MessageSquare className="w-5 h-5 text-slate-300" />
+                      <span>Chưa có ghi chú hoặc trao đổi nào cho task này.</span>
+                      <span className="text-[11px] text-slate-400">Hãy nhập phản hồi bên dưới để bắt đầu trao đổi luồng task!</span>
+                    </div>
+                  ) : (
+                    noteLines.map((line, idx) => {
+                      const isTaggedMessage = line.startsWith('[') && line.includes(']:');
+                      if (isTaggedMessage) {
+                        const match = line.match(/^\[(.*?)\]:\s*(.*)$/);
+                        const authorInfo = match ? match[1] : '';
+                        const messageBody = match ? match[2] : line;
+                        return (
+                          <div
+                            key={idx}
+                            className="bg-white border border-slate-200/80 rounded-xl p-2.5 shadow-2xs text-xs space-y-1"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-indigo-700 text-[11px] bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100">
+                                {authorInfo}
+                              </span>
+                            </div>
+                            <p className="text-slate-700 text-xs leading-relaxed whitespace-pre-wrap pl-1">
+                              {messageBody}
+                            </p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div
+                          key={idx}
+                          className="bg-white border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap"
+                        >
+                          {line}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Collaborative Input Field for ANY team member */}
+                <form onSubmit={handleSendComment} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={quickComment}
+                    onChange={(e) => setQuickComment(e.target.value)}
+                    placeholder={`Gửi ghi chú/trao đổi luồng task với vai trò ${currentUser?.name || 'thành viên'}...`}
+                    className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!quickComment.trim()}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 shrink-0 active:scale-95"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    Gửi Phản Hồi
+                  </button>
+                </form>
+
+                {isSaved && (
+                  <div className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 animate-fade-in">
+                    <CheckCircle className="w-3.5 h-3.5" /> Đã lưu và đồng bộ ghi chú task thành công!
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Fixed Footer */}
+        <div className="flex items-center justify-between gap-3 p-4 sm:px-6 sm:py-4 border-t border-slate-100 shrink-0 bg-slate-50/60 rounded-b-3xl">
+          {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') ? (
             <button
-              onClick={() => {
-                onClose();
-                onOpenReport(task);
-              }}
-              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
+              type="button"
+              onClick={handleDelete}
+              className="px-3.5 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
             >
-              <Clock className="w-3.5 h-3.5" />
-              Nộp Báo Cáo Tiến Độ
+              <Trash2 className="w-3.5 h-3.5" />
+              Xóa Task
             </button>
+          ) : (
+            <div />
           )}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleClose}
+              className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-xl transition active:scale-95 shadow-2xs"
+            >
+              Đóng
+            </button>
+
+            {isEditable && onOpenReport && (
+              <button
+                onClick={() => {
+                  handleClose();
+                  setTimeout(() => {
+                    onOpenReport(task);
+                  }, 200);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 active:scale-95"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Nộp Báo Cáo Tiến Độ
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskStatus } from '../types/task';
 import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare } from 'lucide-react';
+import { useModalAnimation } from '../hooks/useModalAnimation';
 
 interface WeeklyReportModalProps {
   task: Task | null;
@@ -17,6 +18,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   onClose,
 }) => {
   const { submitTaskReport, simulatedTime, canEditTask } = useApp();
+  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
 
   const [actualEffort, setActualEffort] = useState<number>(0);
   const [completionPercentage, setCompletionPercentage] = useState<number>(0);
@@ -32,7 +34,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     }
   }, [task]);
 
-  if (!isOpen || !task) return null;
+  if (!isRendered || !task) return null;
 
   const isEditable = canEditTask(task);
 
@@ -40,29 +42,41 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     e.preventDefault();
     if (!isEditable) return;
     submitTaskReport(task.id, actualEffort, completionPercentage, status, notes);
-    onClose();
+    handleClose();
   };
 
   const simDate = new Date(simulatedTime);
   const isLateSimulated = simDate.getDay() === 0 && simDate.getHours() >= 22;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg p-6 shadow-2xl text-slate-800">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+      className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
+        isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
+      }`}
+    >
+      <div
+        className={`bg-white border border-slate-200/90 rounded-3xl w-full max-w-lg p-6 sm:p-7 shadow-2xl text-slate-800 relative modal-dialog-transition ${
+          isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
+        }`}
+      >
         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div>
-            <span className="text-xs uppercase font-semibold tracking-wider text-indigo-600">
+            <span className="text-xs uppercase font-bold tracking-wider text-indigo-600 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
               Báo Cáo Tiến Độ Tuần
             </span>
-            <h3 className="text-base font-bold text-slate-900 mt-0.5 line-clamp-1">
+            <h3 className="text-base font-bold text-slate-900 mt-1 line-clamp-1">
               {task.title}
             </h3>
           </div>
           <button
-            onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+            onClick={handleClose}
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -72,8 +86,8 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2.5">
               <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold block text-red-800">CẢNH BÁO NỘP BÁO CÁO MUỘN (BÁO ĐỎ)!</span>
-                Thời điểm hiện tại đã quá hạn 10h tối Chủ Nhật (22:00). Việc nộp/cập nhật này sẽ bị ghi nhận báo đỏ và tính phạt theo quy định.
+                <span className="font-bold block text-red-800">CẢNH BÁO NỘP BÁO CÁO MUỘN (TÍNH PHẠT)!</span>
+                Thời điểm hiện tại đã quá hạn 10h tối Chủ Nhật (22:00). Việc nộp/cập nhật này sẽ bị ghi nhận Phạt theo quy định.
               </div>
             </div>
           ) : (
@@ -158,7 +172,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               />
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              💡 Người có số giờ làm việc thực tế cao nhất tuần sẽ được thưởng Báo Xanh (Green Award).
+              💡 Người có số giờ làm việc thực tế cao nhất tuần sẽ được Thưởng (Top Effort).
             </p>
           </div>
 
@@ -207,7 +221,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-xl transition"
             >
               Hủy

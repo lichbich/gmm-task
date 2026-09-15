@@ -1,9 +1,54 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS } from '../lib/mockData';
 import { database, ref, onValue, set, DB_ROOT_NODE } from '../lib/firebase';
+import { hashPassword, verifyPassword } from '../lib/crypto';
+import { ConfirmModal, ConfirmDialogOptions } from '../components/ConfirmModal';
+
+export const DEFAULT_ROLES: RoleItem[] = [
+  {
+    id: 'role-ba',
+    code: 'BA',
+    name: 'Business Analyst (Nghiệp vụ)',
+    description: 'Phân tích yêu cầu, quy trình nghiệp vụ & viết đặc tả chức năng',
+    color: 'purple',
+    order: 1,
+  },
+  {
+    id: 'role-design',
+    code: 'Design',
+    name: 'UI/UX Design (Thiết kế)',
+    description: 'Thiết kế giao diện, trải nghiệm người dùng & design system',
+    color: 'amber',
+    order: 2,
+  },
+  {
+    id: 'role-fe',
+    code: 'FE',
+    name: 'Front-End Development (FE)',
+    description: 'Lập trình giao diện web, tối ưu tương tác người dùng',
+    color: 'blue',
+    order: 3,
+  },
+  {
+    id: 'role-be',
+    code: 'BE',
+    name: 'Back-End Development (BE)',
+    description: 'Xây dựng API, cơ sở dữ liệu và hệ thống logic máy chủ',
+    color: 'emerald',
+    order: 4,
+  },
+  {
+    id: 'role-qa',
+    code: 'QA',
+    name: 'Quality Assurance (Kiểm thử)',
+    description: 'Kiểm thử tính năng, kiểm soát chất lượng và viết test cases',
+    color: 'rose',
+    order: 5,
+  },
+];
 
 interface LoginResult {
   success: boolean;
@@ -15,14 +60,20 @@ interface LoginResult {
 interface AppContextType {
   currentUser: User | null;
   authSession: User | null;
-  login: (account: string, password?: string) => LoginResult;
+  login: (account: string, password?: string) => Promise<LoginResult>;
   setupFirstTimePassword: (userId: string, newPassword: string) => Promise<boolean>;
+  changePassword: (userId: string, currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   
   users: User[];
   addUser: (user: Omit<User, 'id'>) => void;
   updateUser: (id: string, user: Partial<User>) => void;
   deleteUser: (id: string) => void;
+  
+  roles: RoleItem[];
+  addRole: (role: Omit<RoleItem, 'id'>) => void;
+  updateRole: (id: string, updates: Partial<RoleItem>) => void;
+  deleteRole: (id: string) => void;
   
   milestones: Milestone[];
   addMilestone: (milestone: Omit<Milestone, 'id' | 'order'>) => void;
@@ -56,6 +107,14 @@ interface AppContextType {
   
   resetToDefaultData: () => void;
   isFirebaseConnected: boolean;
+
+  confirmDialog: (options: ConfirmDialogOptions) => void;
+  hasUnreadNote: (task: Task) => boolean;
+  markNoteAsRead: (taskId: string, notesContent?: string) => void;
+
+  requestTaskAssignment: (taskId: string, memberAccount: string, targetWeek?: number) => void;
+  approveTaskAssignment: (taskId: string) => void;
+  rejectTaskAssignment: (taskId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -64,11 +123,79 @@ const LOCAL_STORAGE_AUTH = 'gmm_task_auth_session_v2';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [roles, setRoles] = useState<RoleItem[]>(DEFAULT_ROLES);
   const [milestones, setMilestones] = useState<Milestone[]>(INITIAL_MILESTONES);
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
   const [weeklyArchives, setWeeklyArchives] = useState<WeeklyHistoryArchive[]>([]);
   const [authSession, setAuthSession] = useState<User | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
+  const [confirmState, setConfirmState] = useState<ConfirmDialogOptions | null>(null);
+
+  const confirmDialog = (options: ConfirmDialogOptions) => {
+    setConfirmState(options);
+  };
+  const closeConfirm = () => {
+    setConfirmState(null);
+  };
+
+  // Read notes tracking for unread indicator
+  const [readNotesMap, setReadNotesMap] = useState<Record<string, string>>({});
+
+  const getStorageKey = (account?: string) => `gmm_read_notes_${account || 'guest'}`;
+
+  // Load read notes map whenever user changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = getStorageKey(authSession?.account);
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        setReadNotesMap(JSON.parse(saved));
+      } else {
+        setReadNotesMap({});
+      }
+    } catch (e) {
+      console.error('Failed to load readNotesMap', e);
+    }
+  }, [authSession?.account]);
+
+  const markNoteAsRead = (taskId: string, notesContent?: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    const contentToSave = notesContent !== undefined ? notesContent : (task?.notes || '');
+    setReadNotesMap((prev) => {
+      const updated = { ...prev, [taskId]: contentToSave };
+      try {
+        if (typeof window !== 'undefined') {
+          const key = getStorageKey(authSession?.account);
+          localStorage.setItem(key, JSON.stringify(updated));
+        }
+      } catch (e) {
+        console.error('Failed to save readNotesMap', e);
+      }
+      return updated;
+    });
+  };
+
+  const hasUnreadNote = (task: Task): boolean => {
+    if (!task.notes || !task.notes.trim()) return false;
+    const lastRead = readNotesMap[task.id];
+    // If user already viewed this exact content
+    if (lastRead === task.notes) return false;
+
+    // Check if the current user was the last author of the note
+    const lines = task.notes.trim().split('\n').filter((l) => l.trim().length > 0);
+    if (lines.length > 0 && authSession) {
+      const lastLine = lines[lines.length - 1];
+      const myName = authSession.name.toLowerCase();
+      const myAccount = authSession.account.toLowerCase();
+      const lastLower = lastLine.toLowerCase();
+      if (lastLower.includes(`[${myName}`) || lastLower.includes(`[${myAccount}`)) {
+        return false;
+      }
+    }
+
+    return true;
+  };
 
   const [simulatedTime, setSimulatedTimeState] = useState<string>(
     new Date().toISOString().slice(0, 16)
@@ -121,6 +248,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const archivesList = Object.values(data.weeklyArchives) as WeeklyHistoryArchive[];
             setWeeklyArchives(archivesList);
           }
+          if (data.roles) {
+            const roleList = Object.values(data.roles) as RoleItem[];
+            setRoles(roleList.sort((a, b) => (a.order || 0) - (b.order || 0)));
+          } else {
+            // Seed default roles to Firebase if node is empty
+            const rolesObj: Record<string, RoleItem> = {};
+            DEFAULT_ROLES.forEach((r) => { rolesObj[r.id] = r; });
+            set(ref(database, `${DB_ROOT_NODE}/roles`), rolesObj).catch(console.error);
+            setRoles(DEFAULT_ROLES);
+          }
         } else {
           seedFirebaseMockData();
         }
@@ -145,8 +282,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const tasksObj: Record<string, Task> = {};
       INITIAL_TASKS.forEach((t) => { tasksObj[t.id] = t; });
 
+      const rolesObj: Record<string, RoleItem> = {};
+      DEFAULT_ROLES.forEach((r) => { rolesObj[r.id] = r; });
+
       await set(ref(database, `${DB_ROOT_NODE}`), {
         users: usersObj,
+        roles: rolesObj,
         milestones: milestonesObj,
         tasks: tasksObj,
         weeklyArchives: {},
@@ -157,7 +298,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Auth Operations
-  const login = (accountInput: string, passwordInput?: string): LoginResult => {
+  const login = async (accountInput: string, passwordInput?: string): Promise<LoginResult> => {
     const targetUser = users.find(
       (u) => u.account.toLowerCase() === accountInput.trim().toLowerCase()
     );
@@ -170,8 +311,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true, firstTime: true, user: targetUser };
     }
 
-    if (targetUser.password !== passwordInput) {
+    const isMatch = await verifyPassword(passwordInput || '', targetUser.password);
+    if (!isMatch) {
       return { success: false, error: 'Mật khẩu không chính xác.' };
+    }
+
+    // Auto-migrate legacy plain text password to SHA-256 hash in Firebase
+    const hashedPass = await hashPassword(passwordInput || '');
+    if (targetUser.password !== hashedPass) {
+      const migratedUser = { ...targetUser, password: hashedPass };
+      setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? migratedUser : u)));
+      await set(ref(database, `${DB_ROOT_NODE}/users/${targetUser.id}`), migratedUser);
+      setAuthSession(migratedUser);
+      localStorage.setItem(LOCAL_STORAGE_AUTH, JSON.stringify(migratedUser));
+      return { success: true, user: migratedUser };
     }
 
     setAuthSession(targetUser);
@@ -184,9 +337,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updatedUser = users.find((u) => u.id === userId);
       if (!updatedUser) return false;
 
+      const hashedPassword = await hashPassword(newPassword);
       const newUser: User = {
         ...updatedUser,
-        password: newPassword,
+        password: hashedPassword,
         firstLoginCompleted: true,
       };
 
@@ -202,6 +356,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const changePassword = async (
+    userId: string,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const targetUser = users.find((u) => u.id === userId);
+      if (!targetUser) {
+        return { success: false, error: 'Không tìm thấy thông tin tài khoản.' };
+      }
+
+      // If user already has a password, verify current password with secure hashing
+      if (targetUser.password) {
+        const isCurrentMatch = await verifyPassword(currentPassword, targetUser.password);
+        if (!isCurrentMatch) {
+          return { success: false, error: 'Mật khẩu hiện tại không chính xác.' };
+        }
+      }
+
+      if (!newPassword || newPassword.length < 4) {
+        return { success: false, error: 'Mật khẩu mới phải có ít nhất 4 ký tự.' };
+      }
+
+      const hashedNewPassword = await hashPassword(newPassword);
+      const updatedUser: User = {
+        ...targetUser,
+        password: hashedNewPassword,
+        firstLoginCompleted: true,
+      };
+
+      setUsers((prev) => prev.map((u) => (u.id === userId ? updatedUser : u)));
+      if (authSession?.id === userId) {
+        setAuthSession(updatedUser);
+        localStorage.setItem(LOCAL_STORAGE_AUTH, JSON.stringify(updatedUser));
+      }
+
+      await set(ref(database, `${DB_ROOT_NODE}/users/${userId}`), updatedUser);
+      return { success: true };
+    } catch (e: any) {
+      console.error('Failed to change password', e);
+      return { success: false, error: e?.message || 'Có lỗi xảy ra khi đổi mật khẩu.' };
+    }
+  };
+
   const logout = () => {
     setAuthSession(null);
     localStorage.removeItem(LOCAL_STORAGE_AUTH);
@@ -211,7 +409,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Leader/Admin can edit task structure, but ONLY the specific assignee can submit progress/report for that task!
   const canEditTask = (task: Task, user: User | null = authSession): boolean => {
     if (!user) return false;
-    if (user.role === 'Admin' || user.role === 'Leader') return true;
+    if (user.role === 'Admin') return true;
+    if (user.role === 'Leader') {
+      // Leader can only edit tasks matching their specialization
+      return user.specializations?.includes(task.role) || false;
+    }
     return task.assigneeAccount.toLowerCase() === user.account.toLowerCase();
   };
 
@@ -221,33 +423,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return task.assigneeAccount.toLowerCase() === user.account.toLowerCase();
   };
 
-  const syncUsersToFirebase = async (newUsers: User[]) => {
-    const obj: Record<string, User> = {};
-    newUsers.forEach((u) => { obj[u.id] = u; });
-    await set(ref(database, `${DB_ROOT_NODE}/users`), obj);
-  };
-
-  const syncMilestonesToFirebase = async (newMs: Milestone[]) => {
-    const obj: Record<string, Milestone> = {};
-    newMs.forEach((m) => { obj[m.id] = m; });
-    await set(ref(database, `${DB_ROOT_NODE}/milestones`), obj);
-  };
-
-  const syncTasksToFirebase = async (newTs: Task[]) => {
-    const obj: Record<string, Task> = {};
-    newTs.forEach((t) => { obj[t.id] = t; });
-    await set(ref(database, `${DB_ROOT_NODE}/tasks`), obj);
-  };
-
   // Helper: remove undefined values so Firebase doesn't reject the payload
   // Note: <T,> trailing comma is required in .tsx to disambiguate from JSX
   const sanitizeForFirebase = <T,>(data: T): T =>
     JSON.parse(JSON.stringify(data, (_, v) => (v === undefined ? null : v)));
 
+  const syncUsersToFirebase = async (newUsers: User[]) => {
+    const obj: Record<string, User> = {};
+    newUsers.forEach((u) => { obj[u.id] = sanitizeForFirebase(u); });
+    await set(ref(database, `${DB_ROOT_NODE}/users`), obj);
+  };
+
+  const syncMilestonesToFirebase = async (newMs: Milestone[]) => {
+    const obj: Record<string, Milestone> = {};
+    newMs.forEach((m) => { obj[m.id] = sanitizeForFirebase(m); });
+    await set(ref(database, `${DB_ROOT_NODE}/milestones`), obj);
+  };
+
+  const syncTasksToFirebase = async (newTs: Task[]) => {
+    const obj: Record<string, Task> = {};
+    newTs.forEach((t) => { obj[t.id] = sanitizeForFirebase(t); });
+    await set(ref(database, `${DB_ROOT_NODE}/tasks`), obj);
+  };
+
   const syncArchivesToFirebase = async (archives: WeeklyHistoryArchive[]) => {
     const obj: Record<string, WeeklyHistoryArchive> = {};
     archives.forEach((a) => { obj[a.id] = sanitizeForFirebase(a); });
     await set(ref(database, `${DB_ROOT_NODE}/weeklyArchives`), obj);
+  };
+
+  const syncRolesToFirebase = async (newRoles: RoleItem[]) => {
+    const obj: Record<string, RoleItem> = {};
+    newRoles.forEach((r) => { obj[r.id] = sanitizeForFirebase(r); });
+    await set(ref(database, `${DB_ROOT_NODE}/roles`), obj);
   };
 
   // User Management
@@ -285,13 +493,98 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Unassign tasks assigned to deleted user (set assigneeAccount = "" -> Task trống)
     const updatedTasks = tasks.map((t) => {
       if (t.assigneeAccount.toLowerCase() === targetUser.account.toLowerCase()) {
-        return { ...t, assigneeAccount: '' }; // Preserve completionPercentage & actualEffort
+        return {
+          ...t,
+          assigneeAccount: '',
+          updatedAt: new Date().toISOString(),
+        };
       }
       return t;
     });
-
     setTasks(updatedTasks);
     syncTasksToFirebase(updatedTasks);
+  };
+
+  // Role Management (CRUD)
+  const addRole = (roleData: Omit<RoleItem, 'id'>) => {
+    const cleanCode = roleData.code.trim().toUpperCase();
+    const newRole: RoleItem = {
+      ...roleData,
+      code: cleanCode,
+      name: roleData.name.trim(),
+      id: `role-${cleanCode.toLowerCase().replace(/[^a-z0-9]/g, '')}-${Date.now()}`,
+      order: roles.length + 1,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...roles, newRole];
+    setRoles(updated);
+    syncRolesToFirebase(updated);
+  };
+
+  const updateRole = (id: string, updates: Partial<RoleItem>) => {
+    const oldRole = roles.find((r) => r.id === id);
+    const updated = roles.map((r) => {
+      if (r.id === id) {
+        return {
+          ...r,
+          ...updates,
+          code: updates.code ? updates.code.trim().toUpperCase() : r.code,
+          name: updates.name ? updates.name.trim() : r.name,
+        };
+      }
+      return r;
+    });
+    setRoles(updated);
+    syncRolesToFirebase(updated);
+
+    // If role code changed, cascade update users' specializations and tasks' role
+    const newCode = updates.code ? updates.code.trim().toUpperCase() : undefined;
+    if (oldRole && newCode && newCode !== oldRole.code) {
+      const oldCode = oldRole.code;
+
+      // Update users' specializations
+      const updatedUsers = users.map((u) => {
+        if (u.specializations && u.specializations.includes(oldCode)) {
+          return {
+            ...u,
+            specializations: u.specializations.map((s) => (s === oldCode ? newCode : s)),
+          };
+        }
+        return u;
+      });
+      setUsers(updatedUsers);
+      syncUsersToFirebase(updatedUsers);
+
+      // Update tasks' role
+      const updatedTasks = tasks.map((t) => (t.role === oldCode ? { ...t, role: newCode } : t));
+      setTasks(updatedTasks);
+      syncTasksToFirebase(updatedTasks);
+    }
+  };
+
+  const deleteRole = (id: string) => {
+    const targetRole = roles.find((r) => r.id === id);
+    if (!targetRole) return;
+
+    const roleCode = targetRole.code;
+    const updatedRoles = roles.filter((r) => r.id !== id);
+    setRoles(updatedRoles);
+    syncRolesToFirebase(updatedRoles);
+
+    // Remove role from users' specializations (fallback to remaining or first available role)
+    const fallbackRoleCode = updatedRoles[0]?.code || 'BA';
+    const updatedUsers = users.map((u) => {
+      if (u.specializations && u.specializations.includes(roleCode)) {
+        const remaining = u.specializations.filter((s) => s !== roleCode);
+        return {
+          ...u,
+          specializations: remaining.length > 0 ? remaining : [fallbackRoleCode],
+        };
+      }
+      return u;
+    });
+    setUsers(updatedUsers);
+    syncUsersToFirebase(updatedUsers);
   };
 
   // Milestone Management
@@ -324,6 +617,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Task Management
   const addTask = (taskData: Omit<Task, 'id' | 'orderInMilestone'>) => {
     const milestoneTasks = tasks.filter((t) => t.milestoneId === taskData.milestoneId);
+    const nowIso = new Date().toISOString();
+    const creatorName = authSession
+      ? `${authSession.name} (${authSession.role})`
+      : 'QuynhNV (Leader)';
     const newTask: Task = {
       ...taskData,
       id: `tsk-${Date.now()}`,
@@ -332,7 +629,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       completionPercentage: taskData.completionPercentage || 0,
       weekNumber: taskData.weekNumber || selectedWeek,
       year: taskData.year || selectedYear,
-      updatedAt: new Date().toISOString(),
+      createdBy: taskData.createdBy || creatorName,
+      createdAt: taskData.createdAt || nowIso,
+      priority: taskData.priority || 'Medium',
+      updatedAt: nowIso,
     };
     const updated = [...tasks, newTask];
     setTasks(updated);
@@ -349,6 +649,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateTaskNotes = (taskId: string, notes: string) => {
     updateTask(taskId, { notes });
+    markNoteAsRead(taskId, notes);
   };
 
   const deleteTask = (id: string) => {
@@ -404,17 +705,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncTasksToFirebase(updated);
   };
 
+  // Request task assignment from milestone (For Member)
+  const requestTaskAssignment = (taskId: string, memberAccount: string, targetWeek?: number) => {
+    const targetW = targetWeek || selectedWeek + 1;
+    updateTask(taskId, {
+      assignmentRequestedBy: memberAccount,
+      assignmentRequestStatus: 'PENDING',
+      requestedWeekNumber: targetW,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  // Approve task assignment request (For Leader / Admin)
+  const approveTaskAssignment = (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    updateTask(taskId, {
+      assigneeAccount: task.assignmentRequestedBy || task.assigneeAccount,
+      assignmentRequestStatus: 'APPROVED',
+      weekNumber: task.requestedWeekNumber || selectedWeek + 1,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  // Reject task assignment request (For Leader / Admin)
+  const rejectTaskAssignment = (taskId: string) => {
+    updateTask(taskId, {
+      assignmentRequestStatus: 'REJECTED',
+      assignmentRequestedBy: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
   // Finish Week & Rollover Unfinished Tasks to Next Week
   const finishWeekAndRollover = () => {
     const nextWeek = selectedWeek + 1;
-    const currentWeekTasks = tasks.filter(
-      (t) => t.weekNumber === selectedWeek && t.year === selectedYear
+    // Only assigned tasks are part of active weekly schedules & history
+    const currentWeekAssignedTasks = tasks.filter(
+      (t) => t.weekNumber === selectedWeek && t.year === selectedYear && t.assigneeAccount && t.assigneeAccount.trim() !== ''
     );
 
-    const completedTasks = currentWeekTasks.filter((t) => t.status === 'Done');
-    const unfinishedTasks = currentWeekTasks.filter((t) => t.status !== 'Done');
+    const completedTasks = currentWeekAssignedTasks.filter((t) => t.status === 'Done');
+    const unfinishedTasks = currentWeekAssignedTasks.filter((t) => t.status !== 'Done');
 
-    // Create Archive Record for current week
+    // Create Archive Record for current week with full snapshot of all tasks in selectedWeek
     const archiveRecord: WeeklyHistoryArchive = {
       id: `archive-${selectedWeek}-${Date.now()}`,
       weekNumber: selectedWeek,
@@ -423,24 +757,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       completedTasksCount: completedTasks.length,
       rolledOverTasksCount: unfinishedTasks.length,
       awards: computeWeeklyAwards(),
+      tasksSnapshot: JSON.parse(JSON.stringify(currentWeekAssignedTasks)),
     };
 
     const updatedArchives = [...weeklyArchives, archiveRecord];
     setWeeklyArchives(updatedArchives);
     syncArchivesToFirebase(updatedArchives);
 
-    // Duplicate unfinished tasks to nextWeek (rollover)
-    const rolledOverNewTasks: Task[] = unfinishedTasks.map((t) => ({
-      ...t,
-      id: `tsk-w${nextWeek}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      weekNumber: nextWeek,
-      year: selectedYear,
-      updatedAt: new Date().toISOString(),
-    }));
+    // Create continuation tasks for nextWeek for all unfinished assigned tasks while preserving current week history
+    const newTasksList = [...tasks];
+    unfinishedTasks.forEach((t) => {
+      const alreadyHasNextWeekTask = newTasksList.some(
+        (nt) =>
+          nt.weekNumber === nextWeek &&
+          nt.year === selectedYear &&
+          (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
+      );
+      if (!alreadyHasNextWeekTask) {
+        newTasksList.push({
+          ...t,
+          id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+          weekNumber: nextWeek,
+          parentTaskId: t.id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    });
 
-    const finalTasks = [...tasks, ...rolledOverNewTasks];
-    setTasks(finalTasks);
-    syncTasksToFirebase(finalTasks);
+    setTasks(newTasksList);
+    syncTasksToFirebase(newTasksList);
 
     setSelectedWeek(nextWeek);
   };
@@ -530,11 +876,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         authSession,
         login,
         setupFirstTimePassword,
+        changePassword,
         logout,
         users,
         addUser,
         updateUser,
         deleteUser,
+        roles,
+        addRole,
+        updateRole,
+        deleteRole,
         milestones,
         addMilestone,
         updateMilestone,
@@ -560,9 +911,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         finishWeekAndRollover,
         resetToDefaultData,
         isFirebaseConnected,
+        confirmDialog,
+        hasUnreadNote,
+        markNoteAsRead,
+
+        requestTaskAssignment,
+        approveTaskAssignment,
+        rejectTaskAssignment,
       }}
     >
       {children}
+      <ConfirmModal
+        isOpen={!!confirmState}
+        options={confirmState}
+        onClose={closeConfirm}
+      />
     </AppContext.Provider>
   );
 };
