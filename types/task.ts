@@ -94,3 +94,24 @@ export interface WeeklyHistoryArchive {
   awards: WeeklyAwardSummary[];
   tasksSnapshot?: Task[];
 }
+
+export type ResourceLevel =
+  | 'Business Plan'
+  | 'Level 1 - Business'
+  | 'Level 2 - Design'
+  | 'Level 3 - Implementation';
+
+export interface ProjectResource {
+  id: string;
+  level: ResourceLevel;
+  name: string; // Tên hạng mục tài liệu
+  content?: string; // Nội dung / Mô tả
+  tool?: string; // Công cụ (Google doc, Draw.io, Figma, Sheet, etc.)
+  primaryLink: string; // Link (break down) - ưu tiên
+  primaryLinkLabel?: string;
+  originLink?: string; // Link (origin) - trường hợp đặc biệt
+  originLinkLabel?: string;
+  order?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}

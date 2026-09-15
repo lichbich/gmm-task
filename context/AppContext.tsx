@@ -1,8 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem } from '../types/task';
-import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS } from '../lib/mockData';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource } from '../types/task';
+import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword } from '../lib/crypto';
 import { ConfirmModal, ConfirmDialogOptions } from '../components/ConfirmModal';
@@ -88,6 +88,11 @@ interface AppContextType {
   updateRole: (id: string, updates: Partial<RoleItem>) => void;
   deleteRole: (id: string) => void;
   
+  resources: ProjectResource[];
+  addResource: (res: Omit<ProjectResource, 'id' | 'order'>) => void;
+  updateResource: (id: string, updates: Partial<ProjectResource>) => void;
+  deleteResource: (id: string) => void;
+  
   milestones: Milestone[];
   addMilestone: (milestone: Omit<Milestone, 'id' | 'order'>) => void;
   updateMilestone: (id: string, milestone: Partial<Milestone>) => void;
@@ -137,6 +142,7 @@ const LOCAL_STORAGE_AUTH = 'gmm_task_auth_session_v2';
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [roles, setRoles] = useState<RoleItem[]>(DEFAULT_ROLES);
+  const [resources, setResources] = useState<ProjectResource[]>(INITIAL_PROJECT_RESOURCES as ProjectResource[]);
   const [milestones, setMilestones] = useState<Milestone[]>(INITIAL_MILESTONES);
   const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
   const [weeklyArchives, setWeeklyArchives] = useState<WeeklyHistoryArchive[]>([]);
@@ -277,6 +283,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             DEFAULT_ROLES.forEach((r) => { rolesObj[r.id] = r; });
             set(ref(database, `${DB_ROOT_NODE}/roles`), rolesObj).catch(console.error);
             setRoles(DEFAULT_ROLES);
+          }
+          if (data.resources) {
+            const resList = Object.values(data.resources) as ProjectResource[];
+            setResources(resList.sort((a, b) => (a.order || 0) - (b.order || 0)));
+          } else {
+            const resObj: Record<string, any> = {};
+            INITIAL_PROJECT_RESOURCES.forEach((r) => { resObj[r.id] = r; });
+            set(ref(database, `${DB_ROOT_NODE}/resources`), resObj).catch(console.error);
+            setResources(INITIAL_PROJECT_RESOURCES as ProjectResource[]);
           }
         } else {
           seedFirebaseMockData();
@@ -598,6 +613,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncUsersToFirebase(updatedUsers);
   };
 
+  // Resource Management
+  const addResource = (resItem: Omit<ProjectResource, 'id' | 'order'>) => {
+    const id = `res_${Date.now()}`;
+    const newRes: ProjectResource = {
+      ...resItem,
+      id,
+      order: resources.length + 1,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...resources, newRes];
+    setResources(updated);
+    set(ref(database, `${DB_ROOT_NODE}/resources/${id}`), newRes).catch(console.error);
+  };
+
+  const updateResource = (id: string, updates: Partial<ProjectResource>) => {
+    const updated = resources.map((r) =>
+      r.id === id ? { ...r, ...updates, updatedAt: new Date().toISOString() } : r
+    );
+    setResources(updated);
+    const target = updated.find((r) => r.id === id);
+    if (target) {
+      set(ref(database, `${DB_ROOT_NODE}/resources/${id}`), target).catch(console.error);
+    }
+  };
+
+  const deleteResource = (id: string) => {
+    const updated = resources.filter((r) => r.id !== id);
+    setResources(updated);
+    set(ref(database, `${DB_ROOT_NODE}/resources/${id}`), null).catch(console.error);
+  };
+
   // Milestone Management
   const addMilestone = (milestoneData: Omit<Milestone, 'id' | 'order'>) => {
     const newMilestone: Milestone = {
@@ -897,6 +943,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addRole,
         updateRole,
         deleteRole,
+        resources,
+        addResource,
+        updateResource,
+        deleteResource,
         milestones,
         addMilestone,
         updateMilestone,

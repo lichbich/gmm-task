@@ -13,20 +13,27 @@ import {
   Kanban,
   LogOut,
   ChevronDown,
-  KeyRound,
   ShieldCheck,
-  Sparkles,
-  User as UserIcon,
   History,
-  CalendarPlus,
+  FolderGit2,
+  CheckSquare,
 } from 'lucide-react';
 
+export type MainSectionType = 'tasks' | 'resources' | 'users';
+
 interface HeaderProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  activeMainSection: MainSectionType;
+  setActiveMainSection: (section: MainSectionType) => void;
+  activeTaskTab: string;
+  setActiveTaskTab: (tab: string) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
+export const Header: React.FC<HeaderProps> = ({
+  activeMainSection,
+  setActiveMainSection,
+  activeTaskTab,
+  setActiveTaskTab,
+}) => {
   const { currentUser, users, logout } = useApp();
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
@@ -40,19 +47,16 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
         return {
           badge: 'bg-purple-50 text-purple-700 border-purple-200/80',
           avatarGrad: 'from-purple-600 to-indigo-600 text-white',
-          dot: 'bg-purple-500',
         };
       case 'Leader':
         return {
           badge: 'bg-amber-50 text-amber-700 border-amber-200/80',
           avatarGrad: 'from-amber-500 to-orange-600 text-white',
-          dot: 'bg-amber-500',
         };
       default:
         return {
           badge: 'bg-blue-50 text-blue-700 border-blue-200/80',
           avatarGrad: 'from-indigo-600 to-blue-500 text-white',
-          dot: 'bg-emerald-500',
         };
     }
   };
@@ -62,13 +66,57 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        {/* TOP HEADER ROW: LOGO, MAIN 3 MANAGEMENT TABS, USER PROFILE */}
+        <div className="flex items-center justify-between h-16 gap-4">
           {/* Brand Logo & Title */}
-          <GMMLogo size={42} showText={true} />
+          <GMMLogo size={40} showText={true} />
+
+          {/* MAIN 3 TOP MANAGEMENT TABS */}
+          <div className="hidden md:flex items-center bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/90 gap-1.5 shadow-2xs">
+            {/* TAB 1: QUẢN LÝ TASK */}
+            <button
+              onClick={() => setActiveMainSection('tasks')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+                activeMainSection === 'tasks'
+                  ? 'bg-white text-indigo-600 shadow-sm shadow-slate-200 border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <CheckSquare className={`w-4 h-4 ${activeMainSection === 'tasks' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <span>Quản Lý Task</span>
+            </button>
+
+            {/* TAB 2: QUẢN LÝ RESOURCE */}
+            <button
+              onClick={() => setActiveMainSection('resources')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+                activeMainSection === 'resources'
+                  ? 'bg-white text-indigo-600 shadow-sm shadow-slate-200 border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <FolderGit2 className={`w-4 h-4 ${activeMainSection === 'resources' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <span>Quản Lý Resource</span>
+            </button>
+
+            {/* TAB 3: QUẢN LÝ USER (ADMIN ONLY) */}
+            {currentUser?.role === 'Admin' && (
+              <button
+                onClick={() => setActiveMainSection('users')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+                  activeMainSection === 'users'
+                    ? 'bg-white text-purple-700 shadow-sm shadow-slate-200 border border-purple-200/80'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <ShieldCheck className={`w-4 h-4 ${activeMainSection === 'users' ? 'text-purple-600' : 'text-purple-400'}`} />
+                <span>Quản Lý User (Admin)</span>
+              </button>
+            )}
+          </div>
 
           {/* Right Controls & Auth Profile */}
-          <div className="flex items-center gap-2.5">
-            {/* Current User Info Card (Clickable to open profile popup & change password) */}
+          <div className="flex items-center gap-2">
             {currentUser && (
               <div className="flex items-center gap-2">
                 <button
@@ -76,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
                   className="group flex items-center gap-3 p-1.5 pr-3.5 bg-slate-50/80 hover:bg-white border border-slate-200/90 hover:border-indigo-300 rounded-2xl transition-all shadow-xs hover:shadow-md active:scale-[0.98] text-left"
                   title="Bấm để xem thông tin chi tiết & Đổi mật khẩu"
                 >
-                  {/* User Avatar with Gradient & Status Dot */}
+                  {/* User Avatar */}
                   <div className="relative shrink-0">
                     <div className={`w-9 h-9 rounded-xl bg-gradient-to-tr ${theme.avatarGrad} flex items-center justify-center text-xs font-black shadow-xs`}>
                       {currentUser.account.slice(0, 2).toUpperCase()}
@@ -87,7 +135,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
                     />
                   </div>
 
-                  {/* Name, Role & Specialization preview */}
+                  {/* Name, Role & Specialization */}
                   <div className="hidden sm:block leading-tight">
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition truncate max-w-[130px]">
@@ -107,13 +155,12 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
                     </div>
                   </div>
 
-                  {/* Dropdown Indicator Icon */}
                   <div className="hidden sm:flex items-center text-slate-400 group-hover:text-indigo-600 transition pl-1">
                     <ChevronDown className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
                   </div>
                 </button>
 
-                {/* Quick Logout Button */}
+                {/* Logout Button */}
                 <button
                   onClick={logout}
                   className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-xl transition"
@@ -126,85 +173,106 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="flex items-center space-x-1 border-t border-slate-100 pt-1 overflow-x-auto">
+        {/* MOBILE VIEW MAIN TABS SWITCHER */}
+        <div className="md:hidden flex items-center justify-around py-2 border-t border-slate-100 bg-slate-50/50">
           <button
-            onClick={() => setActiveTab('schedule')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
-              activeTab === 'schedule'
-                ? 'bg-indigo-50 text-indigo-600 border-t-2 border-indigo-500 shadow-2xs font-bold'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
+            onClick={() => setActiveMainSection('tasks')}
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl ${
+              activeMainSection === 'tasks' ? 'bg-indigo-600 text-white' : 'text-slate-600'
             }`}
           >
-            <LayoutGrid className="w-4 h-4" />
-            Work Schedules (Bảng Excel)
+            <CheckSquare className="w-3.5 h-3.5" />
+            Task
           </button>
-
           <button
-            onClick={() => setActiveTab('milestones')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
-              activeTab === 'milestones'
-                ? 'bg-indigo-50 text-indigo-600 border-t-2 border-indigo-500 shadow-2xs font-bold'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
+            onClick={() => setActiveMainSection('resources')}
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl ${
+              activeMainSection === 'resources' ? 'bg-indigo-600 text-white' : 'text-slate-600'
             }`}
           >
-            <ListOrdered className="w-4 h-4" />
-            Milestones & Break Tasks {currentUser?.role === 'Leader' && '(Leader)'}
+            <FolderGit2 className="w-3.5 h-3.5" />
+            Resource
           </button>
-
-          <button
-            onClick={() => setActiveTab('kanban')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
-              activeTab === 'kanban'
-                ? 'bg-indigo-50 text-indigo-600 border-t-2 border-indigo-500 shadow-2xs font-bold'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
-            }`}
-          >
-            <Kanban className="w-4 h-4" />
-            Bảng Kanban
-          </button>
-
-          <button
-            onClick={() => setActiveTab('awards')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
-              activeTab === 'awards'
-                ? 'bg-amber-50 text-amber-600 border-t-2 border-amber-500 shadow-2xs font-bold'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
-            }`}
-          >
-            <Trophy className="w-4 h-4 text-amber-500" />
-            Thưởng & Cảnh Báo (Thưởng / Phạt)
-          </button>
-
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
-              activeTab === 'history'
-                ? 'bg-indigo-50 text-indigo-600 border-t-2 border-indigo-500 shadow-2xs font-bold'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
-            }`}
-          >
-            <History className="w-4 h-4 text-indigo-600" />
-            Lịch Sử Công Việc
-          </button>
-
           {currentUser?.role === 'Admin' && (
             <button
-              onClick={() => setActiveTab('members')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
-                activeTab === 'members'
-                  ? 'bg-purple-50 text-purple-600 border-t-2 border-purple-500 shadow-2xs font-bold'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
+              onClick={() => setActiveMainSection('users')}
+              className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl ${
+                activeMainSection === 'users' ? 'bg-purple-600 text-white' : 'text-slate-600'
               }`}
             >
-              <Users className="w-4 h-4" />
-              Quản Lý User (Admin)
+              <ShieldCheck className="w-3.5 h-3.5" />
+              User
             </button>
           )}
         </div>
+
+        {/* SUB NAVIGATION TABS FOR TASK MANAGEMENT */}
+        {activeMainSection === 'tasks' && (
+          <div className="flex items-center space-x-1 border-t border-slate-100 pt-1 overflow-x-auto">
+            <button
+              onClick={() => setActiveTaskTab('schedule')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
+                activeTaskTab === 'schedule'
+                  ? 'bg-indigo-50 text-indigo-600 border-t-2 border-indigo-500 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+              Work Schedules (Bảng Excel)
+            </button>
+
+            <button
+              onClick={() => setActiveTaskTab('milestones')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
+                activeTaskTab === 'milestones'
+                  ? 'bg-indigo-50 text-indigo-600 border-t-2 border-indigo-500 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
+              }`}
+            >
+              <ListOrdered className="w-4 h-4" />
+              Milestones & Break Tasks {currentUser?.role === 'Leader' && '(Leader)'}
+            </button>
+
+            <button
+              onClick={() => setActiveTaskTab('kanban')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
+                activeTaskTab === 'kanban'
+                  ? 'bg-indigo-50 text-indigo-600 border-t-2 border-indigo-500 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
+              }`}
+            >
+              <Kanban className="w-4 h-4" />
+              Bảng Kanban
+            </button>
+
+            <button
+              onClick={() => setActiveTaskTab('awards')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
+                activeTaskTab === 'awards'
+                  ? 'bg-amber-50 text-amber-600 border-t-2 border-amber-500 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
+              }`}
+            >
+              <Trophy className="w-4 h-4 text-amber-500" />
+              Thưởng & Cảnh Báo (Thưởng / Phạt)
+            </button>
+
+            <button
+              onClick={() => setActiveTaskTab('history')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap ${
+                activeTaskTab === 'history'
+                  ? 'bg-indigo-50 text-indigo-600 border-t-2 border-indigo-500 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50/80'
+              }`}
+            >
+              <History className="w-4 h-4 text-indigo-600" />
+              Lịch Sử Công Việc
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* User Profile & Change Password Modal */}
+      {/* Profile & Password Modal */}
       <UserProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}

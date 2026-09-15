@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { AppProvider, useApp } from '../context/AppContext';
-import { Header } from '../components/Header';
+import { Header, MainSectionType } from '../components/Header';
 import { WorkScheduleTable } from '../components/WorkScheduleTable';
 import { MilestonesView } from '../components/MilestonesView';
 import { KanbanBoard } from '../components/KanbanBoard';
@@ -10,13 +10,16 @@ import { AwardLeaderboard } from '../components/AwardLeaderboard';
 import { WorkHistoryView } from '../components/WorkHistoryView';
 import { NextWeekDefineView } from '../components/NextWeekDefineView';
 import { UserManagementView } from '../components/UserManagementView';
+import { ResourceManagerView } from '../components/ResourceManagerView';
 import { TaskModal } from '../components/TaskModal';
 import { LoginModal } from '../components/LoginModal';
 import { Task } from '../types/task';
 
 function MainApp() {
   const { authSession } = useApp();
-  const [activeTab, setActiveTab] = useState<string>('schedule');
+  const [activeMainSection, setActiveMainSection] = useState<MainSectionType>('tasks');
+  const [activeTaskTab, setActiveTaskTab] = useState<string>('schedule');
+
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState<boolean>(false);
   const [taskModalDefaultWeek, setTaskModalDefaultWeek] = useState<number | undefined>(undefined);
@@ -36,26 +39,47 @@ function MainApp() {
 
       {authSession && (
         <>
-          <Header activeTab={activeTab} setActiveTab={setActiveTab} />
+          <Header
+            activeMainSection={activeMainSection}
+            setActiveMainSection={setActiveMainSection}
+            activeTaskTab={activeTaskTab}
+            setActiveTaskTab={setActiveTaskTab}
+          />
 
           <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-            <div key={activeTab} className="animate-in fade-in duration-200">
-              {activeTab === 'schedule' && (
-                <WorkScheduleTable onOpenTaskModal={handleOpenTaskModal} />
-              )}
-              {activeTab === 'milestones' && <MilestonesView />}
-              {activeTab === 'nextweek' && (
-                <NextWeekDefineView onOpenTaskModal={handleOpenTaskModal} />
-              )}
-              {activeTab === 'kanban' && (
-                <KanbanBoard onOpenTaskModal={handleOpenTaskModal} />
-              )}
-              {activeTab === 'awards' && <AwardLeaderboard />}
-              {activeTab === 'history' && (
-                <WorkHistoryView onOpenTaskModal={handleOpenTaskModal} />
-              )}
-              {activeTab === 'members' && <UserManagementView />}
-            </div>
+            {/* MAIN SECTION 1: TASK MANAGEMENT */}
+            {activeMainSection === 'tasks' && (
+              <div key={activeTaskTab} className="animate-in fade-in duration-200">
+                {activeTaskTab === 'schedule' && (
+                  <WorkScheduleTable onOpenTaskModal={handleOpenTaskModal} />
+                )}
+                {activeTaskTab === 'milestones' && <MilestonesView />}
+                {activeTaskTab === 'nextweek' && (
+                  <NextWeekDefineView onOpenTaskModal={handleOpenTaskModal} />
+                )}
+                {activeTaskTab === 'kanban' && (
+                  <KanbanBoard onOpenTaskModal={handleOpenTaskModal} />
+                )}
+                {activeTaskTab === 'awards' && <AwardLeaderboard />}
+                {activeTaskTab === 'history' && (
+                  <WorkHistoryView onOpenTaskModal={handleOpenTaskModal} />
+                )}
+              </div>
+            )}
+
+            {/* MAIN SECTION 2: RESOURCE MANAGEMENT */}
+            {activeMainSection === 'resources' && (
+              <div className="animate-in fade-in duration-200">
+                <ResourceManagerView />
+              </div>
+            )}
+
+            {/* MAIN SECTION 3: USER MANAGEMENT (ADMIN ONLY) */}
+            {activeMainSection === 'users' && (
+              <div className="animate-in fade-in duration-200">
+                <UserManagementView />
+              </div>
+            )}
           </main>
 
           {/* Task Creation / Edit Modal */}
