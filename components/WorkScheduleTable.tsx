@@ -697,12 +697,34 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                         </td>
                       </tr>
 
-                      {/* Group Tasks */}
-                      {group.tasks.map((t) => {
-                        const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                        const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                        return renderTaskRow(t, displayIdx);
-                      })}
+                      {/* Group Tasks by Account */}
+                      {(() => {
+                        const tasksByAccountMap = new Map<string, Task[]>();
+                        group.tasks.forEach((t) => {
+                          const acc = t.assigneeAccount || 'Unassigned';
+                          const list = tasksByAccountMap.get(acc) || [];
+                          list.push(t);
+                          tasksByAccountMap.set(acc, list);
+                        });
+
+                        const accountGroups = Array.from(tasksByAccountMap.entries());
+
+                        return accountGroups.map(([acc, accTasks], accIdx) => (
+                          <React.Fragment key={`acc-group-${group.role}-${acc}`}>
+                            {/* Thin blank separator row (half height of normal row) between different accounts */}
+                            {accIdx > 0 && (
+                              <tr className="h-4 bg-slate-50/60 border-y border-slate-100/80 select-none">
+                                <td colSpan={9} className="h-4 p-0 border-0"></td>
+                              </tr>
+                            )}
+                            {accTasks.map((t) => {
+                              const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                              const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
+                              return renderTaskRow(t, displayIdx);
+                            })}
+                          </React.Fragment>
+                        ));
+                      })()}
                     </React.Fragment>
                   );
                 })
