@@ -76,7 +76,7 @@ export const LoginModal: React.FC = () => {
             <GMMLogo size={56} />
           </div>
           <h2 className="text-xl font-bold text-slate-800 tracking-tight">
-            {isFirstTimeSetup ? 'Tạo Mật Khẩu Lần Đầu' : 'Đăng Nhập GMM Task System'}
+            {isFirstTimeSetup ? 'Tạo Mật Khẩu Lần Đầu' : 'Đăng Nhập Saho Task System'}
           </h2>
           <p className="text-xs text-slate-500">
             {isFirstTimeSetup

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GMM Task System - Hệ thống quản lý task & báo cáo",
+  title: "Saho Task System - Hệ thống quản lý task & báo cáo",
   description: "Hệ thống quản lý task, milestones và báo cáo tiến độ thời gian thực",
   icons: {
     icon: [

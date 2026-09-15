@@ -98,7 +98,7 @@ export const GMMLogo: React.FC<GMMLogoProps> = ({
         <div className="leading-tight">
           <div className="flex items-center gap-1.5">
             <h1 className={`text-lg font-black text-slate-800 tracking-tight ${textClassName}`}>
-              GMM Task System
+              Saho Task System
             </h1>
           </div>
           <p className={`text-xs text-slate-500 font-medium ${subtextClassName}`}>
