@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+import { UserDetailModal } from './UserDetailModal';
 
 const COLOR_OPTIONS: { id: string; name: string; bg: string; text: string; border: string; preview: string }[] = [
   { id: 'purple', name: 'Tím', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-300', preview: 'bg-purple-500' },
@@ -51,6 +52,9 @@ export const UserManagementView: React.FC = () => {
 
   // Sub-tabs: 'USERS' or 'ROLES'
   const [activeSubTab, setActiveSubTab] = useState<'USERS' | 'ROLES'>('USERS');
+
+  // SELECTED USER FOR DETAIL MODAL
+  const [selectedUserForDetail, setSelectedUserForDetail] = useState<User | null>(null);
 
   // USER FORM STATE
   const [isUserFormOpen, setIsUserFormOpen] = useState(false);
@@ -540,19 +544,16 @@ export const UserManagementView: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[900px]">
+              <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
                     <th className="py-3 px-3 w-10 text-center">STT</th>
                     <th className="py-3 px-3">STAFF CODE (USERNAME)</th>
                     <th className="py-3 px-4">FULL NAME</th>
-                    <th className="py-3 px-3">CCCD</th>
-                    <th className="py-3 px-3">TK BANK</th>
                     <th className="py-3 px-3">GMAIL / PHONE</th>
                     <th className="py-3 px-3 text-center">ROLE</th>
                     <th className="py-3 px-3 text-center">LEVEL</th>
                     <th className="py-3 px-3">TECHNOLOGY</th>
-                    <th className="py-3 px-2 text-center">NĂM SINH</th>
                     <th className="py-3 px-3 text-right">THAO TÁC</th>
                   </tr>
                 </thead>
@@ -563,12 +564,22 @@ export const UserManagementView: React.FC = () => {
                         {idx + 1}
                       </td>
                       <td className="py-3 px-3 font-mono font-bold text-indigo-700 bg-indigo-50/40 rounded">
-                        {u.account}
+                        <button
+                          onClick={() => setSelectedUserForDetail(u)}
+                          className="hover:underline text-indigo-700 font-bold focus:outline-none"
+                          title="Xem chi tiết & quản lý thành viên"
+                        >
+                          {u.account}
+                        </button>
                       </td>
-                      <td className="py-3 px-4 font-bold text-slate-800">{u.name}</td>
-                      <td className="py-3 px-3 font-mono text-[11px] text-slate-600">{u.cccd || '—'}</td>
-                      <td className="py-3 px-3 text-[11px] text-slate-600 max-w-[180px] truncate" title={u.bankAccount}>
-                        {u.bankAccount || '—'}
+                      <td className="py-3 px-4 font-bold text-slate-800">
+                        <button
+                          onClick={() => setSelectedUserForDetail(u)}
+                          className="text-left font-bold text-slate-800 hover:text-indigo-600 hover:underline transition focus:outline-none"
+                          title="Xem chi tiết & quản lý thành viên"
+                        >
+                          {u.name}
+                        </button>
                       </td>
                       <td className="py-3 px-3 text-[11px]">
                         <div className="text-slate-700 font-semibold">{u.email || '—'}</div>
@@ -606,24 +617,9 @@ export const UserManagementView: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3 px-3 text-[11px] text-slate-600 font-semibold">{u.technologies || '—'}</td>
-                      <td className="py-3 px-2 text-center font-mono text-[11px] font-bold text-slate-600">{u.birthDate || '—'}</td>
                       <td className="py-3 px-3 text-right">
                         {currentUser?.role === 'Admin' && (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleResetPassword(u)}
-                              className="p-1.5 bg-slate-100 hover:bg-amber-50 hover:text-amber-600 text-slate-500 rounded-lg transition"
-                              title="Đặt lại mật khẩu cho tài khoản này"
-                            >
-                              <KeyRound className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditUser(u)}
-                              className="p-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-500 rounded-lg transition"
-                              title="Sửa thông tin nhân viên"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                          <div className="flex items-center justify-end">
                             <button
                               onClick={() => handleDeleteUser(u)}
                               className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-500 rounded-lg transition"
@@ -856,6 +852,13 @@ export const UserManagementView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* User Detail & Edit Modal */}
+      <UserDetailModal
+        user={selectedUserForDetail}
+        isOpen={!!selectedUserForDetail}
+        onClose={() => setSelectedUserForDetail(null)}
+      />
     </div>
   );
 };
