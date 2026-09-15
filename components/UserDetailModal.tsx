@@ -25,6 +25,7 @@ import {
   Calendar,
   FileText,
   Cpu,
+  Info,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown } from './common/Dropdown';
@@ -49,17 +50,9 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
 
-  // Form Fields
-  const [userName, setUserName] = useState('');
-  const [userAccount, setUserAccount] = useState('');
+  // Form Fields (Admin only updates role and specializations)
   const [userRole, setUserRole] = useState<UserRole>('Member');
   const [selectedSpecs, setSelectedSpecs] = useState<Specialization[]>(['BA']);
-  const [userCccd, setUserCccd] = useState('');
-  const [userBankAccount, setUserBankAccount] = useState('');
-  const [userEmail, setUserEmail] = useState('');
-  const [userPhone, setUserPhone] = useState('');
-  const [userTechnologies, setUserTechnologies] = useState('');
-  const [userBirthDate, setUserBirthDate] = useState('');
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -67,16 +60,8 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   // Sync state when user prop changes or modal opens
   useEffect(() => {
     if (user) {
-      setUserName(user.name || '');
-      setUserAccount(user.account || '');
       setUserRole(user.role || 'Member');
       setSelectedSpecs(user.specializations && user.specializations.length > 0 ? user.specializations : ['BA']);
-      setUserCccd(user.cccd || '');
-      setUserBankAccount(user.bankAccount || '');
-      setUserEmail(user.email || '');
-      setUserPhone(user.phone || '');
-      setUserTechnologies(user.technologies || '');
-      setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
       setErrorMsg('');
       setSuccessMsg('');
     }
@@ -141,30 +126,12 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!userName.trim()) {
-      setErrorMsg('Vui lòng nhập Họ & Tên.');
-      return;
-    }
-
-    if (!userAccount.trim()) {
-      setErrorMsg('Vui lòng nhập Staff Code / Username.');
-      return;
-    }
-
     updateUser(user.id, {
-      name: userName.trim(),
-      account: userAccount.trim(),
       role: userRole,
       specializations: selectedSpecs,
-      cccd: userCccd.trim(),
-      bankAccount: userBankAccount.trim(),
-      email: userEmail.trim(),
-      phone: userPhone.trim(),
-      technologies: userTechnologies.trim(),
-      birthDate: userBirthDate.trim(),
     });
 
-    setSuccessMsg('Cập nhật thông tin nhân viên thành công!');
+    setSuccessMsg('Cập nhật phân quyền & chuyên môn nhân viên thành công!');
     setTimeout(() => {
       setSuccessMsg('');
     }, 3000);
@@ -245,11 +212,11 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
               <div className="space-y-1">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                  {userName || user.name}
+                  {user.name}
                 </h3>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-mono text-indigo-200 bg-white/10 px-2 py-0.5 rounded-md border border-white/15 font-bold">
-                    @{userAccount || user.account}
+                    @{user.account}
                   </span>
                   <span
                     className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${roleTheme.badge}`}
@@ -339,18 +306,18 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
             </div>
           </div>
 
-          {/* Form Content */}
+          {/* Admin Edit Controls: Level & Specializations */}
           <form onSubmit={handleSaveUser} className="space-y-4">
-            <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-4 shadow-2xs">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
+            <div className="border border-purple-200/80 rounded-2xl p-4 bg-purple-50/30 space-y-4 shadow-2xs">
+              <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-100 pb-2">
                 <Shield className="w-4 h-4 text-purple-600" />
-                Cài Đặt Phân Quyền & Vai Trò Chuyên Môn
+                Quản Lý Phân Quyền & Vai Trò Chuyên Môn (Admin Only)
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Level / Quyền */}
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
                     Cấp Phân Quyền (Level System):
                   </label>
                   {isAdmin ? (
@@ -364,33 +331,28 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                         { value: 'Admin', label: 'Admin (Quản trị hệ thống)' },
                       ]}
                       className="w-full"
-                      buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300 font-semibold text-slate-800"
+                      buttonClassName="py-2 px-3 text-xs bg-white border-purple-300 font-bold text-slate-800 shadow-2xs"
                     />
                   ) : (
-                    <div className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
+                    <div className="py-2 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700">
                       {userRole}
                     </div>
                   )}
                 </div>
 
-                {/* Staff Code */}
+                {/* Staff Code (Read-Only) */}
                 <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Staff Code (Username Đăng Nhập):
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Staff Code (Username):
                   </label>
-                  <input
-                    type="text"
-                    value={userAccount}
-                    onChange={(e) => setUserAccount(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-indigo-700 font-mono font-bold focus:outline-none focus:border-purple-400 focus:bg-white disabled:opacity-75"
-                    required
-                  />
+                  <div className="py-2 px-3 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-indigo-700 shadow-2xs">
+                    @{user.account}
+                  </div>
                 </div>
 
                 {/* Specializations (Role Position) */}
                 <div className="sm:col-span-2 space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-600 block">
+                  <label className="text-xs font-semibold text-slate-700 block">
                     Vị Trí Chuyên Môn Kiêm Nhiệm (Role):
                   </label>
                   <div className="flex flex-wrap gap-2 pt-0.5">
@@ -404,12 +366,12 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                           disabled={!isAdmin}
                           className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 ${
                             isChecked
-                              ? 'bg-purple-50 text-purple-700 border-purple-300 shadow-2xs font-bold'
-                              : 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100'
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-sm font-bold'
+                              : 'bg-white text-slate-600 border-slate-300 hover:bg-purple-50'
                           } ${!isAdmin ? 'cursor-default opacity-85' : 'active:scale-95'}`}
                         >
                           {isChecked ? (
-                            <CheckSquare className="w-3.5 h-3.5 text-purple-600" />
+                            <CheckSquare className="w-3.5 h-3.5 text-white" />
                           ) : (
                             <Square className="w-3.5 h-3.5 text-slate-400" />
                           )}
@@ -424,104 +386,69 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
               </div>
             </div>
 
-            {/* Personal Details Section */}
-            <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-4 shadow-2xs">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
-                <FileText className="w-4 h-4 text-indigo-600" />
-                Hồ Sơ Lý Lịch Nhân Sự
-              </h4>
+            {/* Read-Only Personal Details Section */}
+            <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-3.5 shadow-2xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  Hồ Sơ Lý Lịch Nhân Sự
+                </h4>
+                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
+                  <Info className="w-3 h-3 text-indigo-500" />
+                  Chỉ nhân viên tự cập nhật trong Hồ sơ cá nhân
+                </span>
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Họ & Tên Nhân Viên: <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={userName}
-                    onChange={(e) => setUserName(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-purple-400 focus:bg-white disabled:opacity-75"
-                    required
-                  />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Họ & Tên</span>
+                  <span className="font-bold text-slate-800 text-xs">{user.name || '—'}</span>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1 flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-slate-400" /> Số Điện Thoại:
-                  </label>
-                  <input
-                    type="text"
-                    value={userPhone}
-                    onChange={(e) => setUserPhone(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-purple-400 focus:bg-white disabled:opacity-75"
-                  />
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-slate-400" /> Số Điện Thoại
+                  </span>
+                  <span className="font-mono font-bold text-slate-800">{user.phone || '—'}</span>
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1 flex items-center gap-1">
-                    <Mail className="w-3 h-3 text-slate-400" /> Gmail / Email:
-                  </label>
-                  <input
-                    type="email"
-                    value={userEmail}
-                    onChange={(e) => setUserEmail(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-400 focus:bg-white disabled:opacity-75"
-                  />
+                <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                    <Mail className="w-3 h-3 text-slate-400" /> Gmail / Email
+                  </span>
+                  <span className="font-semibold text-slate-800 truncate block">{user.email || '—'}</span>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1 flex items-center gap-1">
-                    <FileText className="w-3 h-3 text-slate-400" /> Số Căn Cước (CCCD):
-                  </label>
-                  <input
-                    type="text"
-                    value={userCccd}
-                    onChange={(e) => setUserCccd(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-purple-400 focus:bg-white disabled:opacity-75"
-                  />
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-slate-400" /> Số Căn Cước (CCCD)
+                  </span>
+                  <span className="font-mono font-bold text-slate-800">{user.cccd || '—'}</span>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1 flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-slate-400" /> Năm Sinh (BirthDate):
-                  </label>
-                  <input
-                    type="text"
-                    value={userBirthDate}
-                    onChange={(e) => setUserBirthDate(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-purple-400 focus:bg-white disabled:opacity-75"
-                  />
+                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-slate-400" /> Năm Sinh
+                  </span>
+                  <span className="font-mono font-bold text-slate-800">{user.birthDate || '—'}</span>
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1 flex items-center gap-1">
-                    <CreditCard className="w-3 h-3 text-slate-400" /> Tài Khoản Ngân Hàng (Tk Bank):
-                  </label>
-                  <input
-                    type="text"
-                    value={userBankAccount}
-                    onChange={(e) => setUserBankAccount(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-purple-400 focus:bg-white disabled:opacity-75"
-                  />
+                <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                    <CreditCard className="w-3 h-3 text-slate-400" /> Tài Khoản Ngân Hàng (Tk Bank)
+                  </span>
+                  <span className="font-mono font-bold text-slate-800 text-[11px] block">
+                    {user.bankAccount || '—'}
+                  </span>
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1 flex items-center gap-1">
-                    <Cpu className="w-3 h-3 text-slate-400" /> Kỹ Năng / Công Nghệ (Technology):
-                  </label>
-                  <input
-                    type="text"
-                    value={userTechnologies}
-                    onChange={(e) => setUserTechnologies(e.target.value)}
-                    disabled={!isAdmin}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-purple-400 focus:bg-white disabled:opacity-75"
-                  />
+                <div className="sm:col-span-2 bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100 space-y-0.5">
+                  <span className="text-[10px] text-indigo-500 uppercase font-bold tracking-wider block flex items-center gap-1">
+                    <Cpu className="w-3 h-3 text-indigo-500" /> Kỹ Năng / Công Nghệ (Technology)
+                  </span>
+                  <span className="font-semibold text-indigo-700 text-xs block">
+                    {user.technologies || '—'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -555,7 +482,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                     className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 active:scale-95"
                   >
                     <Save className="w-4 h-4" />
-                    Lưu Thay Đổi
+                    Lưu Cấu Hình
                   </button>
                 )}
               </div>
