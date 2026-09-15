@@ -101,19 +101,17 @@ export const MilestonesView: React.FC = () => {
 
   // Check if a milestone matches current view
   const isMilestoneRoleMatch = (ms: Milestone): boolean => {
+    // Milestones marked as 'ALL' or with no specific role apply to all roles & views
+    if (!ms.role || ms.role === 'ALL') {
+      return true;
+    }
+
     if (currentUser?.role === 'Admin') {
-      if (ms.role && ms.role !== 'ALL') {
-        return ms.role === adminSelectedRole;
-      }
-      // If no explicit role or 'ALL', check if it has tasks matching adminSelectedRole
-      return tasks.some((t) => t.milestoneId === ms.id && t.role === adminSelectedRole);
+      return ms.role === adminSelectedRole || tasks.some((t) => t.milestoneId === ms.id && t.role === adminSelectedRole);
     } else {
       const userRoles = currentUser?.specializations || [];
       if (userRoles.length === 0) return false;
-      if (ms.role && ms.role !== 'ALL') {
-        return userRoles.includes(ms.role);
-      }
-      return tasks.some((t) => t.milestoneId === ms.id && userRoles.includes(t.role));
+      return userRoles.includes(ms.role) || tasks.some((t) => t.milestoneId === ms.id && userRoles.includes(t.role));
     }
   };
 
