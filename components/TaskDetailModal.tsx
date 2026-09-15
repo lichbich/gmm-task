@@ -180,30 +180,30 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white border border-slate-200/90 rounded-3xl w-full max-w-2xl shadow-2xl text-slate-800 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl text-slate-800 dark:text-slate-100 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         }`}
       >
         {/* Fixed Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 p-5 sm:px-6 sm:py-4 shrink-0 bg-white">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 p-5 sm:px-6 sm:py-4 shrink-0 bg-white dark:bg-slate-900">
           <div className="space-y-2 flex-1 pr-2 min-w-0">
             {/* Status & Category Badges */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold">
+              <span className="px-2.5 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 text-xs font-semibold">
                 {task.role}
               </span>
 
               {/* Priority badge */}
               {priority === 'High' ? (
-                <span className="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold flex items-center gap-1">
+                <span className="px-2.5 py-0.5 rounded-lg bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 text-xs font-semibold flex items-center gap-1">
                   <Flame className="w-3 h-3 text-rose-500" /> Ưu tiên Cao
                 </span>
               ) : priority === 'Low' ? (
-                <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 border border-slate-200 text-xs font-semibold">
+                <span className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-semibold">
                   Ưu tiên Thấp
                 </span>
               ) : (
-                <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">
+                <span className="px-2.5 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 text-xs font-semibold">
                   Ưu tiên Trung bình
                 </span>
               )}
@@ -212,10 +212,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <span
                 className={`px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${
                   task.status === 'Done'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80'
                     : task.status === 'In Progress'
-                    ? 'bg-blue-50 text-blue-700 border-blue-300'
-                    : 'bg-slate-100 text-slate-700 border-slate-300'
+                    ? 'bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-300 border-blue-200/80 dark:border-blue-800/80'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                 }`}
               >
                 {task.status}
@@ -223,33 +223,27 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
               <span className="text-xs text-slate-400 font-mono">#{task.id.replace('tsk-', '')}</span>
 
-              {task.priority === 'High' && (
-                <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
-                  <Flame className="w-3 h-3 text-red-500 fill-red-500" /> Ưu tiên cao
-                </span>
-              )}
-
               {isLate && (
-                <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                <span className="px-2 py-0.5 bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
                   <AlertTriangle className="w-3 h-3" /> PHẠT (Nộp muộn)
                 </span>
               )}
               {isTopEffort && (
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-300 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
                   <Award className="w-3 h-3" /> THƯỞNG (Top Effort)
                 </span>
               )}
             </div>
 
             {/* Task Title */}
-            <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-snug break-words">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug break-words pt-1">
               {task.title}
             </h3>
           </div>
 
           <button
             onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 shrink-0"
+            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition active:scale-95 shrink-0"
             title="Đóng cửa sổ"
           >
             <X className="w-4 h-4" />
@@ -257,19 +251,19 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Scrollable Body with custom-scrollbar */}
-        <div className="p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4 min-h-0">
+        <div className="p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4 min-h-0 bg-white dark:bg-slate-900">
           {/* Creator & Creation Date Info Banner */}
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-slate-600 flex-wrap">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+          <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
                 <User className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-slate-400">Người tạo:</span>
-                  <span className="font-semibold text-slate-800">{creatorDisplay}</span>
+                  <span className="text-slate-400 dark:text-slate-400">Người tạo:</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{creatorDisplay}</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-400">
                   <Calendar className="w-3 h-3 shrink-0" />
                   <span>Khởi tạo: {createdDateDisplay}</span>
                   {updatedDateDisplay && (
@@ -282,18 +276,18 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
             </div>
 
-            <div className="text-right text-[11px] text-slate-500 shrink-0">
-              <span className="font-medium bg-white px-2 py-1 rounded-lg border border-slate-200/80">
+            <div className="text-right text-[11px] shrink-0">
+              <span className="font-medium bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300">
                 Tuần {task.weekNumber} / {task.year}
               </span>
             </div>
           </div>
 
           {/* Task Details / Description Section */}
-          <div className="bg-gradient-to-br from-indigo-50/50 to-slate-50 border border-indigo-100/90 rounded-2xl p-4 space-y-2 relative">
+          <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-2.5 relative">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 font-bold text-xs text-indigo-900">
-                <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+              <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
+                <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                 <span>Mô Tả Chi Tiết & Hướng Dẫn Kỹ Thuật (Leader):</span>
               </div>
 
@@ -301,7 +295,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsEditingDesc(true)}
-                  className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline transition"
+                  className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 hover:underline transition"
                 >
                   <Edit3 className="w-3 h-3" />
                   {task.description ? 'Chỉnh sửa mô tả' : '+ Thêm mô tả'}
@@ -316,7 +310,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   value={descText}
                   onChange={(e) => setDescText(e.target.value)}
                   placeholder="Nhập mô tả chi tiết công việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên..."
-                  className="w-full bg-white border border-indigo-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200 transition resize-none leading-relaxed"
+                  className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition resize-none leading-relaxed"
                   autoFocus
                 />
                 <div className="flex items-center justify-end gap-2">
@@ -326,7 +320,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       setDescText(task.description || '');
                       setIsEditingDesc(false);
                     }}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl font-medium transition"
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-xl font-medium transition"
                   >
                     Hủy
                   </button>
@@ -342,16 +336,18 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             ) : (
               <div>
                 {task.description ? (
-                  <p className="text-slate-700 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap pl-1 font-normal">
-                    {task.description}
-                  </p>
+                  <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3">
+                    <p className="text-slate-700 dark:text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-normal">
+                      {task.description}
+                    </p>
+                  </div>
                 ) : (
                   <div
                     onClick={() => setIsEditingDesc(true)}
-                    className="border border-dashed border-slate-300 rounded-xl p-3.5 text-center text-xs text-slate-400 cursor-pointer hover:bg-indigo-50/40 hover:border-indigo-300 hover:text-indigo-700 transition space-y-1"
+                    className="border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3.5 text-center text-xs cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40 hover:border-indigo-300 dark:hover:border-indigo-700 transition space-y-1"
                   >
-                    <div className="font-medium text-slate-500">Chưa có mô tả chi tiết cho task này</div>
-                    <div className="text-[11px] text-slate-400">
+                    <div className="font-medium text-slate-600 dark:text-slate-300">Chưa có mô tả chi tiết cho task này</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-400">
                       Bấm vào đây để thêm nội dung hướng dẫn hoặc yêu cầu nghiệm thu từ Leader.
                     </div>
                   </div>
@@ -360,31 +356,31 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             )}
 
             {isSavedDesc && (
-              <div className="text-xs text-emerald-600 font-semibold flex items-center gap-1 animate-fade-in pt-1">
+              <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 animate-fade-in pt-1">
                 <CheckCircle className="w-3.5 h-3.5" /> Đã cập nhật mô tả task thành công!
               </div>
             )}
           </div>
 
           {/* Comprehensive Metadata Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/90 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
             <div>
-              <span className="text-slate-400 block mb-1">Người phụ trách:</span>
-              <span className="font-semibold text-indigo-700 flex items-center gap-1 truncate" title={assigneeUser?.name || task.assigneeAccount}>
-                <UserCheck className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Người phụ trách:</span>
+              <span className="font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 truncate" title={assigneeUser?.name || task.assigneeAccount}>
+                <UserCheck className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
                 {assigneeUser ? `${assigneeUser.name} (${task.assigneeAccount})` : task.assigneeAccount || 'Chưa gán'}
               </span>
             </div>
 
             <div>
-              <span className="text-slate-400 block mb-1">Cột mốc Milestone:</span>
+              <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Cột mốc Milestone:</span>
               {milestone ? (
-                <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md truncate max-w-full" title={milestone.title}>
-                  <Flag className="w-3 h-3 text-indigo-500 shrink-0" />
+                <span className="inline-flex items-center gap-1 font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/60 px-2 py-0.5 rounded-md truncate max-w-full" title={milestone.title}>
+                  <Flag className="w-3 h-3 text-indigo-500 dark:text-indigo-400 shrink-0" />
                   <span className="truncate">{milestone.title}</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md">
                   <FolderOpen className="w-3 h-3 text-slate-400 shrink-0" />
                   Ngoài Milestone
                 </span>
@@ -392,15 +388,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             </div>
 
             <div>
-              <span className="text-slate-400 block mb-1">Effort Thực tế / Ước tính:</span>
-              <span className="font-mono font-bold text-emerald-700 text-xs">
+              <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Effort Thực tế / Ước tính:</span>
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
                 {task.actualEffort}h <span className="text-slate-400 font-normal">/</span> {task.estimatedEffort}h
               </span>
             </div>
 
             <div>
-              <span className="text-slate-400 block mb-1">Tiến độ hoàn thành:</span>
-              <span className="font-bold text-indigo-600 text-xs">
+              <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Tiến độ hoàn thành:</span>
+              <span className="font-bold text-indigo-600 dark:text-indigo-400 text-xs">
                 {task.completionPercentage}%
               </span>
             </div>
@@ -408,14 +404,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
           {/* Completion Progress Bar */}
           <div className="space-y-1.5">
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
+            <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-200/80 dark:border-slate-700">
               <div
                 className={`h-full transition-all duration-300 ${
                   task.completionPercentage === 100
                     ? 'bg-emerald-500'
                     : task.completionPercentage > 0
-                    ? 'bg-indigo-500'
-                    : 'bg-slate-300'
+                    ? 'bg-indigo-600 dark:bg-indigo-500'
+                    : 'bg-slate-300 dark:bg-slate-700'
                 }`}
                 style={{ width: `${task.completionPercentage}%` }}
               />
@@ -423,17 +419,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
 
           {/* SECTION: Collaborative Notes & Discussion Feed (Luồng Trao Đổi Task) */}
-          <div className="space-y-3 pt-2 border-t border-slate-100">
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-indigo-600" />
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 Luồng Trao Đổi & Ghi Chú Task (Notes & Discussion):
               </label>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsEditingRaw(!isEditingRaw)}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 hover:underline"
+                  className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium flex items-center gap-1 hover:underline"
                 >
                   <Edit3 className="w-3 h-3" />
                   {isEditingRaw ? 'Quay lại xem trao đổi' : 'Sửa trực tiếp toàn bộ note'}
@@ -449,13 +445,13 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   value={notesText}
                   onChange={(e) => setNotesText(e.target.value)}
                   placeholder="Nhập toàn bộ ghi chú công việc..."
-                  className="w-full bg-slate-50 border border-slate-300 rounded-2xl p-3 text-xs text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none font-mono"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl p-3 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none font-mono"
                 />
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setIsEditingRaw(false)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-xl transition"
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-xl transition"
                   >
                     Hủy
                   </button>
@@ -472,12 +468,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               /* Rich Thread Display & Quick Discussion Post */
               <div className="space-y-2.5">
                 {/* Discussion History Container */}
-                <div className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-3.5 max-h-52 overflow-y-auto custom-scrollbar space-y-2">
+                <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-52 overflow-y-auto custom-scrollbar space-y-2">
                   {noteLines.length === 0 ? (
-                    <div className="text-center py-5 text-slate-400 text-xs flex flex-col items-center gap-1.5">
-                      <MessageSquare className="w-5 h-5 text-slate-300" />
+                    <div className="text-center py-5 text-slate-400 dark:text-slate-400 text-xs flex flex-col items-center gap-1.5">
+                      <MessageSquare className="w-5 h-5 text-slate-300 dark:text-slate-600" />
                       <span>Chưa có ghi chú hoặc trao đổi nào cho task này.</span>
-                      <span className="text-[11px] text-slate-400">Hãy nhập phản hồi bên dưới để bắt đầu trao đổi luồng task!</span>
+                      <span className="text-[11px] text-slate-400 dark:text-slate-400">Hãy nhập phản hồi bên dưới để bắt đầu trao đổi luồng task!</span>
                     </div>
                   ) : (
                     noteLines.map((line, idx) => {
@@ -489,14 +485,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                         return (
                           <div
                             key={idx}
-                            className="bg-white border border-slate-200/80 rounded-xl p-2.5 shadow-2xs text-xs space-y-1"
+                            className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 shadow-2xs text-xs space-y-1"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-semibold text-indigo-700 text-[11px] bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100">
+                              <span className="font-semibold text-indigo-600 dark:text-indigo-300 text-[11px] bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-800/80">
                                 {authorInfo}
                               </span>
                             </div>
-                            <p className="text-slate-700 text-xs leading-relaxed whitespace-pre-wrap pl-1">
+                            <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed whitespace-pre-wrap pl-1">
                               {messageBody}
                             </p>
                           </div>
@@ -505,7 +501,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       return (
                         <div
                           key={idx}
-                          className="bg-white border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap"
+                          className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap"
                         >
                           {line}
                         </div>
@@ -521,7 +517,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     value={quickComment}
                     onChange={(e) => setQuickComment(e.target.value)}
                     placeholder={`Gửi ghi chú/trao đổi luồng task với vai trò ${currentUser?.name || 'thành viên'}...`}
-                    className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                    className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
                   />
                   <button
                     type="submit"
@@ -534,7 +530,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 </form>
 
                 {isSaved && (
-                  <div className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 animate-fade-in">
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-fade-in">
                     <CheckCircle className="w-3.5 h-3.5" /> Đã lưu và đồng bộ ghi chú task thành công!
                   </div>
                 )}
@@ -544,12 +540,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Fixed Footer */}
-        <div className="flex items-center justify-between gap-3 p-4 sm:px-6 sm:py-4 border-t border-slate-100 shrink-0 bg-slate-50/60 rounded-b-3xl">
+        <div className="flex items-center justify-between gap-3 p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900 rounded-b-3xl">
           {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') ? (
             <button
               type="button"
               onClick={handleDelete}
-              className="px-3.5 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
+              className="px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/80 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Xóa Task
@@ -561,7 +557,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-xl transition active:scale-95 shadow-2xs"
+              className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-xl transition active:scale-95 shadow-2xs"
             >
               Đóng
             </button>

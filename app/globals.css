@@ -39,21 +39,18 @@ html.dark header {
 html.dark .bg-white,
 html.dark [class*="bg-white"] {
   background-color: #0f172a !important;
-  color: #f8fafc !important;
   border-color: #1e293b !important;
 }
 
 html.dark .bg-slate-50,
 html.dark [class*="bg-slate-50"] {
   background-color: #0a0f1c !important;
-  color: #cbd5e1 !important;
   border-color: #182236 !important;
 }
 
 html.dark .bg-slate-100,
 html.dark [class*="bg-slate-100"] {
   background-color: #141d30 !important;
-  color: #e2e8f0 !important;
   border-color: #1e2a42 !important;
 }
 
@@ -76,43 +73,43 @@ html.dark [class*="to-slate-50"] {
 html.dark [class*="bg-purple-50"],
 html.dark [class*="bg-purple-100"] {
   background-color: #191226 !important; /* Pitch Dark Navy-Purple */
-  color: #e9d5ff !important;
   border-color: #2b1d42 !important;
 }
 
 html.dark [class*="bg-amber-50"],
 html.dark [class*="bg-amber-100"] {
   background-color: #20150c !important; /* Pitch Dark Navy-Amber */
-  color: #fef08a !important;
   border-color: #382516 !important;
 }
 
 html.dark [class*="bg-blue-50"],
 html.dark [class*="bg-blue-100"] {
   background-color: #0e172a !important; /* Pitch Dark Navy-Blue */
-  color: #bfdbfe !important;
   border-color: #1b2a4c !important;
 }
 
 html.dark [class*="bg-emerald-50"],
 html.dark [class*="bg-emerald-100"] {
   background-color: #0a1b15 !important; /* Pitch Dark Navy-Emerald */
-  color: #a7f3d0 !important;
   border-color: #15382b !important;
 }
 
 html.dark [class*="bg-rose-50"],
 html.dark [class*="bg-rose-100"] {
   background-color: #221016 !important; /* Pitch Dark Navy-Rose */
-  color: #fecdd3 !important;
   border-color: #3b1c26 !important;
 }
 
 html.dark [class*="bg-indigo-50"],
 html.dark [class*="bg-indigo-100"] {
   background-color: #111a2e !important; /* Pitch Dark Navy-Indigo */
-  color: #38bdf8 !important;
   border-color: #1e2e50 !important;
+}
+
+html.dark [class*="bg-cyan-50"],
+html.dark [class*="bg-cyan-100"] {
+  background-color: #0b1a28 !important; /* Pitch Dark Navy-Cyan */
+  border-color: #133248 !important;
 }
 
 /* Tab Hover States - Dark Navy-Slate Hover ONLY (No Light Gray/White Hovers!) */
@@ -135,12 +132,12 @@ html.dark [class*="border-blue-200"],
 html.dark [class*="border-emerald-200"],
 html.dark [class*="border-amber-200"],
 html.dark [class*="border-rose-200"] {
-  border-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Table Design & Glowing Hover Contrast */
@@ -152,7 +149,7 @@ html.dark table th,
 html.dark thead tr {
   background-color: #141d30 !important;
   color: #94a3b8 !important;
-  border-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 html.dark table td {
@@ -167,7 +164,7 @@ html.dark td.bg-slate-50 {
 html.dark td.sticky,
 html.dark th.sticky {
   background-color: #0f172a !important;
-  border-color: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* Glowing Row Hover Effect */
@@ -185,13 +182,13 @@ html.dark tr.hover\:bg-slate-50:hover td.sticky {
   color: #ffffff !important;
 }
 
-/* Typography Overrides */
+/* Typography Overrides for Crisp High Contrast */
 html.dark .text-slate-900,
-html.dark .text-slate-800,
-html.dark .text-slate-700 {
+html.dark .text-slate-800 {
   color: #f8fafc !important;
 }
 
+html.dark .text-slate-700,
 html.dark .text-slate-600 {
   color: #e2e8f0 !important;
 }
@@ -205,7 +202,61 @@ html.dark .text-slate-400 {
 }
 
 html.dark .text-slate-300 {
-  color: #64748b !important;
+  color: #cbd5e1 !important;
+}
+
+/* Dark Mode High-Contrast Vibrant Text Colors */
+html.dark .text-indigo-500,
+html.dark .text-indigo-600,
+html.dark .text-indigo-700,
+html.dark .text-indigo-800 {
+  color: #818cf8 !important; /* Bright Violet/Indigo */
+}
+
+html.dark .text-purple-500,
+html.dark .text-purple-600,
+html.dark .text-purple-700,
+html.dark .text-purple-800 {
+  color: #c084fc !important; /* Bright Lavender/Purple */
+}
+
+html.dark .text-blue-500,
+html.dark .text-blue-600,
+html.dark .text-blue-700,
+html.dark .text-blue-800 {
+  color: #60a5fa !important; /* Bright Sky Blue */
+}
+
+html.dark .text-emerald-500,
+html.dark .text-emerald-600,
+html.dark .text-emerald-700,
+html.dark .text-emerald-800 {
+  color: #34d399 !important; /* Bright Mint Green */
+}
+
+html.dark .text-amber-500,
+html.dark .text-amber-600,
+html.dark .text-amber-700,
+html.dark .text-amber-800 {
+  color: #fbbf24 !important; /* Bright Amber Yellow */
+}
+
+html.dark .text-rose-500,
+html.dark .text-rose-600,
+html.dark .text-rose-700,
+html.dark .text-rose-800,
+html.dark .text-red-500,
+html.dark .text-red-600,
+html.dark .text-red-700,
+html.dark .text-red-800 {
+  color: #f87171 !important; /* Bright Coral Red */
+}
+
+html.dark .text-cyan-500,
+html.dark .text-cyan-600,
+html.dark .text-cyan-700,
+html.dark .text-cyan-800 {
+  color: #22d3ee !important; /* Bright Cyan */
 }
 
 /* Form Inputs, Dropdowns & Modals */
@@ -216,7 +267,7 @@ html.dark textarea,
 html.dark select {
   background-color: #0a0f1c !important;
   color: #f8fafc !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 html.dark input:focus,
@@ -236,7 +287,6 @@ html.dark .fixed .bg-white,
 html.dark .fixed [class*="bg-white"] {
   background-color: #0f172a !important;
   border-color: rgba(255, 255, 255, 0.1) !important;
-  color: #f8fafc !important;
 }
 
 /* Progress bar background tracks in Dark Mode */

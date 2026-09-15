@@ -74,45 +74,47 @@ const getToolStyle = (toolName?: string) => {
   const t = (toolName || '').toLowerCase();
   if (t.includes('figma')) {
     return {
-      badge: 'bg-rose-100 text-rose-700 border-rose-300',
-      icon: <FigmaIcon className="w-3.5 h-3.5 text-rose-600" />,
+      badge: 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800/80',
+      icon: <FigmaIcon className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />,
       label: 'Figma Design',
     };
   }
   if (t.includes('draw.io') || t.includes('diagram')) {
     return {
-      badge: 'bg-cyan-100 text-cyan-700 border-cyan-300',
-      icon: <Layers className="w-3.5 h-3.5 text-cyan-600" />,
+      badge: 'bg-cyan-100 text-cyan-700 border-cyan-300 dark:bg-cyan-950/80 dark:text-cyan-300 dark:border-cyan-800/80',
+      icon: <Layers className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />,
       label: 'Draw.io Diagram',
     };
   }
   if (t.includes('sheet') || t.includes('excel')) {
     return {
-      badge: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-      icon: <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />,
+      badge: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/80',
+      icon: <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />,
       label: 'Google Sheet',
     };
   }
   if (t.includes('ai studio') || t.includes('ai')) {
     return {
-      badge: 'bg-purple-100 text-purple-700 border-purple-300',
-      icon: <Sparkles className="w-3.5 h-3.5 text-purple-600" />,
+      badge: 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800/80',
+      icon: <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />,
       label: 'Google AI Studio',
     };
   }
   if (t.includes('doc')) {
     return {
-      badge: 'bg-indigo-100 text-indigo-700 border-indigo-300',
-      icon: <FileText className="w-3.5 h-3.5 text-indigo-600" />,
+      badge: 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-950/80 dark:text-indigo-300 dark:border-indigo-800/80',
+      icon: <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />,
       label: 'Google Docs',
     };
   }
   return {
-    badge: 'bg-slate-100 text-slate-700 border-slate-300',
-    icon: <BookOpen className="w-3.5 h-3.5 text-slate-600" />,
+    badge: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+    icon: <BookOpen className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />,
     label: toolName || 'Tài liệu',
   };
 };
+
+const getToolBadgeConfig = getToolStyle;
 
 export const ResourceManagerView: React.FC = () => {
   const { resources, addResource, updateResource, deleteResource, currentUser, confirmDialog } = useApp();

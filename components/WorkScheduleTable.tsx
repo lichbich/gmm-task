@@ -222,28 +222,28 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const getStatusBadge = (status: TaskStatus) => {
     switch (status) {
       case 'Done':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/80 font-semibold';
       case 'In Progress':
-        return 'bg-blue-50 text-blue-700 border-blue-200 font-semibold';
+        return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800/80 font-semibold';
       default:
-        return 'bg-slate-100 text-slate-600 border-slate-200';
+        return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
     }
   };
 
   const getRoleStyle = (role: string) => {
     switch (role) {
       case 'BA':
-        return 'bg-purple-50 text-purple-700 border-purple-200';
+        return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800/80';
       case 'Design':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
+        return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800/80';
       case 'FE':
-        return 'bg-blue-50 text-blue-700 border-blue-200';
+        return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800/80';
       case 'BE':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/80';
       case 'QA':
-        return 'bg-rose-50 text-rose-700 border-rose-200';
+        return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800/80';
       default:
-        return 'bg-slate-100 text-slate-600 border-slate-200';
+        return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
     }
   };
 
@@ -267,29 +267,29 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
           if (t.notes) markNoteAsRead(t.id, t.notes);
           setViewingDetailTask(t);
         }}
-        className={`hover:bg-slate-50/80 transition cursor-pointer group ${
+        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/70 transition cursor-pointer group ${
           isLate
-            ? 'bg-red-50/50'
+            ? 'bg-red-50/50 dark:bg-red-950/30'
             : isTopEffort
-            ? 'bg-emerald-50/50'
+            ? 'bg-emerald-50/50 dark:bg-emerald-950/30'
             : ''
         }`}
       >
         {/* STT */}
-        <td className="py-3 px-4 text-center text-slate-400 font-mono font-medium">
+        <td className="py-3 px-4 text-center text-slate-400 dark:text-slate-400 font-mono font-medium">
           {displayIdx}
         </td>
 
         {/* Task Name: Clean & minimal, identical layout for all rows */}
-        <td className="py-3 px-4 font-medium text-slate-800">
+        <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-100">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="line-clamp-2 font-semibold text-slate-800 group-hover:text-indigo-600 transition">
+              <span className="line-clamp-2 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
                 {t.title}
               </span>
               {t.priority === 'High' && (
                 <span
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 border border-red-200 text-red-700 font-bold text-[10px] shrink-0 shadow-2xs"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-950/80 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 font-bold text-[10px] shrink-0 shadow-2xs"
                   title="Mức độ ưu tiên: Cao"
                 >
                   <Flame className="w-3 h-3 text-red-500 fill-red-500" />
@@ -302,15 +302,15 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                 const milestone = milestones.find((m) => m.id === t.milestoneId);
                 return milestone ? (
                   <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200/90 text-indigo-700 font-semibold text-[10px] shadow-2xs"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/90 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] shadow-2xs"
                     title={`Thuộc Milestone: ${milestone.title}`}
                   >
-                    <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                    <Flag className="w-2.5 h-2.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
                     {milestone.title}
                   </span>
                 ) : (
                   <span
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 border border-slate-200/80 text-slate-500 text-[10px]"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-[10px]"
                     title="Task độc lập, không gắn vào Milestone cụ thể"
                   >
                     <FolderOpen className="w-2.5 h-2.5 text-slate-400 shrink-0" />
@@ -336,11 +336,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         {/* Effort */}
         <td className="py-3 px-3 text-center font-mono">
           <div className="flex flex-col items-center">
-            <span className="font-bold text-indigo-600">
+            <span className="font-bold text-indigo-600 dark:text-indigo-400">
               {t.actualEffort > 0 ? t.actualEffort : t.estimatedEffort}h
             </span>
             {t.actualEffort > 0 && t.actualEffort !== t.estimatedEffort && (
-              <span className="text-[9px] text-slate-400">
+              <span className="text-[9px] text-slate-400 dark:text-slate-400">
                 est: {t.estimatedEffort}h
               </span>
             )}
@@ -362,13 +362,13 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         <td className="py-3 px-3 font-medium">
           {t.assigneeAccount ? (
             <div className="flex items-center gap-1.5">
-              <div className="w-5 h-5 rounded-full bg-indigo-50 border border-indigo-200 flex items-center justify-center text-[9px] font-bold text-indigo-600">
+              <div className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[9px] font-bold text-indigo-600 dark:text-indigo-300">
                 {t.assigneeAccount.slice(0, 2)}
               </div>
-              <span className="text-slate-700">{t.assigneeAccount}</span>
+              <span className="text-slate-700 dark:text-slate-200">{t.assigneeAccount}</span>
             </div>
           ) : (
-            <span className="text-amber-600 font-semibold flex items-center gap-1 text-[11px]">
+            <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
               <UserX className="w-3.5 h-3.5" /> Task trống
             </span>
           )}
@@ -459,7 +459,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             {isAssignedToMe && (
               <button
                 onClick={() => setReportingTask(t)}
-                className="whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white border border-indigo-200/90 hover:border-indigo-600 rounded-xl text-xs font-semibold shadow-xs hover:shadow-md active:scale-95 transition-all"
+                className="whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 hover:text-white dark:hover:text-white border border-indigo-200/90 dark:border-indigo-800 rounded-xl text-xs font-semibold shadow-xs hover:shadow-md active:scale-95 transition-all"
                 title="Nộp báo cáo số giờ làm & % hoàn thành"
               >
                 <Clock className="w-3.5 h-3.5 shrink-0" />
@@ -472,7 +472,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               <>
                 <button
                   onClick={() => onOpenTaskModal?.(t)}
-                  className="p-1.5 bg-slate-100 hover:bg-slate-200 hover:text-indigo-600 text-slate-600 rounded-xl transition-all shadow-xs"
+                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-300 rounded-xl transition-all shadow-xs"
                   title="Chỉnh sửa task / Giao việc"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
@@ -487,7 +487,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                       onConfirm: () => deleteTask(t.id),
                     });
                   }}
-                  className="p-1.5 bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-400 rounded-xl transition-all shadow-xs"
+                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/60 hover:text-red-600 dark:hover:text-red-400 text-slate-400 dark:text-slate-400 rounded-xl transition-all shadow-xs"
                   title="Xóa đầu việc này"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -531,27 +531,27 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         </div>
 
         {/* Navigation Sub-Tabs Switcher (Below title & description, identical to Milestones) */}
-        <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 max-w-fit gap-1">
+        <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 max-w-fit gap-1">
           <button
             onClick={() => setSubTab('MY_TASKS')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
               subTab === 'MY_TASKS'
-                ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-slate-700/60'
             }`}
           >
-            <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+            <UserCheck className={`w-3.5 h-3.5 ${subTab === 'MY_TASKS' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
             Task Của Tôi
           </button>
           <button
             onClick={() => setSubTab('ALL_TASKS')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
               subTab === 'ALL_TASKS'
-                ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-slate-700/60'
             }`}
           >
-            <Globe className="w-3.5 h-3.5 text-indigo-600" />
+            <Globe className={`w-3.5 h-3.5 ${subTab === 'ALL_TASKS' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
             Tất Cả Công Việc
           </button>
           <button
@@ -559,10 +559,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
               subTab === 'DEFINE_NEXT_WEEK'
                 ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20'
-                : 'text-slate-600 hover:text-indigo-600 hover:bg-white/60'
+                : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-700/60'
             }`}
           >
-            <CalendarPlus className={`w-3.5 h-3.5 ${subTab === 'DEFINE_NEXT_WEEK' ? 'text-white' : 'text-indigo-600'}`} />
+            <CalendarPlus className={`w-3.5 h-3.5 ${subTab === 'DEFINE_NEXT_WEEK' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
             Define Tuần Tới (Tuần {selectedWeek + 1})
           </button>
         </div>
@@ -680,16 +680,16 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                               <span className={`text-xs font-bold ${cfg.text} tracking-tight`}>
                                 {cfg.label}
                               </span>
-                              <span className="text-[10px] text-slate-500 font-semibold bg-white/80 px-2 py-0.5 rounded-full border border-slate-200/70">
+                              <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-white/80 dark:bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
                                 {group.tasks.length} đầu việc
                               </span>
                             </div>
 
                             <div className="flex items-center gap-3 text-xs">
-                              <span className="text-slate-500 text-[11px]">
-                                Tổng Effort: <strong className="text-indigo-600 font-mono font-bold">{groupTotalActual > 0 ? groupTotalActual : groupTotalEst}h</strong>
+                              <span className="text-slate-600 dark:text-slate-400 text-[11px]">
+                                Tổng Effort: <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">{groupTotalActual > 0 ? groupTotalActual : groupTotalEst}h</strong>
                                 {groupTotalActual > 0 && groupTotalActual !== groupTotalEst && (
-                                  <span className="text-slate-400 font-mono ml-1">(est: {groupTotalEst}h)</span>
+                                  <span className="text-slate-400 dark:text-slate-400 font-mono ml-1">(est: {groupTotalEst}h)</span>
                                 )}
                               </span>
                             </div>

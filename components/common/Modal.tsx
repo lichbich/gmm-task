@@ -59,7 +59,7 @@ export const Modal: React.FC<ModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white border border-slate-200/90 rounded-3xl w-full ${sizeClasses} p-6 sm:p-7 shadow-2xl text-slate-800 relative modal-dialog-transition overflow-hidden ${
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full ${sizeClasses} p-6 sm:p-7 shadow-2xl text-slate-800 dark:text-slate-100 relative modal-dialog-transition overflow-hidden ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         } ${className}`}
       >
@@ -70,12 +70,12 @@ export const Modal: React.FC<ModalProps> = ({
               {icon && <div className="shrink-0 mt-0.5">{icon}</div>}
               <div className="flex-1 min-w-0">
                 {title && (
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight leading-snug">
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug">
                     {title}
                   </h3>
                 )}
                 {description && (
-                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                     {description}
                   </p>
                 )}
@@ -86,7 +86,7 @@ export const Modal: React.FC<ModalProps> = ({
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 shrink-0 -mr-1 -mt-1"
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-center transition active:scale-95 shrink-0 -mr-1 -mt-1"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -98,7 +98,7 @@ export const Modal: React.FC<ModalProps> = ({
         <div className={bodyClassName}>{children}</div>
 
         {/* Modal Footer */}
-        {footer && <div className="mt-5 pt-4 border-t border-slate-100">{footer}</div>}
+        {footer && <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">{footer}</div>}
       </div>
     </div>
   );
