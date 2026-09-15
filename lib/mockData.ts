@@ -13,7 +13,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0388607463',
     technologies: 'PO, Angular, JavaSpring',
     birthDate: 1999,
-    totalEffort: 225.75,
+    totalEffort: 0,
   },
   {
     id: 'usr-thanhndt',
@@ -26,7 +26,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0976263139',
     technologies: 'BA, Java-Spring, DevOps',
     birthDate: 1999,
-    totalEffort: 171,
+    totalEffort: 0,
   },
   {
     id: 'usr-namnv',
@@ -40,7 +40,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0868149135',
     technologies: 'AI, ReactJS, Angular',
     birthDate: 1999,
-    totalEffort: 129,
+    totalEffort: 0,
   },
   {
     id: 'usr-lichdt',
@@ -54,7 +54,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0926066296',
     technologies: 'BA, Designer',
     birthDate: 1999,
-    totalEffort: 252.5,
+    totalEffort: 0,
   },
   {
     id: 'usr-huyfq',
@@ -67,7 +67,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0989427489',
     technologies: 'BA',
     birthDate: 1999,
-    totalEffort: 343.5,
+    totalEffort: 0,
   },
   {
     id: 'usr-hailh',
@@ -79,7 +79,7 @@ export const INITIAL_USERS: User[] = [
     email: 'lehonghai2307.hbc@gmail.com',
     technologies: 'ReactJS, Angular, NextJS',
     birthDate: 1999,
-    totalEffort: 530,
+    totalEffort: 0,
   },
   {
     id: 'usr-viethq',
@@ -92,7 +92,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0978595918',
     technologies: 'Angular, ReactJs, VueJs, ReactNative',
     birthDate: 1999,
-    totalEffort: 142,
+    totalEffort: 0,
   },
   {
     id: 'usr-longvt',
@@ -105,7 +105,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0819122238',
     technologies: 'Java Spring, Angular, Flutter',
     birthDate: 2000,
-    totalEffort: 337,
+    totalEffort: 0,
   },
   {
     id: 'usr-dungpm',
@@ -119,7 +119,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0829427558',
     technologies: 'Java Spring, SA',
     birthDate: 1993,
-    totalEffort: 328,
+    totalEffort: 0,
   },
   {
     id: 'usr-hoannv',
@@ -133,7 +133,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0985712135',
     technologies: 'Java Spring, DevOps',
     birthDate: 2001,
-    totalEffort: 173.5,
+    totalEffort: 0,
   },
   {
     id: 'usr-vuongnt',
@@ -147,7 +147,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0987964931',
     technologies: 'BA',
     birthDate: 1995,
-    totalEffort: 36.5,
+    totalEffort: 0,
   },
   {
     id: 'usr-tinhdd',
@@ -161,7 +161,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0342506775',
     technologies: 'Angular, DevOps',
     birthDate: 2001,
-    totalEffort: 74,
+    totalEffort: 0,
   },
   {
     id: 'usr-dattq',
@@ -175,7 +175,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0868130164',
     technologies: 'Angular, React, NextJS',
     birthDate: 1998,
-    totalEffort: 71,
+    totalEffort: 0,
   },
   {
     id: 'usr-binhtnt',
@@ -189,7 +189,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0358504024',
     technologies: 'QA',
     birthDate: 1997,
-    totalEffort: 52,
+    totalEffort: 0,
   },
   {
     id: 'usr-dungdv',
@@ -203,7 +203,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0868603426',
     technologies: 'Java, Spring, DevOps',
     birthDate: 2000,
-    totalEffort: 30,
+    totalEffort: 0,
   },
   {
     id: 'usr-sonmc',
@@ -217,7 +217,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0335622389',
     technologies: 'Java, Angular, React',
     birthDate: 1980,
-    totalEffort: 28,
+    totalEffort: 0,
   },
   {
     id: 'usr-anhnmm',
@@ -231,7 +231,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0803036692',
     technologies: 'BA',
     birthDate: 2005,
-    totalEffort: 37.5,
+    totalEffort: 0,
   },
   {
     id: 'usr-nhiht',
@@ -245,7 +245,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0942220437',
     technologies: 'BA',
     birthDate: 1999,
-    totalEffort: 22.5,
+    totalEffort: 0,
   },
   {
     id: 'usr-anhptm',
@@ -259,7 +259,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0388624532',
     technologies: 'BA',
     birthDate: 2004,
-    totalEffort: 22,
+    totalEffort: 0,
   },
   {
     id: 'usr-ductm',
@@ -273,7 +273,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0585161654',
     technologies: 'Java, Angular',
     birthDate: 2001,
-    totalEffort: 14,
+    totalEffort: 0,
   },
   {
     id: 'usr-thont',
@@ -287,7 +287,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0395431919',
     technologies: 'Java/python, angular',
     birthDate: 2001,
-    totalEffort: 14,
+    totalEffort: 0,
   },
   {
     id: 'usr-phulv',
@@ -301,7 +301,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0814321006',
     technologies: 'Java Spring, angular',
     birthDate: 2003,
-    totalEffort: 27,
+    totalEffort: 0,
   },
   {
     id: 'usr-truongnk',
@@ -315,7 +315,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0385908714',
     technologies: 'python, angular',
     birthDate: 2005,
-    totalEffort: 14,
+    totalEffort: 0,
   },
   {
     id: 'usr-giangnvm',
@@ -326,10 +326,10 @@ export const INITIAL_USERS: User[] = [
     cccd: '075205017046',
     bankAccount: '1040440108 - VCB - NGUYEN VAN MINH GIANG',
     email: 'minhgiang882@gmail.com',
-    phone: '0862391750',
+    phone: '0868391750',
     technologies: 'python, angular',
     birthDate: 2005,
-    totalEffort: 14,
+    totalEffort: 0,
   },
   {
     id: 'usr-loinv',
@@ -343,7 +343,7 @@ export const INITIAL_USERS: User[] = [
     phone: '0383277878',
     technologies: 'Angular, DotNet',
     birthDate: 1999,
-    totalEffort: 14,
+    totalEffort: 0,
   },
   {
     id: 'usr-khanhtp',
@@ -357,11 +357,10 @@ export const INITIAL_USERS: User[] = [
     phone: '0897828452',
     technologies: 'Designer',
     birthDate: 2005,
-    totalEffort: 22,
+    totalEffort: 0,
   },
 ];
 
 export const INITIAL_MILESTONES: Milestone[] = [];
 
 export const INITIAL_TASKS: Task[] = [];
-

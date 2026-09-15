@@ -7,6 +7,19 @@ import { database, ref, onValue, set, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword } from '../lib/crypto';
 import { ConfirmModal, ConfirmDialogOptions } from '../components/ConfirmModal';
 
+export function getCurrentISOWeekAndYear(d: Date = new Date()): { week: number; year: number } {
+  const date = new Date(d.valueOf());
+  const dayNum = (d.getDay() + 6) % 7;
+  date.setDate(date.getDate() - dayNum + 3);
+  const firstThursday = date.valueOf();
+  date.setMonth(0, 1);
+  if (date.getDay() !== 4) {
+    date.setMonth(0, 1 + ((4 - date.getDay() + 7) % 7));
+  }
+  const weekNumber = 1 + Math.round((firstThursday - date.valueOf()) / 604800000);
+  return { week: weekNumber, year: date.getFullYear() };
+}
+
 export const DEFAULT_ROLES: RoleItem[] = [
   {
     id: 'role-ba',
@@ -201,8 +214,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     new Date().toISOString().slice(0, 16)
   );
 
-  const [selectedWeek, setSelectedWeek] = useState<number>(37);
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const initialWeekYear = getCurrentISOWeekAndYear();
+  const [selectedWeek, setSelectedWeek] = useState<number>(initialWeekYear.week);
+  const [selectedYear, setSelectedYear] = useState<number>(initialWeekYear.year);
 
   useEffect(() => {
     try {
@@ -239,14 +253,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data.milestones) {
             const milestoneList = Object.values(data.milestones) as Milestone[];
             setMilestones(milestoneList.sort((a, b) => a.order - b.order));
+          } else {
+            setMilestones([]);
           }
           if (data.tasks) {
             const taskList = Object.values(data.tasks) as Task[];
             setTasks(taskList);
+          } else {
+            setTasks([]);
           }
           if (data.weeklyArchives) {
             const archivesList = Object.values(data.weeklyArchives) as WeeklyHistoryArchive[];
             setWeeklyArchives(archivesList);
+          } else {
+            setWeeklyArchives([]);
           }
           if (data.roles) {
             const roleList = Object.values(data.roles) as RoleItem[];
@@ -276,21 +296,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const usersObj: Record<string, User> = {};
       INITIAL_USERS.forEach((u) => { usersObj[u.id] = u; });
 
-      const milestonesObj: Record<string, Milestone> = {};
-      INITIAL_MILESTONES.forEach((m) => { milestonesObj[m.id] = m; });
-
-      const tasksObj: Record<string, Task> = {};
-      INITIAL_TASKS.forEach((t) => { tasksObj[t.id] = t; });
-
       const rolesObj: Record<string, RoleItem> = {};
       DEFAULT_ROLES.forEach((r) => { rolesObj[r.id] = r; });
 
       await set(ref(database, `${DB_ROOT_NODE}`), {
         users: usersObj,
         roles: rolesObj,
-        milestones: milestonesObj,
-        tasks: tasksObj,
-        weeklyArchives: {},
       });
     } catch (e) {
       console.error('Failed to seed Firebase data', e);
