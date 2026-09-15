@@ -57,6 +57,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingInfo, setIsSavingInfo] = useState(false);
+  const [isSavedInfo, setIsSavedInfo] = useState(false);
+  const [isSavedPassword, setIsSavedPassword] = useState(false);
 
   if (!isRendered || !currentUser) return null;
 
@@ -106,22 +109,31 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
       return;
     }
 
-    updateUser(userRecord.id, {
-      name: editName.trim(),
-      cccd: editCccd.trim(),
-      bankAccount: editBankAccount.trim(),
-      email: editEmail.trim(),
-      phone: editPhone.trim(),
-      technologies: editTechnologies.trim(),
-      birthDate: editBirthDate.trim(),
-      specializations: editSpecializations,
-    });
+    setErrorMsg('');
+    setSuccessMsg('');
+    setIsSavingInfo(true);
 
-    setIsEditingInfo(false);
-    setSuccessMsg('Cập nhật thông tin cá nhân thành công!');
     setTimeout(() => {
-      setSuccessMsg('');
-    }, 4000);
+      updateUser(userRecord.id, {
+        name: editName.trim(),
+        cccd: editCccd.trim(),
+        bankAccount: editBankAccount.trim(),
+        email: editEmail.trim(),
+        phone: editPhone.trim(),
+        technologies: editTechnologies.trim(),
+        birthDate: editBirthDate.trim(),
+        specializations: editSpecializations,
+      });
+
+      setIsSavingInfo(false);
+      setIsSavedInfo(true);
+      setIsEditingInfo(false);
+      setSuccessMsg('Cập nhật thông tin cá nhân thành công!');
+      setTimeout(() => {
+        setIsSavedInfo(false);
+        setSuccessMsg('');
+      }, 4000);
+    }, 300);
   };
 
   const getRoleTheme = (role: string) => {
@@ -188,11 +200,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     try {
       const res = await changePassword(currentUser.id, currentPassword, newPassword);
       if (res.success) {
+        setIsSavedPassword(true);
         setSuccessMsg('Đổi mật khẩu thành công! Mật khẩu mới đã được mã hoá an toàn.');
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         setTimeout(() => {
+          setIsSavedPassword(false);
           setSuccessMsg('');
         }, 4000);
       } else {
@@ -591,7 +605,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                  <div className="flex justify-end items-center gap-2 pt-2 border-t border-slate-100">
                     <button
                       type="button"
                       onClick={() => setIsEditingInfo(false)}
@@ -601,9 +615,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 active:scale-95"
+                      disabled={isSavingInfo}
+                      className={`px-4 py-1.5 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95 ${
+                        isSavingInfo
+                          ? 'bg-indigo-500 opacity-80 cursor-wait'
+                          : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/20'
+                      }`}
                     >
-                      <Save className="w-3.5 h-3.5" /> Lưu Thay Đổi
+                      {isSavingInfo ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Đang lưu...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Lưu Thay Đổi</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </form>
@@ -709,10 +738,28 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-indigo-600/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
+                  className={`w-full py-2.5 font-semibold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] ${
+                    isSavedPassword
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/25'
+                  }`}
                 >
-                  <Key className="w-4 h-4" />
-                  {isSubmitting ? 'Đang mã hoá & cập nhật...' : 'Cập Nhật Mật Khẩu Mới'}
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Đang mã hoá & cập nhật...</span>
+                    </>
+                  ) : isSavedPassword ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-white" />
+                      <span>Đã Cập Nhật Mật Khẩu Thành Công!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Key className="w-4 h-4" />
+                      <span>Cập Nhật Mật Khẩu Mới</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

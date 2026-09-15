@@ -56,6 +56,8 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   // Sync state when user prop changes or modal opens
   useEffect(() => {
@@ -125,16 +127,22 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+    setIsSaving(true);
 
-    updateUser(user.id, {
-      role: userRole,
-      specializations: selectedSpecs,
-    });
-
-    setSuccessMsg('Cập nhật phân quyền & chuyên môn nhân viên thành công!');
     setTimeout(() => {
-      setSuccessMsg('');
-    }, 3000);
+      updateUser(user.id, {
+        role: userRole,
+        specializations: selectedSpecs,
+      });
+
+      setIsSaving(false);
+      setIsSaved(true);
+      setSuccessMsg('Cập nhật phân quyền & chuyên môn nhân viên thành công!');
+      setTimeout(() => {
+        setIsSaved(false);
+        setSuccessMsg('');
+      }, 3500);
+    }, 300);
   };
 
   const getRoleTheme = (role: string) => {
@@ -454,7 +462,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
             </div>
 
             {/* Submit & Footer Actions */}
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
               {isAdmin ? (
                 <button
                   type="button"
@@ -469,6 +477,13 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
               )}
 
               <div className="flex items-center gap-2">
+                {isSaved && (
+                  <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl animate-in fade-in slide-in-from-right-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    Đã lưu thành công!
+                  </span>
+                )}
+
                 <button
                   type="button"
                   onClick={handleClose}
@@ -479,10 +494,31 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                 {isAdmin && (
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 active:scale-95"
+                    disabled={isSaving}
+                    className={`px-5 py-2 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95 ${
+                      isSaved
+                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                        : isSaving
+                        ? 'bg-purple-500 opacity-80 cursor-wait'
+                        : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
+                    }`}
                   >
-                    <Save className="w-4 h-4" />
-                    Lưu Cấu Hình
+                    {isSaving ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Đang lưu...</span>
+                      </>
+                    ) : isSaved ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-white" />
+                        <span>Đã Lưu!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Lưu Cấu Hình</span>
+                      </>
+                    )}
                   </button>
                 )}
               </div>

@@ -43,27 +43,35 @@ export const MilestonesView: React.FC = () => {
   // Sub-tabs: Milestones vs Ad-hoc tasks
   const [subTab, setSubTab] = useState<'MILESTONES' | 'ADHOC'>('MILESTONES');
 
-  // Admin selected role filter:
-  // If Admin has specialization (e.g. Design), default to that. Otherwise default to first role in list ('BA')
-  const getDefaultAdminRole = (): string => {
-    if (currentUser?.specializations && currentUser.specializations.length > 0) {
-      return currentUser.specializations[0];
+  // Find default matching role for current user based on their specializations
+  const getInitialRoleForUser = (): string => {
+    if (!currentUser) return 'ALL';
+    const userSpecs = currentUser.specializations || [];
+    
+    // 1. Check direct or fuzzy match in roles list
+    for (const spec of userSpecs) {
+      const directMatch = roles.find((r) => r.code.toLowerCase() === spec.toLowerCase());
+      if (directMatch) return directMatch.code;
+
+      const fuzzyMatch = roles.find(
+        (r) => spec.toLowerCase().includes(r.code.toLowerCase()) || r.code.toLowerCase().includes(spec.toLowerCase())
+      );
+      if (fuzzyMatch) return fuzzyMatch.code;
     }
-    return roles[0]?.code || 'BA';
+
+    // 2. Fallback to first role or ALL
+    return roles[0]?.code || 'ALL';
   };
 
-  const [adminSelectedRole, setAdminSelectedRole] = useState<string>(getDefaultAdminRole());
+  const [adminSelectedRole, setAdminSelectedRole] = useState<string>('ALL');
 
-  // Automatically select Admin's specialization or default to first role when Admin logs in
+  // Automatically select user's current role/specialization when component loads or user/roles change
   React.useEffect(() => {
-    if (currentUser?.role === 'Admin') {
-      if (currentUser.specializations && currentUser.specializations.length > 0) {
-        setAdminSelectedRole(currentUser.specializations[0]);
-      } else {
-        setAdminSelectedRole(roles[0]?.code || 'BA');
-      }
+    if (currentUser && roles.length > 0) {
+      const bestRole = getInitialRoleForUser();
+      setAdminSelectedRole(bestRole);
     }
-  }, [currentUser?.id, currentUser?.role, roles]);
+  }, [currentUser?.id, currentUser?.specializations?.join(','), roles]);
 
   const [modalInitialRole, setModalInitialRole] = useState<Specialization | undefined>(undefined);
 
@@ -90,29 +98,28 @@ export const MilestonesView: React.FC = () => {
   const [editMsRole, setEditMsRole] = useState<string>('ALL');
 
   // Role filtering logic:
-  // Check if a task's role matches current view
+  // Check if a task's role matches current view filter
   const isTaskRoleMatch = (taskRole: Specialization): boolean => {
-    if (currentUser?.role === 'Admin') {
-      return taskRole === adminSelectedRole;
-    }
+    if (adminSelectedRole === 'ALL') return true;
+    if (adminSelectedRole) return taskRole === adminSelectedRole;
     const userRoles = currentUser?.specializations || [];
     return userRoles.includes(taskRole);
   };
 
-  // Check if a milestone matches current view
+  // Check if a milestone matches current view filter
   const isMilestoneRoleMatch = (ms: Milestone): boolean => {
-    // Milestones marked as 'ALL' or with no specific role apply to all roles & views
-    if (!ms.role || ms.role === 'ALL') {
+    if (!ms.role || ms.role === 'ALL' || adminSelectedRole === 'ALL') {
       return true;
     }
-
-    if (currentUser?.role === 'Admin') {
-      return ms.role === adminSelectedRole || tasks.some((t) => t.milestoneId === ms.id && t.role === adminSelectedRole);
-    } else {
-      const userRoles = currentUser?.specializations || [];
-      if (userRoles.length === 0) return false;
-      return userRoles.includes(ms.role) || tasks.some((t) => t.milestoneId === ms.id && userRoles.includes(t.role));
+    if (adminSelectedRole) {
+      return (
+        ms.role === adminSelectedRole ||
+        tasks.some((t) => t.milestoneId === ms.id && t.role === adminSelectedRole)
+      );
     }
+    const userRoles = currentUser?.specializations || [];
+    if (userRoles.length === 0) return false;
+    return userRoles.includes(ms.role) || tasks.some((t) => t.milestoneId === ms.id && userRoles.includes(t.role));
   };
 
   // Checkbox toggle permission:
@@ -341,36 +348,25 @@ export const MilestonesView: React.FC = () => {
             </button>
           </div>
 
-          {/* Right beside the sub-tabs switcher: Admin Role Selector or User Role Indicator */}
-          {currentUser?.role === 'Admin' ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-600 shrink-0">
-                Lọc xem Role:
-              </span>
-              <Dropdown
-                value={adminSelectedRole}
-                onChange={setAdminSelectedRole}
-                options={roles.map((r) => ({
+          {/* Role Selector Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-600 shrink-0">
+              Lọc xem Role:
+            </span>
+            <Dropdown
+              value={adminSelectedRole}
+              onChange={setAdminSelectedRole}
+              options={[
+                { value: 'ALL', label: 'Tất Cả Role (Toàn Bộ Dự Án)' },
+                ...roles.map((r) => ({
                   value: r.code,
                   label: `Role ${r.code} (${r.name})`,
-                }))}
-                size="sm"
-                buttonClassName="py-1.5 px-3 text-xs font-bold bg-white border-slate-300 text-indigo-700 shadow-2xs hover:border-indigo-400"
-              />
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50/80 border border-indigo-200 rounded-xl text-xs font-semibold text-indigo-700 self-start sm:self-auto">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
-              <span>
-                Đang xem chuyên môn:{' '}
-                <strong className="text-indigo-900 font-bold">
-                  {currentUser?.specializations && currentUser.specializations.length > 0
-                    ? currentUser.specializations.join(', ')
-                    : 'Chưa phân'}
-                </strong>
-              </span>
-            </div>
-          )}
+                })),
+              ]}
+              size="sm"
+              buttonClassName="py-1.5 px-3 text-xs font-bold bg-white border-slate-300 text-indigo-700 shadow-2xs hover:border-indigo-400"
+            />
+          </div>
         </div>
       </div>
 
