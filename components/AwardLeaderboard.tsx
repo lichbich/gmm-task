@@ -81,12 +81,12 @@ export const AwardLeaderboard: React.FC = () => {
       {/* Grid Highlights */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* 🟢 TOP EFFORT BANNER */}
-            <div className="bg-gradient-to-br from-emerald-50 to-white border-2 border-emerald-300 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+            <div className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/70 dark:to-slate-900 border-2 border-emerald-300 dark:border-emerald-700/80 rounded-2xl p-6 shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
-                <Trophy className="w-36 h-36 text-emerald-600" />
+                <Trophy className="w-36 h-36 text-emerald-600 dark:text-emerald-400" />
               </div>
 
-              <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs uppercase tracking-wider mb-2">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider mb-2">
                 <Sparkles className="w-4 h-4 animate-spin" />
                 🟢 DANH HIỆU THƯỞNG - TOP EFFORT TUẦN {selectedWeek}
               </div>
@@ -94,32 +94,32 @@ export const AwardLeaderboard: React.FC = () => {
               {topEffortMember ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 border-2 border-emerald-400 flex items-center justify-center text-xl font-bold text-emerald-700 shadow-md">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-900/80 border-2 border-emerald-400 dark:border-emerald-600 flex items-center justify-center text-xl font-bold text-emerald-700 dark:text-emerald-200 shadow-md">
                       {topEffortMember.account.slice(0, 2)}
                     </div>
                     <div>
-                      <h3 className="text-xl font-black text-slate-800">{topEffortMember.userName}</h3>
+                      <h3 className="text-xl font-black text-slate-800 dark:text-white">{topEffortMember.userName}</h3>
                       <div className="flex items-center gap-2 text-xs mt-1">
-                        <span className="px-2 py-0.5 rounded bg-emerald-100 border border-emerald-300 text-emerald-700 font-semibold">
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-semibold">
                           Account: {topEffortMember.account}
                         </span>
-                        <span className="text-slate-500">
+                        <span className="text-slate-500 dark:text-slate-400">
                           ({topEffortMember.role} - [{topEffortMember.specializations?.join(', ') || 'BA'}])
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 flex items-center justify-between">
+                  <div className="bg-emerald-50 dark:bg-emerald-950/50 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800/80 flex items-center justify-between">
                     <div>
-                      <span className="text-xs text-slate-500 block">Tổng số giờ làm việc thực tế:</span>
-                      <span className="text-2xl font-black text-emerald-600">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block">Tổng số giờ làm việc thực tế:</span>
+                      <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
                         {topEffortMember.totalEffort} Giờ (Effort)
                       </span>
                     </div>
                     <div className="text-right">
-                      <span className="text-xs text-slate-500 block">Trạng thái thưởng:</span>
-                      <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 px-3 py-1 bg-emerald-100 border border-emerald-300 rounded-full">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block">Trạng thái thưởng:</span>
+                      <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 px-3 py-1 bg-emerald-100 dark:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-700 rounded-full">
                         <Award className="w-4 h-4" /> Được Nhận Thưởng
                       </span>
                     </div>
@@ -133,12 +133,12 @@ export const AwardLeaderboard: React.FC = () => {
             </div>
 
             {/* 🔴 LATE SUBMISSION WARNING */}
-            <div className="bg-gradient-to-br from-red-50 to-white border-2 border-red-300 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+            <div className="bg-gradient-to-br from-red-50 to-white dark:from-red-950/70 dark:to-slate-900 border-2 border-red-300 dark:border-red-700/80 rounded-2xl p-6 shadow-sm relative overflow-hidden">
               <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none">
-                <AlertTriangle className="w-36 h-36 text-red-600" />
+                <AlertTriangle className="w-36 h-36 text-red-600 dark:text-red-400" />
               </div>
 
-              <div className="flex items-center gap-2 text-red-700 font-bold text-xs uppercase tracking-wider mb-2">
+              <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-bold text-xs uppercase tracking-wider mb-2">
                 <AlertTriangle className="w-4 h-4 animate-bounce" />
                 🔴 DANH SÁCH PHẠT - CẢNH BÁO NỘP MUỘN (SAU 10H CN)
               </div>

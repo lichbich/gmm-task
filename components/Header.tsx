@@ -74,30 +74,30 @@ export const Header: React.FC<HeaderProps> = ({
           <GMMLogo size={40} showText={true} />
 
           {/* MAIN 3 TOP MANAGEMENT TABS */}
-          <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 shadow-2xs">
+          <div className="hidden md:flex items-center bg-slate-100 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200 dark:border-slate-800 gap-1 shadow-2xs">
             {/* TAB 1: QUẢN LÝ TASK */}
             <button
               onClick={() => setActiveMainSection('tasks')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
                 activeMainSection === 'tasks'
-                  ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/80'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500 font-extrabold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <CheckSquare className={`w-3.5 h-3.5 ${activeMainSection === 'tasks' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <CheckSquare className={`w-3.5 h-3.5 ${activeMainSection === 'tasks' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
               <span>Quản Lý Task</span>
             </button>
 
             {/* TAB 2: QUẢN LÝ RESOURCE */}
             <button
               onClick={() => setActiveMainSection('resources')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
                 activeMainSection === 'resources'
-                  ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/80'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500 font-extrabold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <FolderGit2 className={`w-3.5 h-3.5 ${activeMainSection === 'resources' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <FolderGit2 className={`w-3.5 h-3.5 ${activeMainSection === 'resources' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
               <span>Quản Lý Resource</span>
             </button>
 
@@ -105,13 +105,13 @@ export const Header: React.FC<HeaderProps> = ({
             {currentUser?.role === 'Admin' && (
               <button
                 onClick={() => setActiveMainSection('users')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
                   activeMainSection === 'users'
-                    ? 'bg-white text-purple-700 shadow-xs border border-purple-200/80'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 border border-purple-500 font-extrabold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
                 }`}
               >
-                <ShieldCheck className={`w-3.5 h-3.5 ${activeMainSection === 'users' ? 'text-purple-600' : 'text-purple-400'}`} />
+                <ShieldCheck className={`w-3.5 h-3.5 ${activeMainSection === 'users' ? 'text-white' : 'text-purple-400'}`} />
                 <span>Quản Lý User (Admin)</span>
               </button>
             )}

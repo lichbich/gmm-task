@@ -8,7 +8,7 @@
 }
 
 .dark {
-  --background: #0b0f19;
+  --background: #080c14;
   --foreground: #f8fafc;
   color-scheme: dark;
 }
@@ -21,161 +21,208 @@ body {
 }
 
 /* ==========================================================================
-   ELEGANT, HIGH-CONTRAST DARK THEME DESIGN SYSTEM
+   PURE DARK THEME OVERRIDES (PITCH DARK NAVY/BLACK EVERYWHERE)
    ========================================================================== */
 
-/* Dark Mode Backgrounds */
+/* Page Background & Header */
 html.dark body {
-  background-color: #0b0f19 !important;
-  color: #f1f5f9 !important;
+  background-color: #080c14 !important;
+  color: #f8fafc !important;
 }
 
 html.dark header {
-  background-color: #131a29 !important;
-  border-color: #232f48 !important;
+  background-color: #0d1322 !important;
+  border-color: #172136 !important;
 }
 
-html.dark .bg-white {
-  background-color: #131a29 !important;
-  color: #f1f5f9;
-  border-color: #232f48;
+/* Force All White & Slate Light Containers to Dark Black-Navy */
+html.dark .bg-white,
+html.dark [class*="bg-white"] {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
 }
 
-html.dark .bg-slate-50 {
-  background-color: #0c1220 !important;
-  color: #cbd5e1;
-}
-
-html.dark .bg-slate-50\/50,
-html.dark .bg-slate-50\/80 {
-  background-color: rgba(12, 18, 32, 0.75) !important;
+html.dark .bg-slate-50,
+html.dark [class*="bg-slate-50"] {
+  background-color: #0a0f1c !important;
+  color: #cbd5e1 !important;
+  border-color: #182236 !important;
 }
 
 html.dark .bg-slate-100,
-html.dark .bg-slate-100\/90 {
-  background-color: #1c263b !important;
-  color: #e2e8f0;
+html.dark [class*="bg-slate-100"] {
+  background-color: #141d30 !important;
+  color: #e2e8f0 !important;
+  border-color: #1e2a42 !important;
 }
 
-/* Table Hover & Sticky Cell Contrast Fixes */
-html.dark tr.hover\:bg-slate-50:hover,
-html.dark tr.hover\:bg-slate-50\/50:hover,
-html.dark .group:hover {
-  background-color: #1f2b42 !important;
+/* Fix Tailwind Gradient Variables in Dark Theme */
+html.dark [class*="from-slate-50"] {
+  --tw-gradient-from: #0a0f1c !important;
+  --tw-gradient-to: #0a0f1c !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
 }
 
-html.dark tr.hover\:bg-slate-50:hover td,
-html.dark tr.hover\:bg-slate-50:hover td.sticky {
-  background-color: #1f2b42 !important;
+html.dark [class*="via-indigo-50"] {
+  --tw-gradient-stops: var(--tw-gradient-from), #121c33, var(--tw-gradient-to) !important;
 }
 
-html.dark table th,
-html.dark thead tr {
-  background-color: #162032 !important;
-  color: #94a3b8 !important;
-  border-color: #232f48 !important;
+html.dark [class*="to-slate-50"] {
+  --tw-gradient-to: #0a0f1c !important;
 }
 
-html.dark table td {
-  border-color: #182235 !important;
-}
-
-html.dark td.sticky,
-html.dark th.sticky {
-  background-color: #131a29 !important;
-  border-color: #232f48 !important;
-}
-
-/* Group Header Rows in Tables (BA, Design, FE, BE, QA) */
-html.dark tr.bg-purple-50\/50,
-html.dark tr.bg-purple-50,
-html.dark td.bg-purple-50 {
-  background-color: rgba(88, 28, 135, 0.3) !important;
+/* Fix Role Group Header Rows in Tables (BA, Design, FE, BE, QA Header Rows) */
+html.dark [class*="bg-purple-50"],
+html.dark [class*="bg-purple-100"] {
+  background-color: #191226 !important; /* Pitch Dark Navy-Purple */
   color: #e9d5ff !important;
+  border-color: #2b1d42 !important;
 }
 
-html.dark tr.bg-amber-50\/50,
-html.dark tr.bg-amber-50,
-html.dark td.bg-amber-50 {
-  background-color: rgba(120, 53, 15, 0.3) !important;
+html.dark [class*="bg-amber-50"],
+html.dark [class*="bg-amber-100"] {
+  background-color: #20150c !important; /* Pitch Dark Navy-Amber */
   color: #fef08a !important;
+  border-color: #382516 !important;
 }
 
-html.dark tr.bg-blue-50\/50,
-html.dark tr.bg-blue-50,
-html.dark td.bg-blue-50 {
-  background-color: rgba(30, 58, 138, 0.3) !important;
+html.dark [class*="bg-blue-50"],
+html.dark [class*="bg-blue-100"] {
+  background-color: #0e172a !important; /* Pitch Dark Navy-Blue */
   color: #bfdbfe !important;
+  border-color: #1b2a4c !important;
 }
 
-html.dark tr.bg-emerald-50\/50,
-html.dark tr.bg-emerald-50,
-html.dark td.bg-emerald-50 {
-  background-color: rgba(6, 78, 59, 0.3) !important;
+html.dark [class*="bg-emerald-50"],
+html.dark [class*="bg-emerald-100"] {
+  background-color: #0a1b15 !important; /* Pitch Dark Navy-Emerald */
   color: #a7f3d0 !important;
+  border-color: #15382b !important;
 }
 
-html.dark tr.bg-rose-50\/50,
-html.dark tr.bg-rose-50,
-html.dark td.bg-rose-50 {
-  background-color: rgba(136, 19, 55, 0.3) !important;
+html.dark [class*="bg-rose-50"],
+html.dark [class*="bg-rose-100"] {
+  background-color: #221016 !important; /* Pitch Dark Navy-Rose */
   color: #fecdd3 !important;
+  border-color: #3b1c26 !important;
 }
 
-/* Dark Mode Borders */
-html.dark .border-slate-200,
-html.dark .border-slate-200\/90,
-html.dark .border-slate-200\/80,
-html.dark .border-slate-300 {
-  border-color: #232f48 !important;
+html.dark [class*="bg-indigo-50"],
+html.dark [class*="bg-indigo-100"] {
+  background-color: #111a2e !important; /* Pitch Dark Navy-Indigo */
+  color: #38bdf8 !important;
+  border-color: #1e2e50 !important;
 }
 
-html.dark .border-slate-100 {
-  border-color: #182235 !important;
+/* Tab Hover States - Dark Navy-Slate Hover ONLY (No Light Gray/White Hovers!) */
+html.dark [class*="hover:bg-white"]:hover,
+html.dark [class*="hover:bg-slate-50"]:hover,
+html.dark [class*="hover:bg-slate-100"]:hover,
+html.dark [class*="hover:bg-slate-200"]:hover {
+  background-color: #1c283f !important;
+  color: #ffffff !important;
+}
+
+/* Dark Theme Borders - Subtle Dark Borders Only */
+html.dark [class*="border-slate-100"],
+html.dark [class*="border-slate-200"],
+html.dark [class*="border-slate-300"],
+html.dark [class*="border-indigo-100"],
+html.dark [class*="border-indigo-200"],
+html.dark [class*="border-purple-200"],
+html.dark [class*="border-blue-200"],
+html.dark [class*="border-emerald-200"],
+html.dark [class*="border-amber-200"],
+html.dark [class*="border-rose-200"] {
+  border-color: rgba(255, 255, 255, 0.07) !important;
 }
 
 html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #1c263b !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
 }
 
-/* Dark Mode Typography */
+/* Table Design & Glowing Hover Contrast */
+html.dark table {
+  background-color: #0f172a !important;
+}
+
+html.dark table th,
+html.dark thead tr {
+  background-color: #141d30 !important;
+  color: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+html.dark table td {
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+html.dark td.bg-slate-100,
+html.dark td.bg-slate-50 {
+  background-color: transparent !important;
+}
+
+html.dark td.sticky,
+html.dark th.sticky {
+  background-color: #0f172a !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+/* Glowing Row Hover Effect */
+html.dark tr:hover,
+html.dark tr.hover\:bg-slate-50:hover,
+html.dark .group:hover {
+  background-color: #1e293b !important;
+}
+
+html.dark tr:hover td,
+html.dark tr.hover\:bg-slate-50:hover td,
+html.dark tr:hover td.sticky,
+html.dark tr.hover\:bg-slate-50:hover td.sticky {
+  background-color: #1e293b !important;
+  color: #ffffff !important;
+}
+
+/* Typography Overrides */
+html.dark .text-slate-900,
 html.dark .text-slate-800,
-html.dark .text-slate-900 {
+html.dark .text-slate-700 {
   color: #f8fafc !important;
 }
 
-html.dark .text-slate-700 {
+html.dark .text-slate-600 {
   color: #e2e8f0 !important;
 }
 
-html.dark .text-slate-600 {
+html.dark .text-slate-500 {
   color: #cbd5e1 !important;
 }
 
-html.dark .text-slate-500 {
+html.dark .text-slate-400 {
   color: #94a3b8 !important;
 }
 
-html.dark .text-slate-400 {
+html.dark .text-slate-300 {
   color: #64748b !important;
 }
 
-/* Dark Mode Form Inputs & Selects */
+/* Form Inputs, Dropdowns & Modals */
 html.dark input[type="text"],
 html.dark input[type="number"],
 html.dark input[type="password"],
 html.dark textarea,
 html.dark select {
-  background-color: #0c1220 !important;
+  background-color: #0a0f1c !important;
   color: #f8fafc !important;
-  border-color: #2b3954 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 html.dark input:focus,
 html.dark textarea:focus,
 html.dark select:focus {
-  background-color: #131a29 !important;
+  background-color: #0f172a !important;
   border-color: #6366f1 !important;
 }
 
@@ -184,24 +231,18 @@ html.dark textarea::placeholder {
   color: #64748b !important;
 }
 
-/* Modals & Popups Container Overrides */
-html.dark .fixed .bg-white {
-  background-color: #131a29 !important;
-  border-color: #2b3954 !important;
+/* Modal Dialog Windows */
+html.dark .fixed .bg-white,
+html.dark .fixed [class*="bg-white"] {
+  background-color: #0f172a !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
   color: #f8fafc !important;
 }
 
-/* Hover Buttons in Dark Mode */
-html.dark .hover\:bg-slate-100:hover {
-  background-color: #1c263b !important;
-}
-
-html.dark .hover\:bg-slate-50:hover {
-  background-color: #172134 !important;
-}
-
-html.dark .hover\:bg-white:hover {
-  background-color: #1c263b !important;
+/* Progress bar background tracks in Dark Mode */
+html.dark .bg-slate-200,
+html.dark .bg-slate-100 {
+  background-color: #1e293b !important;
 }
 
 /* Custom sleek modern floating scrollbar */
@@ -329,5 +370,3 @@ html.dark .hover\:bg-white:hover {
   opacity: 0;
   transform: scale(0.95) translateY(10px);
 }
-
-

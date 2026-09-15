@@ -134,52 +134,52 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
     const colorClasses: Record<string, { bg: string; text: string; badgeBg: string; border: string }> = {
       purple: {
-        bg: 'bg-purple-50/75',
-        text: 'text-purple-900',
-        badgeBg: 'bg-purple-100 text-purple-700 border-purple-300',
-        border: 'border-purple-200/80',
+        bg: 'bg-purple-50/75 dark:bg-purple-950/50',
+        text: 'text-purple-900 dark:text-purple-200',
+        badgeBg: 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/60 dark:text-purple-300 dark:border-purple-700',
+        border: 'border-purple-200/80 dark:border-purple-900/40',
       },
       amber: {
-        bg: 'bg-amber-50/75',
-        text: 'text-amber-900',
-        badgeBg: 'bg-amber-100 text-amber-800 border-amber-300',
-        border: 'border-amber-200/80',
+        bg: 'bg-amber-50/75 dark:bg-amber-950/50',
+        text: 'text-amber-900 dark:text-amber-200',
+        badgeBg: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/60 dark:text-amber-300 dark:border-amber-700',
+        border: 'border-amber-200/80 dark:border-amber-900/40',
       },
       blue: {
-        bg: 'bg-blue-50/75',
-        text: 'text-blue-900',
-        badgeBg: 'bg-blue-100 text-blue-700 border-blue-300',
-        border: 'border-blue-200/80',
+        bg: 'bg-blue-50/75 dark:bg-blue-950/50',
+        text: 'text-blue-900 dark:text-blue-200',
+        badgeBg: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/60 dark:text-blue-300 dark:border-blue-700',
+        border: 'border-blue-200/80 dark:border-blue-900/40',
       },
       emerald: {
-        bg: 'bg-emerald-50/75',
-        text: 'text-emerald-900',
-        badgeBg: 'bg-emerald-100 text-emerald-700 border-emerald-300',
-        border: 'border-emerald-200/80',
+        bg: 'bg-emerald-50/75 dark:bg-emerald-950/50',
+        text: 'text-emerald-900 dark:text-emerald-200',
+        badgeBg: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/60 dark:text-emerald-300 dark:border-emerald-700',
+        border: 'border-emerald-200/80 dark:border-emerald-900/40',
       },
       rose: {
-        bg: 'bg-rose-50/75',
-        text: 'text-rose-900',
-        badgeBg: 'bg-rose-100 text-rose-700 border-rose-300',
-        border: 'border-rose-200/80',
+        bg: 'bg-rose-50/75 dark:bg-rose-950/50',
+        text: 'text-rose-900 dark:text-rose-200',
+        badgeBg: 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-900/60 dark:text-rose-300 dark:border-rose-700',
+        border: 'border-rose-200/80 dark:border-rose-900/40',
       },
       indigo: {
-        bg: 'bg-indigo-50/75',
-        text: 'text-indigo-900',
-        badgeBg: 'bg-indigo-100 text-indigo-700 border-indigo-300',
-        border: 'border-indigo-200/80',
+        bg: 'bg-indigo-50/75 dark:bg-indigo-950/50',
+        text: 'text-indigo-900 dark:text-indigo-200',
+        badgeBg: 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-900/60 dark:text-indigo-300 dark:border-indigo-700',
+        border: 'border-indigo-200/80 dark:border-indigo-900/40',
       },
       cyan: {
-        bg: 'bg-cyan-50/75',
-        text: 'text-cyan-900',
-        badgeBg: 'bg-cyan-100 text-cyan-700 border-cyan-300',
-        border: 'border-cyan-200/80',
+        bg: 'bg-cyan-50/75 dark:bg-cyan-950/50',
+        text: 'text-cyan-900 dark:text-cyan-200',
+        badgeBg: 'bg-cyan-100 text-cyan-700 border-cyan-300 dark:bg-cyan-900/60 dark:text-cyan-300 dark:border-cyan-700',
+        border: 'border-cyan-200/80 dark:border-cyan-900/40',
       },
       slate: {
-        bg: 'bg-slate-100/75',
-        text: 'text-slate-900',
-        badgeBg: 'bg-slate-200 text-slate-700 border-slate-300',
-        border: 'border-slate-300/80',
+        bg: 'bg-slate-100/75 dark:bg-slate-900/90',
+        text: 'text-slate-900 dark:text-slate-100',
+        badgeBg: 'bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+        border: 'border-slate-300/80 dark:border-slate-800',
       },
     };
 
@@ -713,8 +713,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                           <React.Fragment key={`acc-group-${group.role}-${acc}`}>
                             {/* Thin blank separator row (half height of normal row) between different accounts */}
                             {accIdx > 0 && (
-                              <tr className="h-4 bg-slate-50/60 border-y border-slate-100/80 select-none">
-                                <td colSpan={9} className="h-4 p-0 border-0"></td>
+                              <tr className="h-4 bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-100/80 dark:border-slate-800 select-none">
+                                <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
                               </tr>
                             )}
                             {accTasks.map((t) => {

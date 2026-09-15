@@ -200,22 +200,22 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
         </div>
 
         {/* Informational Workflow Cards */}
-        <div className="bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 p-4 rounded-xl border border-indigo-100 text-xs text-slate-700 space-y-2">
-          <div className="flex items-center gap-2 text-indigo-900 font-bold">
-            <Info className="w-4 h-4 text-indigo-600 shrink-0" />
+        <div className="bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 p-4 rounded-xl border border-indigo-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 space-y-2">
+          <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-300 font-bold">
+            <Info className="w-4 h-4 text-indigo-600 dark:text-sky-400 shrink-0" />
             Quy trình tổng kết tuần và lưu lịch sử công việc (Weekly Rollover Workflow):
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-            <div className="bg-white/80 p-3 rounded-lg border border-indigo-100/60 shadow-2xs">
-              <span className="font-bold text-indigo-700 block mb-1">1. Báo cáo & Kiểm tra tuần</span>
+            <div className="bg-white/80 dark:bg-slate-900/90 p-3 rounded-lg border border-indigo-100/60 dark:border-slate-800 shadow-2xs text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-indigo-700 dark:text-sky-400 block mb-1">1. Báo cáo & Kiểm tra tuần</span>
               Đến hạn 22:00 Chủ Nhật, thành viên hoàn thành báo cáo số giờ & % tiến độ. Admin/Leader kiểm tra công việc trong tuần.
             </div>
-            <div className="bg-white/80 p-3 rounded-lg border border-indigo-100/60 shadow-2xs">
-              <span className="font-bold text-indigo-700 block mb-1">2. Chốt & Lưu lịch sử</span>
+            <div className="bg-white/80 dark:bg-slate-900/90 p-3 rounded-lg border border-indigo-100/60 dark:border-slate-800 shadow-2xs text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-indigo-700 dark:text-sky-400 block mb-1">2. Chốt & Lưu lịch sử</span>
               Nhấn <strong>Chốt Tuần</strong>: Toàn bộ bảng log công việc tuần sẽ được đưa vào phần Lịch Sử này để lưu trữ vĩnh viễn.
             </div>
-            <div className="bg-white/80 p-3 rounded-lg border border-indigo-100/60 shadow-2xs">
-              <span className="font-bold text-indigo-700 block mb-1">3. Chuyển task dở & Tuần mới</span>
+            <div className="bg-white/80 dark:bg-slate-900/90 p-3 rounded-lg border border-indigo-100/60 dark:border-slate-800 shadow-2xs text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-indigo-700 dark:text-sky-400 block mb-1">3. Chuyển task dở & Tuần mới</span>
               Công việc dở dang tự động đẩy sang tuần mới. Leader define/assign thêm task mới cho cả team làm tiếp.
             </div>
           </div>
