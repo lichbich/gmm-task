@@ -133,6 +133,10 @@ interface AppContextType {
   requestTaskAssignment: (taskId: string, memberAccount: string, targetWeek?: number) => void;
   approveTaskAssignment: (taskId: string) => void;
   rejectTaskAssignment: (taskId: string) => void;
+
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
+  setTheme: (theme: 'light' | 'dark') => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -149,6 +153,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authSession, setAuthSession] = useState<User | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [confirmState, setConfirmState] = useState<ConfirmDialogOptions | null>(null);
+
+  // Theme Management (Default: light, persisted in localStorage)
+  const [theme, setThemeState] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const savedTheme = localStorage.getItem('saho_theme') as 'light' | 'dark' | null;
+      if (savedTheme === 'dark' || savedTheme === 'light') {
+        setThemeState(savedTheme);
+        if (savedTheme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } else {
+        setThemeState('light');
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (e) {
+      console.error('Failed to load theme preference', e);
+    }
+  }, []);
+
+  const setTheme = (newTheme: 'light' | 'dark') => {
+    setThemeState(newTheme);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('saho_theme', newTheme);
+        if (newTheme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (e) {
+        console.error('Failed to save theme preference', e);
+      }
+    }
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light');
+  };
 
   const confirmDialog = (options: ConfirmDialogOptions) => {
     setConfirmState(options);
@@ -979,6 +1026,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         requestTaskAssignment,
         approveTaskAssignment,
         rejectTaskAssignment,
+
+        theme,
+        toggleTheme,
+        setTheme,
       }}
     >
       {children}

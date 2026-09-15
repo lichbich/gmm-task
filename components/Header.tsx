@@ -17,6 +17,8 @@ import {
   History,
   FolderGit2,
   CheckSquare,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export type MainSectionType = 'tasks' | 'resources' | 'users';
@@ -34,7 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeTaskTab,
   setActiveTaskTab,
 }) => {
-  const { currentUser, users, logout } = useApp();
+  const { currentUser, users, logout, theme: currentTheme, toggleTheme } = useApp();
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const userRecord = currentUser
@@ -117,6 +119,25 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right Controls & Auth Profile */}
           <div className="flex items-center gap-2">
+            {/* Theme Toggle Button (Light/Dark mode) */}
+            <button
+              onClick={toggleTheme}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold transition-all duration-200 shadow-2xs active:scale-95 cursor-pointer"
+              title={currentTheme === 'dark' ? 'Đang ở giao diện Tối - Bấm để chuyển sang Light Theme' : 'Đang ở giao diện Sáng - Bấm để chuyển sang Dark Theme'}
+            >
+              {currentTheme === 'dark' ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400" />
+                  <span className="hidden sm:inline">Light Mode</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-indigo-600" />
+                  <span className="hidden sm:inline">Dark Mode</span>
+                </>
+              )}
+            </button>
+
             {currentUser && (
               <div className="flex items-center gap-2">
                 <button
