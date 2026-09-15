@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Lock, User as UserIcon, CheckCircle, Key, LogIn, Sparkles } from 'lucide-react';
+import { GMMLogo } from './common/GMMLogo';
 
 export const LoginModal: React.FC = () => {
   const { authSession, login, setupFirstTimePassword } = useApp();
@@ -71,8 +72,8 @@ export const LoginModal: React.FC = () => {
 
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-500 mx-auto flex items-center justify-center text-white font-black text-2xl shadow-xl shadow-indigo-500/30">
-            G
+          <div className="flex justify-center mb-1">
+            <GMMLogo size={56} />
           </div>
           <h2 className="text-xl font-bold text-slate-800 tracking-tight">
             {isFirstTimeSetup ? 'Tạo Mật Khẩu Lần Đầu' : 'Đăng Nhập GMM Task System'}

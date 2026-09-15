@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserProfileModal } from './UserProfileModal';
+import { GMMLogo } from './common/GMMLogo';
 
 import {
   LayoutGrid,
@@ -63,17 +64,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo & Title */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-black text-xl shadow-md shadow-indigo-500/25">
-              G
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-slate-800 tracking-tight">GMM Task System</h1>
-              </div>
-              <p className="text-xs text-slate-500">Hệ thống quản lý task & báo cáo thưởng/phạt 10h CN</p>
-            </div>
-          </div>
+          <GMMLogo size={42} showText={true} />
 
           {/* Right Controls & Auth Profile */}
           <div className="flex items-center gap-2.5">
