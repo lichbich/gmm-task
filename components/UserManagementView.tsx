@@ -15,6 +15,8 @@ import {
   Layers,
   Tag,
   AlertCircle,
+  Search,
+  X,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 import { UserDetailModal } from './UserDetailModal';
@@ -50,8 +52,9 @@ export const UserManagementView: React.FC = () => {
     confirmDialog,
   } = useApp();
 
-  // Sub-tabs: 'USERS' or 'ROLES'
+  // SUB-TAB & SEARCH STATE
   const [activeSubTab, setActiveSubTab] = useState<'USERS' | 'ROLES'>('USERS');
+  const [userSearchQuery, setUserSearchQuery] = useState('');
 
   // SELECTED USER FOR DETAIL MODAL
   const [selectedUserForDetail, setSelectedUserForDetail] = useState<User | null>(null);
@@ -537,10 +540,46 @@ export const UserManagementView: React.FC = () => {
 
           {/* Users Table */}
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-800">
-                Danh Sách Nhân Viên ({users.length} nhân sự)
-              </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">
+                  Danh Sách Nhân Viên ({
+                    users.filter((u) => {
+                      if (!userSearchQuery.trim()) return true;
+                      const q = userSearchQuery.toLowerCase().trim();
+                      return (
+                        u.name.toLowerCase().includes(q) ||
+                        u.account.toLowerCase().includes(q) ||
+                        (u.email && u.email.toLowerCase().includes(q)) ||
+                        (u.phone && u.phone.toLowerCase().includes(q)) ||
+                        (u.technologies && u.technologies.toLowerCase().includes(q)) ||
+                        (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
+                      );
+                    }).length
+                  } / {users.length} nhân sự)
+                </h3>
+              </div>
+
+              {/* Search Bar Input */}
+              <div className="relative min-w-[240px] sm:w-72">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm tên, staff code, email..."
+                  value={userSearchQuery}
+                  onChange={(e) => setUserSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-100 transition"
+                />
+                {userSearchQuery && (
+                  <button
+                    onClick={() => setUserSearchQuery('')}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                    title="Xóa tìm kiếm"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -558,7 +597,20 @@ export const UserManagementView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                  {users.map((u, idx) => (
+                  {users
+                    .filter((u) => {
+                      if (!userSearchQuery.trim()) return true;
+                      const q = userSearchQuery.toLowerCase().trim();
+                      return (
+                        u.name.toLowerCase().includes(q) ||
+                        u.account.toLowerCase().includes(q) ||
+                        (u.email && u.email.toLowerCase().includes(q)) ||
+                        (u.phone && u.phone.toLowerCase().includes(q)) ||
+                        (u.technologies && u.technologies.toLowerCase().includes(q)) ||
+                        (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
+                      );
+                    })
+                    .map((u, idx) => (
                     <tr key={u.id} className="hover:bg-slate-50 transition">
                       <td className="py-3 px-3 text-center text-slate-400 font-mono text-[11px]">
                         {idx + 1}
