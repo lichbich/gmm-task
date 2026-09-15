@@ -74,30 +74,30 @@ export const Header: React.FC<HeaderProps> = ({
           <GMMLogo size={40} showText={true} />
 
           {/* MAIN 3 TOP MANAGEMENT TABS */}
-          <div className="hidden md:flex items-center bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/90 gap-1.5 shadow-2xs">
+          <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 shadow-2xs">
             {/* TAB 1: QUẢN LÝ TASK */}
             <button
               onClick={() => setActiveMainSection('tasks')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
                 activeMainSection === 'tasks'
-                  ? 'bg-white text-indigo-600 shadow-sm shadow-slate-200 border border-slate-200/80'
+                  ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <CheckSquare className={`w-4 h-4 ${activeMainSection === 'tasks' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <CheckSquare className={`w-3.5 h-3.5 ${activeMainSection === 'tasks' ? 'text-indigo-600' : 'text-slate-400'}`} />
               <span>Quản Lý Task</span>
             </button>
 
             {/* TAB 2: QUẢN LÝ RESOURCE */}
             <button
               onClick={() => setActiveMainSection('resources')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
                 activeMainSection === 'resources'
-                  ? 'bg-white text-indigo-600 shadow-sm shadow-slate-200 border border-slate-200/80'
+                  ? 'bg-white text-indigo-600 shadow-xs border border-slate-200/80'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              <FolderGit2 className={`w-4 h-4 ${activeMainSection === 'resources' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <FolderGit2 className={`w-3.5 h-3.5 ${activeMainSection === 'resources' ? 'text-indigo-600' : 'text-slate-400'}`} />
               <span>Quản Lý Resource</span>
             </button>
 
@@ -105,13 +105,13 @@ export const Header: React.FC<HeaderProps> = ({
             {currentUser?.role === 'Admin' && (
               <button
                 onClick={() => setActiveMainSection('users')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 ${
                   activeMainSection === 'users'
-                    ? 'bg-white text-purple-700 shadow-sm shadow-slate-200 border border-purple-200/80'
+                    ? 'bg-white text-purple-700 shadow-xs border border-purple-200/80'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                 }`}
               >
-                <ShieldCheck className={`w-4 h-4 ${activeMainSection === 'users' ? 'text-purple-600' : 'text-purple-400'}`} />
+                <ShieldCheck className={`w-3.5 h-3.5 ${activeMainSection === 'users' ? 'text-purple-600' : 'text-purple-400'}`} />
                 <span>Quản Lý User (Admin)</span>
               </button>
             )}
@@ -119,22 +119,16 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right Controls & Auth Profile */}
           <div className="flex items-center gap-2">
-            {/* Theme Toggle Button (Light/Dark mode) */}
+            {/* Theme Toggle Button (Sleek Circular Icon Button) */}
             <button
               onClick={toggleTheme}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold transition-all duration-200 shadow-2xs active:scale-95 cursor-pointer"
-              title={currentTheme === 'dark' ? 'Đang ở giao diện Tối - Bấm để chuyển sang Light Theme' : 'Đang ở giao diện Sáng - Bấm để chuyển sang Dark Theme'}
+              className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 flex items-center justify-center transition active:scale-90 shrink-0 cursor-pointer shadow-2xs"
+              title={currentTheme === 'dark' ? 'Chuyển sang giao diện Sáng (Light Theme)' : 'Chuyển sang giao diện Tối (Dark Theme)'}
             >
               {currentTheme === 'dark' ? (
-                <>
-                  <Sun className="w-4 h-4 text-amber-400" />
-                  <span className="hidden sm:inline">Light Mode</span>
-                </>
+                <Sun className="w-4 h-4 text-amber-400" />
               ) : (
-                <>
-                  <Moon className="w-4 h-4 text-indigo-600" />
-                  <span className="hidden sm:inline">Dark Mode</span>
-                </>
+                <Moon className="w-4 h-4 text-indigo-600" />
               )}
             </button>
 
