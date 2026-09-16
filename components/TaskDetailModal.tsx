@@ -74,7 +74,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     confirmDialog,
     markNoteAsRead,
   } = useApp();
-  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
+  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   const [notesText, setNotesText] = useState('');
   const [quickComment, setQuickComment] = useState('');
@@ -265,9 +265,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   return (
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
       className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}

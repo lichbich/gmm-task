@@ -33,7 +33,7 @@ export const Modal: React.FC<ModalProps> = ({
   bodyClassName = '',
   closeOnBackdropClick = true,
 }) => {
-  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
+  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   if (!isRendered) return null;
 
@@ -48,9 +48,10 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
+      onMouseDown={handleBackdropMouseDown}
       onClick={(e) => {
-        if (closeOnBackdropClick && e.target === e.currentTarget) {
-          handleClose();
+        if (closeOnBackdropClick) {
+          handleBackdropClick(e);
         }
       }}
       className={`fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 modal-backdrop-transition ${

@@ -32,7 +32,7 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
   onOpenFullDetail,
 }) => {
   const { currentUser, tasks, updateTaskNotes, markNoteAsRead, users } = useApp();
-  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
+  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   // Keep task updated in real-time with context
   const activeTask = tasks.find((t) => t.id === task?.id) || task;
@@ -109,9 +109,8 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
 
   return (
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
       className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}

@@ -27,7 +27,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   defaultAssignee,
 }) => {
   const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear } = useApp();
-  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
+  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   const allRoleCodes = roles.map((r) => r.code);
 
@@ -138,9 +138,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   return (
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
       className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
@@ -240,13 +239,23 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   Role Phụ Trách:
                 </label>
                 {allowedRoles.length === 1 ? (
-                  <div className="w-full bg-slate-100 border border-slate-300/90 rounded-xl px-3 py-2 text-slate-700 text-xs font-semibold flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                      {roles.find((ro) => ro.code === role)?.name || role}
-                    </span>
-                    <span className="text-[10px] text-slate-500 font-normal">
-                      Cố định theo Leader
+                  <div
+                    className="w-full bg-slate-50 border border-slate-300/90 rounded-xl px-3 py-2 text-slate-800 text-xs font-semibold flex items-center justify-between gap-2 h-[38px] shadow-2xs"
+                    title={`${role}${roles.find((ro) => ro.code === role)?.name ? ` - ${roles.find((ro) => ro.code === role)?.name}` : ''} (Cố định theo chuyên môn Leader)`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0"></span>
+                      <span className="font-bold text-indigo-700 shrink-0">
+                        {role}
+                      </span>
+                      {roles.find((ro) => ro.code === role)?.name && (
+                        <span className="text-[11px] text-slate-500 font-normal truncate hidden sm:inline">
+                          • {roles.find((ro) => ro.code === role)?.name}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md font-medium shrink-0">
+                      Leader
                     </span>
                   </div>
                 ) : (
@@ -260,11 +269,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       const matched = roles.find((ro) => ro.code === r);
                       return {
                         value: r,
-                        label: matched ? `${r} (${matched.name})` : r,
+                        label: matched ? `${r} - ${matched.name}` : r,
                       };
                     })}
                     className="w-full"
-                    buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300/90"
+                    buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300/90 h-[38px]"
                   />
                 )}
               </div>

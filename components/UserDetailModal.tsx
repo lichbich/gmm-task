@@ -51,7 +51,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     confirmDialog,
   } = useApp();
 
-  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
+  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   // Form Fields (Admin only updates role and specializations)
   const [userRole, setUserRole] = useState<UserRole>('Member');
@@ -210,9 +210,8 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   return (
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
       className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}

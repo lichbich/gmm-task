@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserRole, Specialization, User, RoleItem } from '../types/task';
 import {
@@ -64,6 +64,7 @@ export const UserManagementView: React.FC = () => {
   // SUB-TAB & SEARCH STATE
   const [activeSubTab, setActiveSubTab] = useState<'USERS' | 'ROLES'>('USERS');
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const isMouseDownOnBatchBackdrop = useRef(false);
 
   // SORT STATE FOR USER TABLE
   const [sortField, setSortField] = useState<'account' | 'name' | 'role' | 'level' | null>(null);
@@ -1356,8 +1357,14 @@ export const UserManagementView: React.FC = () => {
       {/* Batch Temporary Credentials Modal */}
       {batchCredModal && (
         <div
+          onMouseDown={(e) => {
+            isMouseDownOnBatchBackdrop.current = e.target === e.currentTarget;
+          }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) setBatchCredModal(null);
+            if (isMouseDownOnBatchBackdrop.current && e.target === e.currentTarget) {
+              setBatchCredModal(null);
+            }
+            isMouseDownOnBatchBackdrop.current = false;
           }}
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
         >

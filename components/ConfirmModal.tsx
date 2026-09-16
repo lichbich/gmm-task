@@ -24,7 +24,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   options,
   onClose,
 }) => {
-  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
+  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   if (!isRendered || !options) return null;
 
@@ -40,11 +40,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   return (
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
       className={`fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}

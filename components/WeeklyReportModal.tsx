@@ -18,7 +18,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   onClose,
 }) => {
   const { submitTaskReport, simulatedTime, canReportTask, users } = useApp();
-  const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
+  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   const [actualEffort, setActualEffort] = useState<number>(0);
   const [completionPercentage, setCompletionPercentage] = useState<number>(0);
@@ -53,9 +53,8 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
 
   return (
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
       className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
