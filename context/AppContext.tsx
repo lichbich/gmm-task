@@ -16,8 +16,10 @@ export function getCurrentISOWeekAndYear(d: Date = new Date()): { week: number; 
   if (date.getDay() !== 4) {
     date.setMonth(0, 1 + ((4 - date.getDay() + 7) % 7));
   }
-  const weekNumber = 1 + Math.round((firstThursday - date.valueOf()) / 604800000);
-  return { week: weekNumber, year: date.getFullYear() };
+  const isoWeekNumber = 1 + Math.round((firstThursday - date.valueOf()) / 604800000);
+  // Sheet cumulative week system offset (+55 weeks offset: ISO week 38 (14/09-20/09/2026) -> Sheet week 93)
+  const sheetWeekNumber = isoWeekNumber + 55;
+  return { week: sheetWeekNumber, year: date.getFullYear() };
 }
 
 export const DEFAULT_ROLES: RoleItem[] = [
@@ -380,6 +382,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Không tìm thấy tên tài khoản trong hệ thống.' };
     }
 
+    if (targetUser.disabled || targetUser.status === 'disabled') {
+      return { success: false, error: 'Tài khoản này đã bị vô hiệu hóa (Disabled). Vui lòng liên hệ Admin.' };
+    }
+
     if (!targetUser.password || !targetUser.firstLoginCompleted) {
       return { success: true, firstTime: true, user: targetUser };
     }
@@ -554,12 +560,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncUsersToFirebase(updated);
   };
 
-  // Delete User & Unassign User Tasks
+  // Delete User & Unassign User Tasks (Soft-delete: set disabled status in DB, hide from UI)
   const deleteUser = (id: string) => {
     const targetUser = users.find((u) => u.id === id);
     if (!targetUser) return;
 
-    const updatedUsers = users.filter((u) => u.id !== id);
+    const updatedUsers = users.map((u) =>
+      u.id === id ? { ...u, disabled: true, status: 'disabled' as const } : u
+    );
     setUsers(updatedUsers);
     syncUsersToFirebase(updatedUsers);
 
@@ -576,6 +584,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     setTasks(updatedTasks);
     syncTasksToFirebase(updatedTasks);
+
+    // If deleting currently logged in user, log out
+    if (authSession?.id === id) {
+      logout();
+    }
   };
 
   // Role Management (CRUD)

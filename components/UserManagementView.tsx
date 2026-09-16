@@ -20,6 +20,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  RotateCcw,
+  Eye,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 import { UserDetailModal } from './UserDetailModal';
@@ -169,13 +171,25 @@ export const UserManagementView: React.FC = () => {
     setIsUserFormOpen(false);
   };
 
+  const [showDisabledUsers, setShowDisabledUsers] = useState(false);
+
   const handleDeleteUser = (user: User) => {
     confirmDialog({
-      title: 'Xác nhận xóa thành viên',
-      message: `Bạn có chắc chắn muốn xóa thành viên ${user.name} (${user.account})? Tất cả task của thành viên này sẽ chuyển thành Task Trống để Leader giao cho người khác.`,
-      confirmText: 'Xác nhận xóa',
+      title: 'Xác nhận vô hiệu hóa tài khoản',
+      message: `Bạn có chắc chắn muốn vô hiệu hóa tài khoản ${user.name} (${user.account})? Tài khoản sẽ bị ẩn khỏi giao diện và ngưng hoạt động nhưng dữ liệu vẫn được bảo lưu an toàn trong Database. Tất cả task của thành viên này sẽ chuyển thành Task Trống để Leader giao cho người khác.`,
+      confirmText: 'Xác nhận vô hiệu hóa',
       type: 'danger',
       onConfirm: () => deleteUser(user.id),
+    });
+  };
+
+  const handleRestoreUser = (user: User) => {
+    confirmDialog({
+      title: 'Kích hoạt lại tài khoản',
+      message: `Bạn có chắc chắn muốn khôi phục và kích hoạt lại tài khoản ${user.name} (${user.account})?`,
+      confirmText: 'Kích hoạt lại',
+      type: 'warning',
+      onConfirm: () => updateUser(user.id, { disabled: false, status: 'active' }),
     });
   };
 
@@ -564,42 +578,48 @@ export const UserManagementView: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
               <div>
                 <h3 className="text-base font-bold text-slate-800">
-                  Danh Sách Nhân Viên ({
-                    users.filter((u) => {
-                      if (!userSearchQuery.trim()) return true;
-                      const q = userSearchQuery.toLowerCase().trim();
-                      return (
-                        u.name.toLowerCase().includes(q) ||
-                        u.account.toLowerCase().includes(q) ||
-                        (u.email && u.email.toLowerCase().includes(q)) ||
-                        (u.phone && u.phone.toLowerCase().includes(q)) ||
-                        (u.technologies && u.technologies.toLowerCase().includes(q)) ||
-                        (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
-                      );
-                    }).length
-                  } / {users.length} nhân sự)
+                  Danh Sách Nhân Viên ({users.filter((u) => !u.disabled && u.status !== 'disabled').length} nhân sự hoạt động)
                 </h3>
               </div>
 
-              {/* Search Bar Input */}
-              <div className="relative min-w-[240px] sm:w-72">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm tên, staff code, email..."
-                  value={userSearchQuery}
-                  onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-100 transition"
-                />
-                {userSearchQuery && (
+              <div className="flex items-center gap-2">
+                {users.some((u) => u.disabled || u.status === 'disabled') && (
                   <button
-                    onClick={() => setUserSearchQuery('')}
-                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
-                    title="Xóa tìm kiếm"
+                    onClick={() => setShowDisabledUsers(!showDisabledUsers)}
+                    className={`text-xs px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 font-semibold cursor-pointer ${
+                      showDisabledUsers
+                        ? 'bg-amber-50 text-amber-700 border-amber-300 shadow-2xs'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                    title={showDisabledUsers ? 'Ẩn các tài khoản đã bị khóa' : 'Xem danh sách tài khoản đã khóa trong DB'}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <Eye className="w-3.5 h-3.5" />
+                    {showDisabledUsers
+                      ? 'Đang hiện tài khoản đã khóa'
+                      : `Tài khoản đã khóa (${users.filter((u) => u.disabled || u.status === 'disabled').length})`}
                   </button>
                 )}
+
+                {/* Search Bar Input */}
+                <div className="relative min-w-[200px] sm:w-64">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm tên, staff code, email..."
+                    value={userSearchQuery}
+                    onChange={(e) => setUserSearchQuery(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-100 transition"
+                  />
+                  {userSearchQuery && (
+                    <button
+                      onClick={() => setUserSearchQuery('')}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                      title="Xóa tìm kiếm"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -698,6 +718,8 @@ export const UserManagementView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
                   {users
                     .filter((u) => {
+                      if (!showDisabledUsers && (u.disabled || u.status === 'disabled')) return false;
+
                       if (!userSearchQuery.trim()) return true;
                       const q = userSearchQuery.toLowerCase().trim();
                       return (
@@ -737,92 +759,116 @@ export const UserManagementView: React.FC = () => {
                       const cmp = valA.localeCompare(valB, 'vi', { sensitivity: 'base' });
                       return sortOrder === 'asc' ? cmp : -cmp;
                     })
-                    .map((u, idx) => (
-                    <tr key={u.id} className="hover:bg-slate-50 transition">
-                      <td className="py-3 px-3 text-center text-slate-400 font-mono text-[11px]">
-                        {idx + 1}
-                      </td>
-                      <td className="py-3 px-3 font-mono font-bold text-indigo-700 bg-indigo-50/40 rounded">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`w-2 h-2 rounded-full shrink-0 ${
-                              u.password && u.password.trim() !== '' ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
-                            }`}
-                            title={
-                              u.password && u.password.trim() !== ''
-                                ? 'Đã kích hoạt hệ thống (Đã có mật khẩu)'
-                                : 'Chưa vào hệ thống (Chưa tạo mật khẩu)'
-                            }
-                          />
-                          <button
-                            onClick={() => setSelectedUserForDetail(u)}
-                            className="hover:underline text-indigo-700 font-bold focus:outline-none"
-                            title="Xem chi tiết & quản lý thành viên"
-                          >
-                            {u.account}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-bold text-slate-800">
-                        <button
-                          onClick={() => setSelectedUserForDetail(u)}
-                          className="text-left font-bold text-slate-800 hover:text-indigo-600 hover:underline transition focus:outline-none"
-                          title="Xem chi tiết & quản lý thành viên"
-                        >
-                          {u.name}
-                        </button>
-                      </td>
-                      <td className="py-3 px-3 text-[11px]">
-                        <div className="text-slate-700 font-semibold">{u.email || '—'}</div>
-                        <div className="text-slate-400 font-mono text-[10px]">{u.phone || '—'}</div>
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex flex-wrap justify-center gap-1">
-                          {(u.specializations || ['BA']).map((s) => {
-                            const rObj = roles.find((r) => r.code === s);
-                            const style = getRoleStyle(rObj?.color);
-                            return (
+                    .map((u, idx) => {
+                      const isDisabled = u.disabled || u.status === 'disabled';
+                      return (
+                        <tr key={u.id} className={`transition ${isDisabled ? 'bg-slate-100/60 opacity-70' : 'hover:bg-slate-50'}`}>
+                          <td className="py-3 px-3 text-center text-slate-400 font-mono text-[11px]">
+                            {idx + 1}
+                          </td>
+                          <td className="py-3 px-3 font-mono font-bold text-indigo-700 bg-indigo-50/40 rounded">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span
-                                key={s}
-                                className={`px-2 py-0.5 rounded ${style.bg} ${style.text} border ${style.border} font-bold text-[10px]`}
+                                className={`w-2 h-2 rounded-full shrink-0 ${
+                                  isDisabled
+                                    ? 'bg-red-400'
+                                    : u.password && u.password.trim() !== ''
+                                    ? 'bg-emerald-500'
+                                    : 'bg-slate-300 dark:bg-slate-600'
+                                }`}
+                                title={
+                                  isDisabled
+                                    ? 'Tài khoản đã bị vô hiệu hóa (Disabled)'
+                                    : u.password && u.password.trim() !== ''
+                                    ? 'Đã kích hoạt hệ thống (Đã có mật khẩu)'
+                                    : 'Chưa vào hệ thống (Chưa tạo mật khẩu)'
+                                }
+                              />
+                              <button
+                                onClick={() => setSelectedUserForDetail(u)}
+                                className="hover:underline text-indigo-700 font-bold focus:outline-none"
+                                title="Xem chi tiết & quản lý thành viên"
                               >
-                                {s}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                            u.role === 'Admin'
-                              ? 'bg-purple-100 text-purple-700 border-purple-300'
-                              : u.role === 'Leader'
-                              ? 'bg-amber-100 text-amber-700 border-amber-300'
-                              : u.role === 'Advisor'
-                              ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-                              : 'bg-blue-100 text-blue-700 border-blue-300'
-                          }`}
-                        >
-                          {u.role}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-[11px] text-slate-600 font-semibold">{u.technologies || '—'}</td>
-                      <td className="py-3 px-3 text-right">
-                        {currentUser?.role === 'Admin' && (
-                          <div className="flex items-center justify-end">
+                                {u.account}
+                              </button>
+                              {isDisabled && (
+                                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-600 text-[9px] font-bold border border-red-200">
+                                  Đã khóa
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-800">
                             <button
-                              onClick={() => handleDeleteUser(u)}
-                              className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-500 rounded-lg transition"
-                              title="Xóa tài khoản thành viên"
+                              onClick={() => setSelectedUserForDetail(u)}
+                              className="text-left font-bold text-slate-800 hover:text-indigo-600 hover:underline transition focus:outline-none"
+                              title="Xem chi tiết & quản lý thành viên"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              {u.name}
                             </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                          </td>
+                          <td className="py-3 px-3 text-[11px]">
+                            <div className="text-slate-700 font-semibold">{u.email || '—'}</div>
+                            <div className="text-slate-400 font-mono text-[10px]">{u.phone || '—'}</div>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <div className="flex flex-wrap justify-center gap-1">
+                              {(u.specializations || ['BA']).map((s) => {
+                                const rObj = roles.find((r) => r.code === s);
+                                const style = getRoleStyle(rObj?.color);
+                                return (
+                                  <span
+                                    key={s}
+                                    className={`px-2 py-0.5 rounded ${style.bg} ${style.text} border ${style.border} font-bold text-[10px]`}
+                                  >
+                                    {s}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                                u.role === 'Admin'
+                                  ? 'bg-purple-100 text-purple-700 border-purple-300'
+                                  : u.role === 'Leader'
+                                  ? 'bg-amber-100 text-amber-700 border-amber-300'
+                                  : u.role === 'Advisor'
+                                  ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                                  : 'bg-blue-100 text-blue-700 border-blue-300'
+                              }`}
+                            >
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-[11px] text-slate-600 font-semibold">{u.technologies || '—'}</td>
+                          <td className="py-3 px-3 text-right">
+                            {currentUser?.role === 'Admin' && (
+                              <div className="flex items-center justify-end gap-1">
+                                {isDisabled ? (
+                                  <button
+                                    onClick={() => handleRestoreUser(u)}
+                                    className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-lg transition"
+                                    title="Kích hoạt / Khôi phục tài khoản"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleDeleteUser(u)}
+                                    className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-500 rounded-lg transition"
+                                    title="Vô hiệu hóa tài khoản"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

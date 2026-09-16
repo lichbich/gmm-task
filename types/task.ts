@@ -28,6 +28,8 @@ export interface User {
   avatarUrl?: string;
   password?: string;
   firstLoginCompleted?: boolean;
+  disabled?: boolean; // Set to true when user account is disabled/hidden
+  status?: 'active' | 'disabled';
 }
 
 export type TaskStatus = 'To do' | 'In Progress' | 'Done';

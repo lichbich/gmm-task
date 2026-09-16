@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Trophy, AlertTriangle, Award, CheckCircle2, Sparkles, TrendingUp, RefreshCw, Calendar, History, FolderArchive } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+import { getWeekDateRangeStr } from './WorkHistoryView';
 
 export const AwardLeaderboard: React.FC = () => {
   const {
@@ -56,10 +57,13 @@ export const AwardLeaderboard: React.FC = () => {
             <Dropdown
               value={selectedWeek}
               onChange={(val) => setSelectedWeek(Number(val))}
-              options={[35, 36, 37, 38, 39, 40].map((w) => ({
-                value: w,
-                label: `Tuần ${w} (${selectedYear})`,
-              }))}
+              options={Array.from({ length: 15 }, (_, i) => selectedWeek - 5 + i).map((w) => {
+                const range = getWeekDateRangeStr(w, selectedYear);
+                return {
+                  value: w,
+                  label: `Tuần ${w} (${range.startDate.slice(0, 5)}-${range.endDate.slice(0, 5)})`,
+                };
+              })}
               buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300 font-semibold"
             />
 

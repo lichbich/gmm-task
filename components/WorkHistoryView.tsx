@@ -32,16 +32,16 @@ interface WorkHistoryViewProps {
 }
 
 export const getWeekDateRangeStr = (weekNo: number, year: number = 2026): { startDate: string; endDate: string; label: string } => {
-  // ISO Week 1 calculation base for 2026
-  // Week 37 of 2026: 14/09/2026 - 20/09/2026
-  // Week 36 of 2026: 07/09/2026 - 13/09/2026
+  // Convert Google Sheet cumulative week (e.g. Week 93) to ISO week (e.g. Week 38)
+  const isoWeekNo = weekNo > 50 ? weekNo - 55 : weekNo;
+
   const jan4 = new Date(year, 0, 4);
   const dayOfWeek = jan4.getDay() || 7;
   const firstMonday = new Date(jan4);
   firstMonday.setDate(jan4.getDate() - dayOfWeek + 1);
 
   const start = new Date(firstMonday);
-  start.setDate(firstMonday.getDate() + (weekNo - 1) * 7);
+  start.setDate(firstMonday.getDate() + (isoWeekNo - 1) * 7);
 
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
@@ -58,7 +58,7 @@ export const getWeekDateRangeStr = (weekNo: number, year: number = 2026): { star
   return {
     startDate: startStr,
     endDate: endStr,
-    label: `Tuần ${weekNo} (${startStr} đến ${endStr})`,
+    label: `Tuần ${weekNo} (${startStr.slice(0, 5)} - ${endStr.slice(0, 5)})`,
   };
 };
 

@@ -112,9 +112,9 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   const handleDeleteUser = () => {
     confirmDialog({
-      title: 'Xác nhận xóa thành viên',
-      message: `Bạn có chắc chắn muốn xóa thành viên ${user.name} (${user.account})? Tất cả task của người này sẽ chuyển thành Task Trống.`,
-      confirmText: 'Xác nhận xóa',
+      title: 'Xác nhận vô hiệu hóa tài khoản',
+      message: `Bạn có chắc chắn muốn vô hiệu hóa tài khoản ${user.name} (${user.account})? Tài khoản sẽ bị ẩn khỏi giao diện nhưng dữ liệu vẫn được bảo lưu an toàn trong Database. Tất cả task của người này sẽ chuyển thành Task Trống.`,
+      confirmText: 'Xác nhận vô hiệu hóa',
       type: 'danger',
       onConfirm: () => {
         deleteUser(user.id);
