@@ -87,7 +87,8 @@ interface AppContextType {
   resetUserPassword: (userId: string) => Promise<{ success: boolean; tempPassword?: string; error?: string }>;
   resetAllUninitializedPasswords: () => Promise<{
     count: number;
-    results: { id: string; name: string; account: string; tempPassword: string }[];
+    newlyGeneratedCount: number;
+    results: { id: string; name: string; account: string; tempPassword: string; isNewlyGenerated: boolean }[];
   }>;
   
   roles: RoleItem[];
@@ -597,49 +598,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetAllUninitializedPasswords = async (): Promise<{
     count: number;
-    results: { id: string; name: string; account: string; tempPassword: string }[];
+    newlyGeneratedCount: number;
+    results: { id: string; name: string; account: string; tempPassword: string; isNewlyGenerated: boolean }[];
   }> => {
     try {
-      const uninitializedUsers = users.filter((u) => {
+      const pendingUsers = users.filter((u) => {
         const isDisabled = u.disabled || u.status === 'disabled';
         if (isDisabled) return false;
         const hasOfficialPass = u.password && u.password.trim() !== '' && u.firstLoginCompleted === true;
         return !hasOfficialPass;
       });
 
-      if (uninitializedUsers.length === 0) {
-        return { count: 0, results: [] };
+      if (pendingUsers.length === 0) {
+        return { count: 0, newlyGeneratedCount: 0, results: [] };
       }
 
-      const results: { id: string; name: string; account: string; tempPassword: string }[] = [];
+      const results: { id: string; name: string; account: string; tempPassword: string; isNewlyGenerated: boolean }[] = [];
       const updatedMap = new Map<string, User>();
+      let newlyGeneratedCount = 0;
 
-      for (const u of uninitializedUsers) {
-        const tempPassword = generateTemporaryPassword();
-        const hashedPassword = await hashPassword(tempPassword);
-        const updatedUser: User = {
-          ...u,
-          password: hashedPassword,
-          tempPassword: tempPassword,
-          firstLoginCompleted: false,
-        };
-        updatedMap.set(u.id, updatedUser);
-        results.push({
-          id: u.id,
-          name: u.name,
-          account: u.account,
-          tempPassword: tempPassword,
-        });
+      for (const u of pendingUsers) {
+        // If user already has a temporary password, retain it! Do not regenerate.
+        if (u.tempPassword && u.tempPassword.trim() !== '') {
+          results.push({
+            id: u.id,
+            name: u.name,
+            account: u.account,
+            tempPassword: u.tempPassword,
+            isNewlyGenerated: false,
+          });
+        } else {
+          // Generate new temporary password for those who do not have one
+          const tempPassword = generateTemporaryPassword();
+          const hashedPassword = await hashPassword(tempPassword);
+          const updatedUser: User = {
+            ...u,
+            password: hashedPassword,
+            tempPassword: tempPassword,
+            firstLoginCompleted: false,
+          };
+          updatedMap.set(u.id, updatedUser);
+          newlyGeneratedCount++;
+          results.push({
+            id: u.id,
+            name: u.name,
+            account: u.account,
+            tempPassword: tempPassword,
+            isNewlyGenerated: true,
+          });
+        }
       }
 
-      const newUsers = users.map((u) => updatedMap.get(u.id) || u);
-      setUsers(newUsers);
-      await syncUsersToFirebase(newUsers);
+      if (updatedMap.size > 0) {
+        const newUsers = users.map((u) => updatedMap.get(u.id) || u);
+        setUsers(newUsers);
+        await syncUsersToFirebase(newUsers);
+      }
 
-      return { count: results.length, results };
+      return { count: results.length, newlyGeneratedCount, results };
     } catch (e) {
-      console.error('Failed to batch reset passwords', e);
-      return { count: 0, results: [] };
+      console.error('Failed to batch issue passwords', e);
+      return { count: 0, newlyGeneratedCount: 0, results: [] };
     }
   };
 

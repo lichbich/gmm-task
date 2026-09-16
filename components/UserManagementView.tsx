@@ -98,19 +98,25 @@ export const UserManagementView: React.FC = () => {
 
   // BATCH CREDENTIALS MODAL (MULTIPLE USERS)
   const [batchCredModal, setBatchCredModal] = useState<{
-    results: { id: string; name: string; account: string; tempPassword: string }[];
+    newlyGeneratedCount: number;
+    results: { id: string; name: string; account: string; tempPassword: string; isNewlyGenerated: boolean }[];
   } | null>(null);
   const [batchCopied, setBatchCopied] = useState(false);
   const [batchSearchQuery, setBatchSearchQuery] = useState('');
   const [individualCopiedId, setIndividualCopiedId] = useState<string | null>(null);
 
-  // UNINITIALIZED USERS CALCULATION
-  const uninitializedUsers = users.filter((u) => {
+  // PENDING USERS (ALL WHO HAVE NOT COMPLETED FIRST LOGIN YET)
+  const pendingFirstLoginUsers = users.filter((u) => {
     const isDisabled = u.disabled || u.status === 'disabled';
     if (isDisabled) return false;
     const hasOfficialPass = u.password && u.password.trim() !== '' && u.firstLoginCompleted === true;
     return !hasOfficialPass;
   });
+
+  // USERS WHO DO NOT HAVE A TEMPORARY PASSWORD YET
+  const needNewTempUsers = pendingFirstLoginUsers.filter(
+    (u) => !u.tempPassword || u.tempPassword.trim() === ''
+  );
 
   const handleCopyAllInfo = (account: string, name: string, tempPassword: string) => {
     const text = `THÔNG TIN TÀI KHOẢN SAHO TASK\n• Họ và tên: ${name}\n• Staff Code (Tài khoản): ${account}\n• Mật khẩu tạm thời: ${tempPassword}\n\n👉 Vui lòng đăng nhập hệ thống bằng Staff Code và Mật khẩu tạm thời trên để đổi mật khẩu chính thức lần đầu.`;
@@ -157,7 +163,7 @@ export const UserManagementView: React.FC = () => {
   };
 
   const handleBatchReset = () => {
-    if (uninitializedUsers.length === 0) {
+    if (pendingFirstLoginUsers.length === 0) {
       confirmDialog({
         title: 'Tất cả nhân sự đã kích hoạt',
         message: 'Hiện không có nhân viên mới nào chưa đổi mật khẩu hoặc thiếu mật khẩu.',
@@ -169,15 +175,23 @@ export const UserManagementView: React.FC = () => {
       return;
     }
 
+    const confirmMsg =
+      needNewTempUsers.length > 0
+        ? `Hệ thống sẽ cấp mật khẩu tạm thời cho ${needNewTempUsers.length} nhân sự chưa có mật khẩu tạm (giữ nguyên mật khẩu của ${pendingFirstLoginUsers.length - needNewTempUsers.length} người đã có) và hiển thị danh sách tổng hợp để bạn sao chép gửi nhóm.`
+        : `Tất cả ${pendingFirstLoginUsers.length} nhân sự mới đều đã có mật khẩu tạm thời. Bấm xác nhận để mở bảng danh sách và sao chép gửi vào nhóm.`;
+
     confirmDialog({
-      title: 'Cấp mật khẩu tạm hàng loạt',
-      message: `Bạn có chắc chắn muốn sinh mật khẩu tạm thời cho toàn bộ ${uninitializedUsers.length} nhân sự mới chưa kích hoạt mật khẩu chính thức? Sau khi hoàn tất, hệ thống sẽ hiển thị bảng danh sách tổng hợp kèm nút sao chép nhanh để gửi vào nhóm chung.`,
-      confirmText: `Cấp MK cho ${uninitializedUsers.length} người`,
+      title: needNewTempUsers.length > 0 ? 'Cấp mật khẩu tạm cho nhân sự mới' : 'Danh sách mật khẩu tạm',
+      message: confirmMsg,
+      confirmText: needNewTempUsers.length > 0 ? `Cấp MK cho ${needNewTempUsers.length} người mới` : 'Xem & Sao Chép DS',
       type: 'warning',
       onConfirm: async () => {
         const res = await resetAllUninitializedPasswords();
         if (res.results.length > 0) {
-          setBatchCredModal({ results: res.results });
+          setBatchCredModal({
+            newlyGeneratedCount: res.newlyGeneratedCount,
+            results: res.results,
+          });
           setBatchSearchQuery('');
         }
       },
@@ -454,10 +468,18 @@ export const UserManagementView: React.FC = () => {
                   <button
                     onClick={handleBatchReset}
                     className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold rounded-xl shadow-xs transition shrink-0 active:scale-95 cursor-pointer"
-                    title="Cấp mật khẩu tạm thời cho tất cả nhân sự mới chưa có mật khẩu và xuất danh sách"
+                    title={
+                      needNewTempUsers.length > 0
+                        ? `Cấp mật khẩu tạm cho ${needNewTempUsers.length} người mới chưa có (giữ nguyên người đã có)`
+                        : `Xem danh sách mật khẩu tạm của ${pendingFirstLoginUsers.length} người đang chờ kích hoạt`
+                    }
                   >
                     <KeyRound className="w-4 h-4 text-amber-600" />
-                    <span>Cấp MK Tạm Cho Người Mới ({uninitializedUsers.length})</span>
+                    <span>
+                      {needNewTempUsers.length > 0
+                        ? `Cấp MK Tạm Cho Người Mới (${needNewTempUsers.length})`
+                        : `DS Mật Khẩu Tạm (${pendingFirstLoginUsers.length})`}
+                    </span>
                   </button>
 
                   <button
@@ -1354,7 +1376,9 @@ export const UserManagementView: React.FC = () => {
                     </span>
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Đã tạo mật khẩu tạm thời cho toàn bộ nhân sự mới. Sao chép danh sách bên dưới để gửi vào nhóm chat chung.
+                    {batchCredModal.newlyGeneratedCount > 0
+                      ? `Đã tạo mật khẩu mới cho ${batchCredModal.newlyGeneratedCount} người và giữ nguyên mật khẩu của ${batchCredModal.results.length - batchCredModal.newlyGeneratedCount} người đã có.`
+                      : `Danh sách ${batchCredModal.results.length} nhân sự mới đang có mật khẩu tạm chờ đăng nhập lần đầu.`}
                   </p>
                 </div>
               </div>
@@ -1436,10 +1460,17 @@ export const UserManagementView: React.FC = () => {
                             {u.name}
                           </td>
                           <td className="py-2.5 px-3">
-                            <span className="inline-flex items-center gap-1 font-mono font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">
-                              <KeyRound className="w-3 h-3 text-amber-600" />
-                              {u.tempPassword}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="inline-flex items-center gap-1 font-mono font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">
+                                <KeyRound className="w-3 h-3 text-amber-600" />
+                                {u.tempPassword}
+                              </span>
+                              {u.isNewlyGenerated && (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded border border-emerald-200">
+                                  Mới
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 text-right">
                             <button
