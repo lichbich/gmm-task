@@ -361,6 +361,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // Real-time Multi-Device Session Invalidation:
+  // When Admin resets a user's password, disables a user, or updates credentials in Firebase Realtime Database,
+  // any active session on any device/browser for that member will immediately be logged out in real time.
+  useEffect(() => {
+    if (!isFirebaseConnected || !authSession) return;
+
+    const currentUserInDb = users.find((u) => u.id === authSession.id);
+
+    // 1. Account not found in DB (deleted)
+    if (!currentUserInDb) {
+      logout();
+      return;
+    }
+
+    // 2. Account disabled by Admin
+    if (currentUserInDb.disabled || currentUserInDb.status === 'disabled') {
+      logout();
+      return;
+    }
+
+    // 3. Password reset by Admin (firstLoginCompleted set back to false)
+    if (currentUserInDb.firstLoginCompleted === false) {
+      logout();
+      return;
+    }
+
+    // 4. Password hash changed in DB (password reset or changed on another device)
+    if (currentUserInDb.password && authSession.password && currentUserInDb.password !== authSession.password) {
+      logout();
+      return;
+    }
+
+    // 5. Account attributes changed (e.g. role, name, specializations) -> synchronize local authSession
+    if (
+      currentUserInDb.name !== authSession.name ||
+      currentUserInDb.role !== authSession.role ||
+      currentUserInDb.account !== authSession.account ||
+      JSON.stringify(currentUserInDb.specializations || []) !== JSON.stringify(authSession.specializations || [])
+    ) {
+      setAuthSession(currentUserInDb);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_AUTH, JSON.stringify(currentUserInDb));
+      } catch (e) {
+        console.error('Failed to sync auth session', e);
+      }
+    }
+  }, [users, authSession, isFirebaseConnected]);
+
   const seedFirebaseMockData = async () => {
     try {
       const usersObj: Record<string, User> = {};
@@ -568,7 +616,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     const updated = [...users, newUser];
     setUsers(updated);
-    syncUsersToFirebase(updated);
+    await syncUsersToFirebase(updated);
     return { user: newUser, tempPassword };
   };
 
@@ -588,7 +636,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const updated = users.map((u) => (u.id === userId ? updatedUser : u));
       setUsers(updated);
-      syncUsersToFirebase(updated);
+      await syncUsersToFirebase(updated);
       return { success: true, tempPassword };
     } catch (e) {
       console.error('Failed to reset user password', e);

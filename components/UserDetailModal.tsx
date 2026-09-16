@@ -123,8 +123,8 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const handleResetPassword = () => {
     confirmDialog({
       title: 'Xác nhận đặt lại mật khẩu',
-      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Hệ thống sẽ tạo mật khẩu tạm thời mới và yêu cầu nhân viên đổi mật khẩu khi đăng nhập lần đầu.`,
-      confirmText: 'Đặt lại mật khẩu',
+      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Hệ thống sẽ ngay lập tức đăng xuất tài khoản này khỏi tất cả các thiết bị đã đăng nhập và tạo mật khẩu tạm thời mới để bạn gửi cho nhân viên.`,
+      confirmText: 'Đặt lại & Đăng xuất thiết bị',
       type: 'warning',
       onConfirm: async () => {
         const res = await resetUserPassword(user.id);
@@ -134,7 +134,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
             account: user.account,
             tempPassword: res.tempPassword,
           });
-          setSuccessMsg(`Đã tạo mật khẩu tạm thời mới cho ${user.account}!`);
+          setSuccessMsg(`Đã thu hồi phiên đăng nhập & tạo mật khẩu tạm thời mới cho ${user.account}!`);
         } else {
           setErrorMsg(res.error || 'Có lỗi xảy ra khi đặt lại mật khẩu.');
         }

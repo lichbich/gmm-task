@@ -321,15 +321,15 @@ export const UserManagementView: React.FC = () => {
   const handleResetPassword = (user: User) => {
     confirmDialog({
       title: 'Xác nhận đặt lại mật khẩu',
-      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Hệ thống sẽ tạo mật khẩu tạm thời mới và yêu cầu nhân viên đổi mật khẩu khi đăng nhập lần đầu.`,
-      confirmText: 'Đặt lại mật khẩu',
+      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Hệ thống sẽ ngay lập tức đăng xuất tài khoản này khỏi tất cả các thiết bị đã đăng nhập và tạo mật khẩu tạm thời mới để bạn gửi cho nhân viên.`,
+      confirmText: 'Đặt lại & Đăng xuất thiết bị',
       type: 'warning',
       onConfirm: async () => {
         const res = await resetUserPassword(user.id);
         if (res.success && res.tempPassword) {
           setTempCredModal({
             title: 'Đặt Lại Mật Khẩu Thành Công',
-            subtitle: 'Hệ thống đã tạo mật khẩu tạm thời mới. Hãy sao chép và gửi cho nhân viên để đăng nhập lại.',
+            subtitle: `Đã thu hồi phiên đăng nhập trên mọi thiết bị và tạo mật khẩu tạm thời mới cho ${user.account}. Hãy sao chép thông tin bên dưới và gửi cho nhân viên để đăng nhập lại.`,
             name: user.name,
             account: user.account,
             tempPassword: res.tempPassword,
