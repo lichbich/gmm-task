@@ -2,6 +2,12 @@
  * Secure Password Hashing Utilities using Web Crypto API SHA-256
  */
 
+export function generateTemporaryPassword(): string {
+  // Generate readable temporary password format: Saho@XXXX
+  const randomDigits = Math.floor(1000 + Math.random() * 9000);
+  return `Saho@${randomDigits}`;
+}
+
 export async function hashPassword(password: string): Promise<string> {
   if (!password) return '';
   const encoder = new TextEncoder();
@@ -15,8 +21,7 @@ export async function verifyPassword(
   inputPassword: string,
   storedPasswordHash?: string
 ): Promise<boolean> {
-  if (!storedPasswordHash) return true; // Account has not set password yet
-  if (!inputPassword) return false;
+  if (!storedPasswordHash || !inputPassword) return false;
   
   const inputHash = await hashPassword(inputPassword);
   // Verify with SHA-256 hash, or fallback to plain text for legacy database migration

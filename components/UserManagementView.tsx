@@ -22,6 +22,8 @@ import {
   ArrowDown,
   RotateCcw,
   Eye,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 import { UserDetailModal } from './UserDetailModal';
@@ -48,6 +50,8 @@ export const UserManagementView: React.FC = () => {
     addUser,
     updateUser,
     deleteUser,
+    resetUserPassword,
+    resetAllUninitializedPasswords,
     roles,
     addRole,
     updateRole,
@@ -81,6 +85,104 @@ export const UserManagementView: React.FC = () => {
 
   // SELECTED USER FOR DETAIL MODAL
   const [selectedUserForDetail, setSelectedUserForDetail] = useState<User | null>(null);
+
+  // TEMPORARY CREDENTIAL MODAL (SINGLE USER)
+  const [tempCredModal, setTempCredModal] = useState<{
+    title: string;
+    subtitle: string;
+    name: string;
+    account: string;
+    tempPassword: string;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<'all' | 'password' | null>(null);
+
+  // BATCH CREDENTIALS MODAL (MULTIPLE USERS)
+  const [batchCredModal, setBatchCredModal] = useState<{
+    results: { id: string; name: string; account: string; tempPassword: string }[];
+  } | null>(null);
+  const [batchCopied, setBatchCopied] = useState(false);
+  const [batchSearchQuery, setBatchSearchQuery] = useState('');
+  const [individualCopiedId, setIndividualCopiedId] = useState<string | null>(null);
+
+  // UNINITIALIZED USERS CALCULATION
+  const uninitializedUsers = users.filter((u) => {
+    const isDisabled = u.disabled || u.status === 'disabled';
+    if (isDisabled) return false;
+    const hasOfficialPass = u.password && u.password.trim() !== '' && u.firstLoginCompleted === true;
+    return !hasOfficialPass;
+  });
+
+  const handleCopyAllInfo = (account: string, name: string, tempPassword: string) => {
+    const text = `THÔNG TIN TÀI KHOẢN SAHO TASK\n• Họ và tên: ${name}\n• Staff Code (Tài khoản): ${account}\n• Mật khẩu tạm thời: ${tempPassword}\n\n👉 Vui lòng đăng nhập hệ thống bằng Staff Code và Mật khẩu tạm thời trên để đổi mật khẩu chính thức lần đầu.`;
+    navigator.clipboard.writeText(text);
+    setCopiedField('all');
+    setTimeout(() => setCopiedField(null), 2500);
+  };
+
+  const handleCopyPasswordOnly = (tempPassword: string) => {
+    navigator.clipboard.writeText(tempPassword);
+    setCopiedField('password');
+    setTimeout(() => setCopiedField(null), 2500);
+  };
+
+  const handleCopyBatchList = (
+    list: { id: string; name: string; account: string; tempPassword: string }[]
+  ) => {
+    let text = `📋 DANH SÁCH MẬT KHẨU TẠM ĐĂNG NHẬP SAHO TASK (${list.length} THÀNH VIÊN)\n`;
+    text += `=========================================\n`;
+    list.forEach((item, index) => {
+      text += `${index + 1}. Staff Code: ${item.account} | ${item.name} -> Mật khẩu tạm: ${item.tempPassword}\n`;
+    });
+    text += `=========================================\n`;
+    text += `💡 HƯỚNG DẪN ĐĂNG NHẬP:\n`;
+    text += `1. Truy cập vào hệ thống Saho Task.\n`;
+    text += `2. Nhập Staff Code (Username) và Mật khẩu tạm thời tương ứng ở trên.\n`;
+    text += `3. Sau khi đăng nhập thành công, hệ thống sẽ yêu cầu bạn đổi sang Mật khẩu mới chính thức để kích hoạt tài khoản.\n`;
+
+    navigator.clipboard.writeText(text);
+    setBatchCopied(true);
+    setTimeout(() => setBatchCopied(false), 2500);
+  };
+
+  const handleCopyIndividualFromBatch = (
+    account: string,
+    name: string,
+    tempPassword: string,
+    id: string
+  ) => {
+    const text = `THÔNG TIN TÀI KHOẢN SAHO TASK\n• Họ và tên: ${name}\n• Staff Code (Tài khoản): ${account}\n• Mật khẩu tạm thời: ${tempPassword}\n\n👉 Vui lòng đăng nhập hệ thống bằng Staff Code và Mật khẩu tạm thời trên để đổi mật khẩu chính thức lần đầu.`;
+    navigator.clipboard.writeText(text);
+    setIndividualCopiedId(id);
+    setTimeout(() => setIndividualCopiedId(null), 2500);
+  };
+
+  const handleBatchReset = () => {
+    if (uninitializedUsers.length === 0) {
+      confirmDialog({
+        title: 'Tất cả nhân sự đã kích hoạt',
+        message: 'Hiện không có nhân viên mới nào chưa đổi mật khẩu hoặc thiếu mật khẩu.',
+        confirmText: 'Đã hiểu',
+        type: 'warning',
+        cancelText: 'Đóng',
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    confirmDialog({
+      title: 'Cấp mật khẩu tạm hàng loạt',
+      message: `Bạn có chắc chắn muốn sinh mật khẩu tạm thời cho toàn bộ ${uninitializedUsers.length} nhân sự mới chưa kích hoạt mật khẩu chính thức? Sau khi hoàn tất, hệ thống sẽ hiển thị bảng danh sách tổng hợp kèm nút sao chép nhanh để gửi vào nhóm chung.`,
+      confirmText: `Cấp MK cho ${uninitializedUsers.length} người`,
+      type: 'warning',
+      onConfirm: async () => {
+        const res = await resetAllUninitializedPasswords();
+        if (res.results.length > 0) {
+          setBatchCredModal({ results: res.results });
+          setBatchSearchQuery('');
+        }
+      },
+    });
+  };
 
   // USER FORM STATE
   const [isUserFormOpen, setIsUserFormOpen] = useState(false);
@@ -145,7 +247,7 @@ export const UserManagementView: React.FC = () => {
     }
   };
 
-  const handleSubmitUser = (e: React.FormEvent) => {
+  const handleSubmitUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim() || !userAccount.trim()) return;
 
@@ -165,7 +267,16 @@ export const UserManagementView: React.FC = () => {
     if (editingUserId) {
       updateUser(editingUserId, payload);
     } else {
-      addUser(payload);
+      const res = await addUser(payload);
+      if (res?.tempPassword) {
+        setTempCredModal({
+          title: 'Tạo Tài Khoản Thành Công',
+          subtitle: 'Hệ thống đã tự động tạo mật khẩu tạm thời cho nhân viên mới. Hãy sao chép thông tin để gửi cho nhân viên đăng nhập lần đầu.',
+          name: res.user.name,
+          account: res.user.account,
+          tempPassword: res.tempPassword,
+        });
+      }
     }
 
     setIsUserFormOpen(false);
@@ -196,10 +307,21 @@ export const UserManagementView: React.FC = () => {
   const handleResetPassword = (user: User) => {
     confirmDialog({
       title: 'Xác nhận đặt lại mật khẩu',
-      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Người dùng sẽ được yêu cầu tạo mật khẩu mới trong lần đăng nhập tiếp theo.`,
+      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Hệ thống sẽ tạo mật khẩu tạm thời mới và yêu cầu nhân viên đổi mật khẩu khi đăng nhập lần đầu.`,
       confirmText: 'Đặt lại mật khẩu',
       type: 'warning',
-      onConfirm: () => updateUser(user.id, { password: '', firstLoginCompleted: false }),
+      onConfirm: async () => {
+        const res = await resetUserPassword(user.id);
+        if (res.success && res.tempPassword) {
+          setTempCredModal({
+            title: 'Đặt Lại Mật Khẩu Thành Công',
+            subtitle: 'Hệ thống đã tạo mật khẩu tạm thời mới. Hãy sao chép và gửi cho nhân viên để đăng nhập lại.',
+            name: user.name,
+            account: user.account,
+            tempPassword: res.tempPassword,
+          });
+        }
+      },
     });
   };
 
@@ -326,19 +448,30 @@ export const UserManagementView: React.FC = () => {
           </div>
 
           {currentUser?.role === 'Admin' && (
-            <div className="shrink-0">
+            <div className="shrink-0 flex items-center gap-2 flex-wrap">
               {activeSubTab === 'USERS' ? (
-                <button
-                  onClick={handleOpenAddUser}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-purple-600/20 transition shrink-0 active:scale-95"
-                >
-                  <Plus className="w-4 h-4" />
-                  Tạo Tài Khoản Mới
-                </button>
+                <>
+                  <button
+                    onClick={handleBatchReset}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold rounded-xl shadow-xs transition shrink-0 active:scale-95 cursor-pointer"
+                    title="Cấp mật khẩu tạm thời cho tất cả nhân sự mới chưa có mật khẩu và xuất danh sách"
+                  >
+                    <KeyRound className="w-4 h-4 text-amber-600" />
+                    <span>Cấp MK Tạm Cho Người Mới ({uninitializedUsers.length})</span>
+                  </button>
+
+                  <button
+                    onClick={handleOpenAddUser}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-purple-600/20 transition shrink-0 active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Tạo Tài Khoản Mới
+                  </button>
+                </>
               ) : (
                 <button
                   onClick={handleOpenAddRole}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition shrink-0 active:scale-95"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition shrink-0 active:scale-95 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   Thêm Role Mới
@@ -772,16 +905,16 @@ export const UserManagementView: React.FC = () => {
                                 className={`w-2 h-2 rounded-full shrink-0 ${
                                   isDisabled
                                     ? 'bg-red-400'
-                                    : u.password && u.password.trim() !== ''
+                                    : u.password && u.password.trim() !== '' && u.firstLoginCompleted === true
                                     ? 'bg-emerald-500'
                                     : 'bg-slate-300 dark:bg-slate-600'
                                 }`}
                                 title={
                                   isDisabled
                                     ? 'Tài khoản đã bị vô hiệu hóa (Disabled)'
-                                    : u.password && u.password.trim() !== ''
-                                    ? 'Đã kích hoạt hệ thống (Đã có mật khẩu)'
-                                    : 'Chưa vào hệ thống (Chưa tạo mật khẩu)'
+                                    : u.password && u.password.trim() !== '' && u.firstLoginCompleted === true
+                                    ? 'Đã vào hệ thống (Đã đổi mật khẩu cá nhân)'
+                                    : 'Chưa vào hệ thống (Chưa đổi mật khẩu cá nhân / Đang dùng mật khẩu tạm)'
                                 }
                               />
                               <button
@@ -846,6 +979,15 @@ export const UserManagementView: React.FC = () => {
                           <td className="py-3 px-3 text-right">
                             {currentUser?.role === 'Admin' && (
                               <div className="flex items-center justify-end gap-1">
+                                {!isDisabled && (
+                                  <button
+                                    onClick={() => handleResetPassword(u)}
+                                    className="p-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-600 rounded-lg transition"
+                                    title="Đặt lại mật khẩu (Tạo mật khẩu tạm mới)"
+                                  >
+                                    <KeyRound className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 {isDisabled ? (
                                   <button
                                     onClick={() => handleRestoreUser(u)}
@@ -1096,6 +1238,273 @@ export const UserManagementView: React.FC = () => {
         isOpen={!!selectedUserForDetail}
         onClose={() => setSelectedUserForDetail(null)}
       />
+
+      {/* Temporary Credentials Modal (Displayed when Admin creates user or resets password) */}
+      {tempCredModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setTempCredModal(null);
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden text-slate-800 relative animate-in zoom-in-95 duration-200 p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">{tempCredModal.title}</h3>
+                  <span className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">Mật Khẩu Tạm Thời Hệ Thống</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setTempCredModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {tempCredModal.subtitle}
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-medium">Họ & Tên:</span>
+                <span className="font-bold text-slate-800">{tempCredModal.name}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-medium">Staff Code (Tài khoản):</span>
+                <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                  {tempCredModal.account}
+                </span>
+              </div>
+              <div className="pt-2.5 border-t border-slate-200 flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] text-amber-700 uppercase font-bold tracking-wider block">Mật Khẩu Tạm Thời</span>
+                  <span className="font-mono font-black text-amber-800 text-base tracking-wider">
+                    {tempCredModal.tempPassword}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyPasswordOnly(tempCredModal.tempPassword)}
+                  className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-1.5 transition active:scale-95"
+                  title="Chỉ sao chép mật khẩu"
+                >
+                  {copiedField === 'password' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedField === 'password' ? 'Đã chép!' : 'Chép MK'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                Cơ chế bảo mật đăng nhập lần đầu
+              </div>
+              <p className="text-indigo-800 leading-snug">
+                Khi nhân viên đăng nhập bằng mật khẩu tạm này, hệ thống sẽ tự động bắt buộc đổi sang mật khẩu chính thức và mật khẩu tạm sẽ bị hủy.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleCopyAllInfo(tempCredModal.account, tempCredModal.name, tempCredModal.tempPassword)}
+                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/20 transition flex items-center justify-center gap-2 active:scale-95"
+              >
+                {copiedField === 'all' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedField === 'all' ? 'Đã Sao Chép Toàn Bộ!' : 'Sao Chép Gửi Nhân Viên'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTempCredModal(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Temporary Credentials Modal */}
+      {batchCredModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setBatchCredModal(null);
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden text-slate-800 relative max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                    Danh Sách Mật Khẩu Tạm Thời
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-mono font-bold border border-amber-300">
+                      {batchCredModal.results.length} thành viên
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Đã tạo mật khẩu tạm thời cho toàn bộ nhân sự mới. Sao chép danh sách bên dưới để gửi vào nhóm chat chung.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBatchCredModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Copy Action Banner */}
+            <div className="p-4 bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-indigo-500/10 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              <div className="text-xs text-slate-700 font-medium">
+                <span className="font-bold text-slate-900 block sm:inline">1 Click sao chép:</span> Định dạng rõ ràng, sẵn sàng paste vào Slack / Zalo / Telegram.
+              </div>
+              <button
+                type="button"
+                onClick={() => handleCopyBatchList(batchCredModal.results)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer shrink-0"
+              >
+                {batchCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{batchCopied ? 'Đã Sao Chép Toàn Bộ Danh Sách!' : 'Sao Chép Toàn Bộ Gửi Nhóm'}</span>
+              </button>
+            </div>
+
+            {/* Search Filter Bar */}
+            <div className="px-6 pt-3 pb-2 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Lọc theo tên hoặc Staff Code..."
+                  value={batchSearchQuery}
+                  onChange={(e) => setBatchSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-100"
+                />
+              </div>
+              <span className="text-[11px] text-slate-400 font-medium shrink-0">
+                Hiển thị {batchCredModal.results.filter((u) => {
+                  if (!batchSearchQuery.trim()) return true;
+                  const q = batchSearchQuery.toLowerCase().trim();
+                  return u.name.toLowerCase().includes(q) || u.account.toLowerCase().includes(q);
+                }).length} / {batchCredModal.results.length}
+              </span>
+            </div>
+
+            {/* Scrollable Table List */}
+            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-3">
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
+                      <th className="py-2.5 px-3 w-10 text-center">STT</th>
+                      <th className="py-2.5 px-3">STAFF CODE</th>
+                      <th className="py-2.5 px-4">HỌ VÀ TÊN</th>
+                      <th className="py-2.5 px-3">MẬT KHẨU TẠM</th>
+                      <th className="py-2.5 px-3 text-right">GỬI RIÊNG</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                    {batchCredModal.results
+                      .filter((u) => {
+                        if (!batchSearchQuery.trim()) return true;
+                        const q = batchSearchQuery.toLowerCase().trim();
+                        return u.name.toLowerCase().includes(q) || u.account.toLowerCase().includes(q);
+                      })
+                      .map((u, idx) => (
+                        <tr key={u.id} className="hover:bg-slate-50/80 transition">
+                          <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
+                            <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                              @{u.account}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-4 font-bold text-slate-800">
+                            {u.name}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="inline-flex items-center gap-1 font-mono font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">
+                              <KeyRound className="w-3 h-3 text-amber-600" />
+                              {u.tempPassword}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleCopyIndividualFromBatch(u.account, u.name, u.tempPassword, u.id)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition inline-flex items-center gap-1 active:scale-95"
+                              title="Sao chép nội dung tin nhắn riêng cho thành viên này"
+                            >
+                              {individualCopiedId === u.id ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span className="text-emerald-700">Đã chép</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3 text-slate-400" />
+                                  <span>Chép info</span>
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Instructions Reminder */}
+              <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                  Quy trình kích hoạt:
+                </div>
+                <p className="text-indigo-800 leading-snug">
+                  Nhân viên chỉ cần đăng nhập bằng Staff Code và Mật khẩu tạm thời. Khi đăng nhập thành công, hệ thống sẽ tự động bắt buộc đổi sang mật khẩu chính thức và hủy mật khẩu tạm.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50/50 shrink-0">
+              <span className="text-xs text-slate-500 font-medium">
+                Tổng cộng: <strong className="text-slate-800">{batchCredModal.results.length}</strong> tài khoản
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopyBatchList(batchCredModal.results)}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                >
+                  {batchCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{batchCopied ? 'Đã Sao Chép!' : 'Sao Chép Toàn Bộ'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchCredModal(null)}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

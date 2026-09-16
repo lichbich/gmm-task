@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, DB_ROOT_NODE } from '../lib/firebase';
-import { hashPassword, verifyPassword } from '../lib/crypto';
+import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
 import { ConfirmModal, ConfirmDialogOptions } from '../components/ConfirmModal';
 
 export function getCurrentISOWeekAndYear(d: Date = new Date()): { week: number; year: number } {
@@ -81,9 +81,14 @@ interface AppContextType {
   logout: () => void;
   
   users: User[];
-  addUser: (user: Omit<User, 'id'>) => void;
+  addUser: (user: Omit<User, 'id'>) => Promise<{ user: User; tempPassword: string }>;
   updateUser: (id: string, user: Partial<User>) => void;
   deleteUser: (id: string) => void;
+  resetUserPassword: (userId: string) => Promise<{ success: boolean; tempPassword?: string; error?: string }>;
+  resetAllUninitializedPasswords: () => Promise<{
+    count: number;
+    results: { id: string; name: string; account: string; tempPassword: string }[];
+  }>;
   
   roles: RoleItem[];
   addRole: (role: Omit<RoleItem, 'id'>) => void;
@@ -386,17 +391,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Tài khoản này đã bị vô hiệu hóa (Disabled). Vui lòng liên hệ Admin.' };
     }
 
-    if (!targetUser.password || !targetUser.firstLoginCompleted) {
-      return { success: true, firstTime: true, user: targetUser };
+    if (!passwordInput || !passwordInput.trim()) {
+      return { success: false, error: 'Vui lòng nhập mật khẩu (Mật khẩu tạm thời do Admin cấp hoặc mật khẩu chính thức).' };
     }
 
-    const isMatch = await verifyPassword(passwordInput || '', targetUser.password);
+    if (!targetUser.password) {
+      return { success: false, error: 'Tài khoản chưa có mật khẩu khởi tạo. Vui lòng liên hệ Admin để nhận mật khẩu tạm thời.' };
+    }
+
+    const isMatch = await verifyPassword(passwordInput, targetUser.password);
     if (!isMatch) {
       return { success: false, error: 'Mật khẩu không chính xác.' };
     }
 
+    // If first-time login with temporary password
+    if (!targetUser.firstLoginCompleted) {
+      return { success: true, firstTime: true, user: targetUser };
+    }
+
     // Auto-migrate legacy plain text password to SHA-256 hash in Firebase
-    const hashedPass = await hashPassword(passwordInput || '');
+    const hashedPass = await hashPassword(passwordInput);
     if (targetUser.password !== hashedPass) {
       const migratedUser = { ...targetUser, password: hashedPass };
       setUsers((prev) => prev.map((u) => (u.id === targetUser.id ? migratedUser : u)));
@@ -420,6 +434,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newUser: User = {
         ...updatedUser,
         password: hashedPassword,
+        tempPassword: '',
         firstLoginCompleted: true,
       };
 
@@ -538,15 +553,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // User Management
-  const addUser = (userData: Omit<User, 'id'>) => {
+  const addUser = async (userData: Omit<User, 'id'>): Promise<{ user: User; tempPassword: string }> => {
+    const tempPassword = generateTemporaryPassword();
+    const hashedPassword = await hashPassword(tempPassword);
     const newUser: User = {
       ...userData,
       id: `usr-${Date.now()}`,
+      password: hashedPassword,
+      tempPassword: tempPassword,
       firstLoginCompleted: false,
+      disabled: false,
+      status: 'active',
     };
     const updated = [...users, newUser];
     setUsers(updated);
     syncUsersToFirebase(updated);
+    return { user: newUser, tempPassword };
+  };
+
+  const resetUserPassword = async (userId: string): Promise<{ success: boolean; tempPassword?: string; error?: string }> => {
+    try {
+      const targetUser = users.find((u) => u.id === userId);
+      if (!targetUser) return { success: false, error: 'Không tìm thấy thông tin tài khoản.' };
+
+      const tempPassword = generateTemporaryPassword();
+      const hashedPassword = await hashPassword(tempPassword);
+      const updatedUser: User = {
+        ...targetUser,
+        password: hashedPassword,
+        tempPassword: tempPassword,
+        firstLoginCompleted: false,
+      };
+
+      const updated = users.map((u) => (u.id === userId ? updatedUser : u));
+      setUsers(updated);
+      syncUsersToFirebase(updated);
+      return { success: true, tempPassword };
+    } catch (e) {
+      console.error('Failed to reset user password', e);
+      return { success: false, error: 'Không thể tạo mật khẩu tạm thời mới.' };
+    }
+  };
+
+  const resetAllUninitializedPasswords = async (): Promise<{
+    count: number;
+    results: { id: string; name: string; account: string; tempPassword: string }[];
+  }> => {
+    try {
+      const uninitializedUsers = users.filter((u) => {
+        const isDisabled = u.disabled || u.status === 'disabled';
+        if (isDisabled) return false;
+        const hasOfficialPass = u.password && u.password.trim() !== '' && u.firstLoginCompleted === true;
+        return !hasOfficialPass;
+      });
+
+      if (uninitializedUsers.length === 0) {
+        return { count: 0, results: [] };
+      }
+
+      const results: { id: string; name: string; account: string; tempPassword: string }[] = [];
+      const updatedMap = new Map<string, User>();
+
+      for (const u of uninitializedUsers) {
+        const tempPassword = generateTemporaryPassword();
+        const hashedPassword = await hashPassword(tempPassword);
+        const updatedUser: User = {
+          ...u,
+          password: hashedPassword,
+          tempPassword: tempPassword,
+          firstLoginCompleted: false,
+        };
+        updatedMap.set(u.id, updatedUser);
+        results.push({
+          id: u.id,
+          name: u.name,
+          account: u.account,
+          tempPassword: tempPassword,
+        });
+      }
+
+      const newUsers = users.map((u) => updatedMap.get(u.id) || u);
+      setUsers(newUsers);
+      await syncUsersToFirebase(newUsers);
+
+      return { count: results.length, results };
+    } catch (e) {
+      console.error('Failed to batch reset passwords', e);
+      return { count: 0, results: [] };
+    }
   };
 
   const updateUser = (id: string, userData: Partial<User>) => {
@@ -999,6 +1093,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addUser,
         updateUser,
         deleteUser,
+        resetUserPassword,
+        resetAllUninitializedPasswords,
         roles,
         addRole,
         updateRole,

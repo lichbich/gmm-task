@@ -27,6 +27,7 @@ export interface User {
   totalEffort?: number; // Tổng giờ Effort tích lũy
   avatarUrl?: string;
   password?: string;
+  tempPassword?: string; // Stored temporary password for Admin reference until first login completion
   firstLoginCompleted?: boolean;
   disabled?: boolean; // Set to true when user account is disabled/hidden
   status?: 'active' | 'disabled';

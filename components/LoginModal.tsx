@@ -76,12 +76,12 @@ export const LoginModal: React.FC = () => {
             <GMMLogo size={56} />
           </div>
           <h2 className="text-xl font-bold text-slate-800 tracking-tight">
-            {isFirstTimeSetup ? 'Tạo Mật Khẩu Lần Đầu' : 'Đăng Nhập Saho Task System'}
+            {isFirstTimeSetup ? 'Đổi Mật Khẩu Lần Đầu' : 'Đăng Nhập Saho Task System'}
           </h2>
           <p className="text-xs text-slate-500">
             {isFirstTimeSetup
-              ? 'Tài khoản của bạn chưa có mật khẩu. Vui lòng tạo mật khẩu mới để đăng nhập các lần sau.'
-              : 'Nhập Account ID được Admin cấp để đăng nhập vào hệ thống.'}
+              ? 'Bạn đang đăng nhập bằng mật khẩu tạm thời. Vui lòng thiết lập mật khẩu mới chính thức để tiếp tục.'
+              : 'Nhập Staff Code & Mật khẩu được Admin cấp để đăng nhập vào hệ thống.'}
           </p>
         </div>
 
@@ -119,14 +119,15 @@ export const LoginModal: React.FC = () => {
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="password"
-                  placeholder="Nhập mật khẩu (Bỏ trống nếu là lần đầu)..."
+                  placeholder="Nhập mật khẩu (Mật khẩu tạm thời hoặc chính thức)..."
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  required
                 />
               </div>
               <p className="text-[10px] text-slate-400 mt-1">
-                💡 Nếu là lần đầu tiên đăng nhập, chỉ cần nhập Account ID rồi bấm Đăng nhập.
+                💡 Nếu là lần đầu tiên đăng nhập, nhập Mật khẩu tạm thời do Admin cấp để đổi mật khẩu chính thức.
               </p>
             </div>
 
@@ -144,7 +145,7 @@ export const LoginModal: React.FC = () => {
             <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-700 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
               <span>
-                Xin chào <strong>{accountInput}</strong>! Vui lòng đặt mật khẩu mới cho tài khoản của bạn.
+                Xin chào <strong>{accountInput}</strong>! Bạn đang đăng nhập bằng mật khẩu tạm. Vui lòng thiết lập mật khẩu mới chính thức.
               </span>
             </div>
 

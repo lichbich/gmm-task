@@ -26,6 +26,8 @@ import {
   FileText,
   Cpu,
   Info,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown } from './common/Dropdown';
@@ -45,6 +47,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     selectedYear,
     updateUser,
     deleteUser,
+    resetUserPassword,
     confirmDialog,
   } = useApp();
 
@@ -58,6 +61,27 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const [successMsg, setSuccessMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+
+  // Temporary password popup state
+  const [tempCredModal, setTempCredModal] = useState<{
+    name: string;
+    account: string;
+    tempPassword: string;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<'all' | 'password' | null>(null);
+
+  const handleCopyAllInfo = (account: string, name: string, tempPassword: string) => {
+    const text = `THÔNG TIN TÀI KHOẢN SAHO TASK\n• Họ và tên: ${name}\n• Staff Code (Tài khoản): ${account}\n• Mật khẩu tạm thời: ${tempPassword}\n\n👉 Vui lòng đăng nhập hệ thống bằng Staff Code và Mật khẩu tạm thời trên để đổi mật khẩu chính thức lần đầu.`;
+    navigator.clipboard.writeText(text);
+    setCopiedField('all');
+    setTimeout(() => setCopiedField(null), 2500);
+  };
+
+  const handleCopyPasswordOnly = (tempPassword: string) => {
+    navigator.clipboard.writeText(tempPassword);
+    setCopiedField('password');
+    setTimeout(() => setCopiedField(null), 2500);
+  };
 
   // Sync state when user prop changes or modal opens
   useEffect(() => {
@@ -99,13 +123,21 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const handleResetPassword = () => {
     confirmDialog({
       title: 'Xác nhận đặt lại mật khẩu',
-      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Mật khẩu sẽ bị xóa và người dùng sẽ được yêu cầu tạo mật khẩu mới khi đăng nhập.`,
+      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Hệ thống sẽ tạo mật khẩu tạm thời mới và yêu cầu nhân viên đổi mật khẩu khi đăng nhập lần đầu.`,
       confirmText: 'Đặt lại mật khẩu',
       type: 'warning',
-      onConfirm: () => {
-        updateUser(user.id, { password: '', firstLoginCompleted: false });
-        setSuccessMsg(`Đã đặt lại mật khẩu cho tài khoản ${user.account} thành công!`);
-        setTimeout(() => setSuccessMsg(''), 4000);
+      onConfirm: async () => {
+        const res = await resetUserPassword(user.id);
+        if (res.success && res.tempPassword) {
+          setTempCredModal({
+            name: user.name,
+            account: user.account,
+            tempPassword: res.tempPassword,
+          });
+          setSuccessMsg(`Đã tạo mật khẩu tạm thời mới cho ${user.account}!`);
+        } else {
+          setErrorMsg(res.error || 'Có lỗi xảy ra khi đặt lại mật khẩu.');
+        }
       },
     });
   };
@@ -217,12 +249,14 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                 </div>
                 <span
                   className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 shadow-xs ${
-                    user.password && user.password.trim() !== '' ? 'bg-emerald-500' : 'bg-slate-400'
+                    user.password && user.password.trim() !== '' && user.firstLoginCompleted === true
+                      ? 'bg-emerald-500'
+                      : 'bg-slate-400'
                   }`}
                   title={
-                    user.password && user.password.trim() !== ''
-                      ? 'Trạng thái: Đã tham gia hệ thống (Đã tạo mật khẩu)'
-                      : 'Trạng thái: Chưa tham gia hệ thống (Chưa tạo mật khẩu)'
+                    user.password && user.password.trim() !== '' && user.firstLoginCompleted === true
+                      ? 'Trạng thái: Đã vào hệ thống (Đã đổi mật khẩu cá nhân)'
+                      : 'Trạng thái: Chưa vào hệ thống (Chưa đổi mật khẩu cá nhân / Đang dùng mật khẩu tạm)'
                   }
                 />
               </div>
@@ -268,6 +302,36 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
               </div>
             )}
           </div>
+
+          {/* Temporary Password Notice Banner for Admin */}
+          {user.firstLoginCompleted === false && user.tempPassword && (
+            <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-amber-900">
+                    Tài khoản chưa hoàn tất đổi mật khẩu lần đầu
+                  </div>
+                  <div className="text-amber-700 text-[11px] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    <span>Mật khẩu tạm thời đang cấp:</span>
+                    <span className="font-mono font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-300">
+                      {user.tempPassword}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleCopyAllInfo(user.account, user.name, user.tempPassword!)}
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shrink-0 shadow-xs"
+              >
+                {copiedField === 'all' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedField === 'all' ? 'Đã Sao Chép!' : 'Sao Chép Thông Tin'}</span>
+              </button>
+            </div>
+          )}
 
           {/* Messages */}
           {errorMsg && (
@@ -535,6 +599,98 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
           </form>
         </div>
       </div>
+
+      {/* Temporary Password Modal upon Reset */}
+      {tempCredModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setTempCredModal(null);
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4 animate-in fade-in duration-200"
+        >
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden text-slate-800 relative animate-in zoom-in-95 duration-200 p-6 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Đặt Lại Mật Khẩu Thành Công</h3>
+                  <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">Mật Khẩu Tạm Thời Mới</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setTempCredModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Mật khẩu cũ đã bị hủy. Hãy gửi thông tin đăng nhập và mật khẩu tạm thời mới này cho nhân viên.
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-medium">Họ & Tên:</span>
+                <span className="font-bold text-slate-800">{tempCredModal.name}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-medium">Staff Code:</span>
+                <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                  {tempCredModal.account}
+                </span>
+              </div>
+              <div className="pt-2.5 border-t border-slate-200 flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] text-amber-700 uppercase font-bold tracking-wider block">Mật Khẩu Tạm Thời Mới</span>
+                  <span className="font-mono font-black text-amber-800 text-base tracking-wider">
+                    {tempCredModal.tempPassword}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyPasswordOnly(tempCredModal.tempPassword)}
+                  className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-1.5 transition active:scale-95"
+                  title="Chỉ sao chép mật khẩu"
+                >
+                  {copiedField === 'password' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedField === 'password' ? 'Đã chép!' : 'Chép MK'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                Cơ chế bảo mật đổi mật khẩu lần đầu
+              </div>
+              <p className="text-indigo-800 leading-snug">
+                Khi nhân viên đăng nhập bằng mật khẩu tạm này, hệ thống sẽ yêu cầu tạo mật khẩu mới ngay lập tức.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleCopyAllInfo(tempCredModal.account, tempCredModal.name, tempCredModal.tempPassword)}
+                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/20 transition flex items-center justify-center gap-2 active:scale-95"
+              >
+                {copiedField === 'all' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedField === 'all' ? 'Đã Sao Chép Toàn Bộ!' : 'Sao Chép Gửi Nhân Viên'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTempCredModal(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
