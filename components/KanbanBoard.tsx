@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { Task, TaskStatus } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
+import { TaskDiscussionModal } from './TaskDiscussionModal';
 import {
   AlertTriangle,
   Award,
@@ -38,6 +39,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
 
   // Drag and drop tracking refs and states
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -444,9 +446,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
                           </div>
 
                           {/* Quick Action Icons */}
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <button
-                              onClick={() => setViewingDetailTask(t)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDiscussingTask(t);
+                              }}
                               className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
                               title="Ghi chú & Trao đổi luồng task"
                             >
@@ -493,6 +498,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
       </div>
 
       {/* Modals */}
+      <TaskDiscussionModal
+        task={discussingTask}
+        isOpen={!!discussingTask}
+        onClose={() => setDiscussingTask(null)}
+        onOpenFullDetail={(t) => setViewingDetailTask(t)}
+      />
+
       <TaskDetailModal
         task={viewingDetailTask}
         isOpen={!!viewingDetailTask}

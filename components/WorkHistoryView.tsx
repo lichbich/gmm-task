@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, WeeklyHistoryArchive, TaskStatus } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
+import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { Dropdown } from './common/Dropdown';
 import {
   History,
@@ -80,6 +81,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
 
   // If archives exist and no selection, pick the latest archive
   const activeArchive =
@@ -494,13 +496,13 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
                               <td className="py-3 px-4 text-center">
                                 <div className="flex items-center justify-center gap-1">
                                   <button
-                                    onClick={() => setViewingDetailTask(t)}
+                                    onClick={() => setDiscussingTask(t)}
                                     className={`p-1.5 rounded-lg border transition ${
                                       unreadNotes
                                         ? 'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200'
                                         : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                                     }`}
-                                    title="Xem chi tiết & Nhật ký ghi chú"
+                                    title="Xem luồng trao đổi & ghi chú"
                                   >
                                     <MessageSquare className="w-3.5 h-3.5" />
                                   </button>
@@ -519,6 +521,14 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
         </div>
       ) : null}
       </div>
+
+      {/* Task Discussion Modal */}
+      <TaskDiscussionModal
+        task={discussingTask}
+        isOpen={!!discussingTask}
+        onClose={() => setDiscussingTask(null)}
+        onOpenFullDetail={(t) => setViewingDetailTask(t)}
+      />
 
       {/* Task Detail View Modal */}
       {viewingDetailTask && (

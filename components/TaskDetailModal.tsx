@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task } from '../types/task';
+import { Task, TaskActivityLog } from '../types/task';
 import {
   X,
   MessageSquare,
@@ -24,6 +24,11 @@ import {
   Flame,
   Check,
   Info,
+  History,
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 
@@ -61,6 +66,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     updateTaskNotes,
     updateTask,
     canEditTask,
+    canReportTask,
     weeklyAwards,
     deleteTask,
     currentUser,
@@ -80,6 +86,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [isSavedDesc, setIsSavedDesc] = useState(false);
 
+  // Collapsible activity history state (default: collapsed)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
   useEffect(() => {
     if (task) {
       setNotesText(task.notes || '');
@@ -95,13 +104,53 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   }, [task]);
 
+  // Find assignee user
+  const assigneeUser = useMemo(() => {
+    if (!task?.assigneeAccount) return undefined;
+    return users.find(
+      (u) => u.account.toLowerCase() === (task.assigneeAccount || '').toLowerCase()
+    );
+  }, [task?.assigneeAccount, users]);
+
+  // Build activity logs with fallback for legacy tasks (Hook at top level before conditional return)
+  const activityLogsList: TaskActivityLog[] = useMemo(() => {
+    if (!task) return [];
+    if (task.activityLogs && Array.isArray(task.activityLogs) && task.activityLogs.length > 0) {
+      return [...task.activityLogs].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+    }
+    const logs: TaskActivityLog[] = [];
+    if (task.updatedAt && task.updatedAt !== task.createdAt) {
+      logs.push({
+        id: `legacy-update-${task.id}`,
+        timestamp: task.updatedAt,
+        authorName: assigneeUser ? assigneeUser.name : task.assigneeAccount || 'Người phụ trách',
+        authorAccount: task.assigneeAccount || 'member',
+        authorRole: 'Member',
+        actionType: 'REPORT_SUBMIT',
+        summary: `Cập nhật tiến độ: ${task.completionPercentage}%, Effort: ${task.actualEffort}h, Trạng thái: "${task.status}"`,
+      });
+    }
+    if (task.createdAt) {
+      logs.push({
+        id: `legacy-create-${task.id}`,
+        timestamp: task.createdAt,
+        authorName: task.createdBy || 'Admin',
+        authorAccount: 'Admin',
+        authorRole: 'Admin',
+        actionType: 'CREATE',
+        summary: 'Khởi tạo công việc ban đầu',
+      });
+    }
+    return logs;
+  }, [task, assigneeUser]);
+
   if (!isRendered || !task) return null;
 
   const milestone = milestones.find((m) => m.id === task.milestoneId);
   const isEditable = canEditTask(task);
-  const assigneeUser = users.find(
-    (u) => u.account.toLowerCase() === task.assigneeAccount.toLowerCase()
-  );
+  const isMyTaskToReport = canReportTask(task);
 
   const award = weeklyAwards.find((w) => w.account === task.assigneeAccount);
   const isTopEffort = award?.isTopEffort || false;
@@ -112,6 +161,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const createdDateDisplay = formatDateTime(task.createdAt || '2026-09-14T08:30:00Z');
   const updatedDateDisplay = task.updatedAt ? formatDateTime(task.updatedAt) : null;
   const priority = task.priority || 'Medium';
+  const displayWeekNumber = task.weekNumber <= 53 ? task.weekNumber + 55 : task.weekNumber;
+
+  // Last updater name fallback
+  const lastUpdaterDisplay =
+    task.updatedBy ||
+    (assigneeUser
+      ? `${assigneeUser.name} (@${task.assigneeAccount})`
+      : task.assigneeAccount
+      ? `@${task.assigneeAccount}`
+      : 'Admin');
 
   // Handle saving inline description
   const handleSaveDescription = (e: React.FormEvent) => {
@@ -168,6 +227,41 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const noteLines = notesText
     ? notesText.split('\n').filter((l) => l.trim().length > 0)
     : [];
+
+  const getActionBadge = (actionType: string) => {
+    switch (actionType) {
+      case 'CREATE':
+        return {
+          icon: <Sparkles className="w-3.5 h-3.5 text-indigo-500" />,
+          label: 'Khởi tạo',
+          badgeClass: 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/80',
+        };
+      case 'REPORT_SUBMIT':
+        return {
+          icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />,
+          label: 'Báo cáo',
+          badgeClass: 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80',
+        };
+      case 'NOTE_ADD':
+        return {
+          icon: <MessageSquare className="w-3.5 h-3.5 text-purple-500" />,
+          label: 'Ghi chú',
+          badgeClass: 'bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border-purple-200/80 dark:border-purple-800/80',
+        };
+      case 'ASSIGNEE_CHANGE':
+        return {
+          icon: <UserCheck className="w-3.5 h-3.5 text-blue-500" />,
+          label: 'Phân công',
+          badgeClass: 'bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border-blue-200/80 dark:border-blue-800/80',
+        };
+      default:
+        return {
+          icon: <Activity className="w-3.5 h-3.5 text-amber-500" />,
+          label: 'Cập nhật',
+          badgeClass: 'bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80',
+        };
+    }
+  };
 
   return (
     <div
@@ -253,33 +347,30 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         {/* Scrollable Body with custom-scrollbar */}
         <div className="p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4 min-h-0 bg-white dark:bg-slate-900">
           {/* Creator & Creation Date Info Banner */}
-          <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3 flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300 flex-wrap">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
-                <User className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-slate-400 dark:text-slate-400">Người tạo:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-100">{creatorDisplay}</span>
+          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 text-xs text-slate-600 dark:text-slate-300">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
+                  <User className="w-4 h-4" />
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-400">
-                  <Calendar className="w-3 h-3 shrink-0" />
-                  <span>Khởi tạo: {createdDateDisplay}</span>
-                  {updatedDateDisplay && (
-                    <>
-                      <span>•</span>
-                      <span>Cập nhật: {updatedDateDisplay}</span>
-                    </>
-                  )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-slate-400 dark:text-slate-400">Người tạo:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-100">{creatorDisplay}</span>
+                    <span className="text-slate-400 dark:text-slate-500">•</span>
+                    <span className="text-slate-500 dark:text-slate-400 font-mono text-[11px] flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {createdDateDisplay}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="text-right text-[11px] shrink-0">
-              <span className="font-medium bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300">
-                Tuần {task.weekNumber} / {task.year}
-              </span>
+              <div className="shrink-0 flex items-center gap-2">
+                <span className="font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-xl border border-indigo-200/80 dark:border-indigo-800/80 text-xs">
+                  Tuần {displayWeekNumber} / {task.year}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -364,15 +455,24 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
           {/* Comprehensive Metadata Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
-            <div>
+            <div className="min-w-0">
               <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Người phụ trách:</span>
-              <span className="font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 truncate" title={assigneeUser?.name || task.assigneeAccount}>
-                <UserCheck className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
-                {assigneeUser ? `${assigneeUser.name} (${task.assigneeAccount})` : task.assigneeAccount || 'Chưa gán'}
-              </span>
+              <div className="flex items-start gap-1.5" title={assigneeUser ? `${assigneeUser.name} (@${task.assigneeAccount})` : task.assigneeAccount}>
+                <UserCheck className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-800 dark:text-slate-100 text-xs break-words leading-tight">
+                    {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
+                  </div>
+                  {task.assigneeAccount && (
+                    <div className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 font-mono">
+                      @{task.assigneeAccount}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Cột mốc Milestone:</span>
               {milestone ? (
                 <span className="inline-flex items-center gap-1 font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/60 px-2 py-0.5 rounded-md truncate max-w-full" title={milestone.title}>
@@ -537,6 +637,79 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* SECTION: Lịch Sử & Nhật Ký Cập Nhật (Activity Log) */}
+          <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
+                <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span>Nhật Ký & Lịch Sử Cập Nhật Task:</span>
+                <span className="text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-800/80">
+                  {activityLogsList.length} lần cập nhật
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+                className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-1 transition"
+              >
+                {isHistoryOpen ? 'Thu gọn' : 'Xem lịch sử'}
+                {isHistoryOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+
+            {isHistoryOpen && (
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-56 overflow-y-auto custom-scrollbar space-y-2.5">
+                {activityLogsList.length === 0 ? (
+                  <div className="text-center py-4 text-slate-400 text-xs flex flex-col items-center gap-1">
+                    <Activity className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                    <span>Chưa có nhật ký hoạt động chi tiết nào.</span>
+                  </div>
+                ) : (
+                  activityLogsList.map((log) => {
+                    const badge = getActionBadge(log.actionType);
+                    return (
+                      <div
+                        key={log.id}
+                        className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 text-xs space-y-1.5 shadow-2xs hover:border-indigo-200 dark:hover:border-indigo-800/80 transition"
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${badge.badgeClass}`}>
+                              {badge.icon}
+                              {badge.label}
+                            </span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                              {log.authorName}
+                            </span>
+                            {log.authorAccount && (
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                (@{log.authorAccount})
+                              </span>
+                            )}
+                            {log.authorRole && (
+                              <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded font-medium">
+                                {log.authorRole}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono shrink-0">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>{formatDateTime(log.timestamp)}</span>
+                          </div>
+                        </div>
+
+                        <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed pl-1 border-l-2 border-slate-200 dark:border-slate-700">
+                          {log.summary}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Fixed Footer */}
@@ -562,7 +735,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               Đóng
             </button>
 
-            {isEditable && onOpenReport && (
+            {isMyTaskToReport && onOpenReport && (
               <button
                 onClick={() => {
                   handleClose();

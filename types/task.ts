@@ -45,12 +45,33 @@ export interface Milestone {
   role?: Specialization | 'ALL';
 }
 
+export interface TaskActivityLog {
+  id: string;
+  timestamp: string; // ISO date string
+  authorName: string; // Tên người thực hiện
+  authorAccount: string; // Staff Code
+  authorRole?: string; // Vai trò: Admin, Leader, Member...
+  actionType:
+    | 'CREATE'
+    | 'STATUS_CHANGE'
+    | 'REPORT_SUBMIT'
+    | 'EFFORT_CHANGE'
+    | 'PROGRESS_CHANGE'
+    | 'ASSIGNEE_CHANGE'
+    | 'DESC_UPDATE'
+    | 'NOTE_ADD'
+    | 'GENERAL_UPDATE';
+  summary: string; // Tóm tắt nội dung thay đổi
+}
+
 export interface Task {
   id: string;
   title: string;
   description?: string; // Chi tiết task mô tả bởi Leader
   createdBy?: string; // Người tạo đầu việc (e.g. "QuynhNV (Leader)")
   createdAt?: string; // Thời gian tạo (ISO date string)
+  updatedBy?: string; // Người cập nhật gần nhất (e.g. "Đoàn Việt Dũng (@DungDV)")
+  updatedAt?: string; // Thời gian cập nhật gần nhất (ISO date string)
   priority?: 'High' | 'Medium' | 'Low'; // Mức độ ưu tiên
   role: Specialization;
   estimatedEffort: number;
@@ -65,11 +86,11 @@ export interface Task {
   weekNumber: number;
   year: number;
   notes?: string; // Ghi chú gửi Leader
-  updatedAt?: string;
   assignmentRequestedBy?: string; // Tài khoản member xin nhận task
   assignmentRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED'; // Trạng thái phê duyệt của Leader
   requestedWeekNumber?: number; // Mốc tuần yêu cầu phân công
   parentTaskId?: string; // ID của task gốc khi rolled over sang tuần mới
+  activityLogs?: TaskActivityLog[]; // Nhật ký lịch sử các lần cập nhật task
 }
 
 export interface WeeklyAwardSummary {

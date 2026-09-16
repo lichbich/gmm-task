@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { Milestone, Task, TaskStatus, Specialization } from '../types/task';
 import { TaskModal } from './TaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
+import { TaskDiscussionModal } from './TaskDiscussionModal';
 import {
   ListOrdered,
   Plus,
@@ -85,6 +86,7 @@ export const MilestonesView: React.FC = () => {
   const [targetMilestoneId, setTargetMilestoneId] = useState<string>('');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
 
   // Drag and drop state for milestone tasks
   const [draggedMilestoneTaskId, setDraggedMilestoneTaskId] = useState<string | null>(null);
@@ -776,7 +778,7 @@ export const MilestonesView: React.FC = () => {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       markNoteAsRead(t.id, t.notes);
-                                      setViewingDetailTask(t);
+                                      setDiscussingTask(t);
                                     }}
                                     className={`relative p-1.5 rounded-lg transition active:scale-95 ${
                                       isUnread
@@ -874,16 +876,6 @@ export const MilestonesView: React.FC = () => {
                   {filteredAdhocTasks.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0)}h
                 </span>
               </div>
-
-              {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
-                <button
-                  onClick={handleOpenCreateAdhocTask}
-                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20 active:scale-95"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Tạo Task Tự Do
-                </button>
-              )}
             </div>
           </div>
 
@@ -1044,7 +1036,7 @@ export const MilestonesView: React.FC = () => {
                           onClick={(e) => {
                             e.stopPropagation();
                             markNoteAsRead(t.id, t.notes);
-                            setViewingDetailTask(t);
+                            setDiscussingTask(t);
                           }}
                           className={`relative p-1.5 rounded-lg transition active:scale-95 ${
                             isUnread
@@ -1108,6 +1100,14 @@ export const MilestonesView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Task Discussion Modal (Only Notes & Stream) */}
+      <TaskDiscussionModal
+        task={discussingTask}
+        isOpen={!!discussingTask}
+        onClose={() => setDiscussingTask(null)}
+        onOpenFullDetail={(t) => setViewingDetailTask(t)}
+      />
 
       {/* Task Detail & Collaborative Notes Discussion Modal */}
       <TaskDetailModal

@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { Task, TaskStatus, Specialization } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
+import { TaskDiscussionModal } from './TaskDiscussionModal';
 import {
   Search,
   Plus,
@@ -58,6 +59,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
 
   // Force default 'MY_TASKS' on component mount
   useEffect(() => {
@@ -432,7 +434,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   onClick={(e) => {
                     e.stopPropagation();
                     markNoteAsRead(t.id, t.notes);
-                    setViewingDetailTask(t);
+                    setDiscussingTask(t);
                   }}
                   className={`relative p-1.5 rounded-xl transition-all shadow-xs active:scale-95 ${
                     isUnread
@@ -518,16 +520,6 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               Quản lý tiến độ, giờ làm thực tế (Effort) và trao đổi ghi chú với Leader.
             </p>
           </div>
-
-          {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
-            <button
-              onClick={() => onOpenTaskModal?.()}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition shrink-0 active:scale-95"
-            >
-              <Plus className="w-4 h-4" />
-              Tạo / Break Task Mới
-            </button>
-          )}
         </div>
 
         {/* Navigation Sub-Tabs Switcher (Below title & description, identical to Milestones) */}
@@ -753,6 +745,14 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       </div>
       </>
       )}
+
+      {/* Task Discussion Modal (Only Notes & Stream) */}
+      <TaskDiscussionModal
+        task={discussingTask}
+        isOpen={!!discussingTask}
+        onClose={() => setDiscussingTask(null)}
+        onOpenFullDetail={(t) => setViewingDetailTask(t)}
+      />
 
       {/* Task Detail Modal with Notes */}
       <TaskDetailModal

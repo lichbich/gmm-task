@@ -41,14 +41,14 @@ export const AwardLeaderboard: React.FC = () => {
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
                 <Trophy className="w-6 h-6 text-amber-500" />
-                Bảng Tổng Kết Thưởng, Cảnh Báo & Lịch Sử Tuần
+                Bảng Tổng Kết Thưởng & Cảnh Báo (Thưởng / Phạt)
               </h2>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
                 Deadline CN 22:00
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Tổng hợp danh hiệu <strong className="text-emerald-600">Thưởng (Top Effort)</strong>, <strong className="text-red-600">Phạt (Nộp muộn)</strong> và chuyển giao task dở sang tuần mới.
+              Tổng hợp danh hiệu <strong className="text-emerald-600">Thưởng (Top Effort)</strong> và danh sách <strong className="text-red-600">Cảnh Báo Phạt (Nộp muộn sau 22:00 Chủ Nhật)</strong> trong tuần.
             </p>
           </div>
 

@@ -17,7 +17,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { submitTaskReport, simulatedTime, canEditTask } = useApp();
+  const { submitTaskReport, simulatedTime, canReportTask, users } = useApp();
   const { isRendered, isVisible, handleClose } = useModalAnimation(isOpen, onClose);
 
   const [actualEffort, setActualEffort] = useState<number>(0);
@@ -36,11 +36,14 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
 
   if (!isRendered || !task) return null;
 
-  const isEditable = canEditTask(task);
+  const isMyTaskToReport = canReportTask(task);
+  const assigneeUser = users.find(
+    (u) => u.account.toLowerCase() === (task.assigneeAccount || '').toLowerCase()
+  );
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isEditable) return;
+    if (!isMyTaskToReport) return;
     submitTaskReport(task.id, actualEffort, completionPercentage, status, notes);
     handleClose();
   };
@@ -68,7 +71,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               <Clock className="w-3.5 h-3.5" />
               Báo Cáo Tiến Độ Tuần
             </span>
-            <h3 className="text-base font-bold text-slate-900 mt-1 line-clamp-1">
+            <h3 className="text-base font-bold text-slate-900 mt-0.5 leading-snug break-words">
               {task.title}
             </h3>
           </div>
@@ -80,18 +83,20 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="py-5 space-y-5">
-          {/* Deadline Warning Banner */}
-          {isLateSimulated ? (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2.5">
+        <form onSubmit={handleSave} className="space-y-4 pt-4">
+          {/* Late submission alert */}
+          {isLateSimulated && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-700">
               <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold block text-red-800">CẢNH BÁO NỘP BÁO CÁO MUỘN (TÍNH PHẠT)!</span>
-                Thời điểm hiện tại đã quá hạn 10h tối Chủ Nhật (22:00). Việc nộp/cập nhật này sẽ bị ghi nhận Phạt theo quy định.
+                <span className="font-bold block text-red-800">CẢNH BÁO: Báo Cáo Muộn (Sau 22h CN)</span>
+                Bạn đang nộp báo cáo sau 22:00 Chủ Nhật. Hệ thống sẽ ghi nhận trạng thái nộp trễ và tính phạt cho tuần này.
               </div>
             </div>
-          ) : (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 flex items-start gap-2.5">
+          )}
+
+          {!isLateSimulated && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-700">
               <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold block text-emerald-800">Nộp Đúng Hạn (Trước 10h Tối CN)</span>
@@ -111,12 +116,19 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               <span className="font-semibold text-slate-800">{task.estimatedEffort} giờ</span>
             </div>
             <div>
-              <span className="text-slate-500 block">Người thực hiện:</span>
-              <span className="font-semibold text-indigo-600">{task.assigneeAccount}</span>
+              <span className="text-slate-500 block mb-0.5">Người thực hiện:</span>
+              <div className="font-semibold text-indigo-600 break-words">
+                {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
+                {task.assigneeAccount && (
+                  <span className="text-[11px] font-normal text-slate-500 block font-mono">
+                    @{task.assigneeAccount}
+                  </span>
+                )}
+              </div>
             </div>
             <div>
-              <span className="text-slate-500 block">Mốc tuần (Week):</span>
-              <span className="font-semibold text-slate-800">Tuần {task.weekNumber} / {task.year}</span>
+              <span className="text-slate-500 block mb-0.5">Mốc tuần (Week):</span>
+              <span className="font-semibold text-slate-800">Tuần {task.weekNumber <= 53 ? task.weekNumber + 55 : task.weekNumber} / {task.year}</span>
             </div>
           </div>
 
@@ -130,7 +142,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 <button
                   key={st}
                   type="button"
-                  disabled={!isEditable}
+                  disabled={!isMyTaskToReport}
                   onClick={() => {
                     setStatus(st);
                     if (st === 'Done') setCompletionPercentage(100);
@@ -165,7 +177,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 step="0.5"
                 min="0"
                 max="100"
-                disabled={!isEditable}
+                disabled={!isMyTaskToReport}
                 value={actualEffort}
                 onChange={(e) => setActualEffort(parseFloat(e.target.value) || 0)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 text-sm focus:bg-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
@@ -189,7 +201,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               min="0"
               max="100"
               step="5"
-              disabled={!isEditable}
+              disabled={!isMyTaskToReport}
               value={completionPercentage}
               onChange={(e) => {
                 const val = parseInt(e.target.value);
@@ -209,7 +221,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
             </label>
             <textarea
               rows={3}
-              disabled={!isEditable}
+              disabled={!isMyTaskToReport}
               placeholder="Nhập nội dung vướng mắc hoặc ghi chú cho Leader..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -228,7 +240,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!isEditable}
+              disabled={!isMyTaskToReport}
               className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition disabled:opacity-50"
             >
               <Save className="w-4 h-4" />

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
@@ -319,7 +319,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           if (data.tasks) {
             const taskList = Object.values(data.tasks) as Task[];
-            setTasks(taskList);
+            let hasLegacy = false;
+            const formattedTasks = taskList.map((t: any) => {
+              const weekNo =
+                typeof t.weekNumber === 'number' && t.weekNumber <= 53 && (!t.year || t.year === 2026)
+                  ? t.weekNumber + 55
+                  : t.weekNumber;
+              if (weekNo !== t.weekNumber) {
+                hasLegacy = true;
+              }
+              return {
+                ...t,
+                weekNumber: weekNo,
+                activityLogs: Array.isArray(t.activityLogs)
+                  ? t.activityLogs
+                  : t.activityLogs && typeof t.activityLogs === 'object'
+                  ? Object.values(t.activityLogs)
+                  : [],
+              };
+            });
+            setTasks(formattedTasks);
+            if (hasLegacy) {
+              const obj: Record<string, Task> = {};
+              formattedTasks.forEach((t) => {
+                obj[t.id] = JSON.parse(JSON.stringify(t, (_, v) => (v === undefined ? null : v)));
+              });
+              set(ref(database, `${DB_ROOT_NODE}/tasks`), obj).catch(console.error);
+            }
           } else {
             setTasks([]);
           }
@@ -896,9 +922,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTask = (taskData: Omit<Task, 'id' | 'orderInMilestone'>) => {
     const milestoneTasks = tasks.filter((t) => t.milestoneId === taskData.milestoneId);
     const nowIso = new Date().toISOString();
-    const creatorName = authSession
-      ? `${authSession.name} (${authSession.role})`
-      : 'QuynhNV (Leader)';
+    const authorName = authSession?.name || 'Admin';
+    const authorAccount = authSession?.account || 'Admin';
+    const authorRole = authSession?.role || 'Admin';
+    const creatorDisplay = `${authorName} (@${authorAccount})`;
+
+    const initialLog: TaskActivityLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: nowIso,
+      authorName,
+      authorAccount,
+      authorRole,
+      actionType: 'CREATE',
+      summary: 'Khởi tạo công việc mới',
+    };
+
     const newTask: Task = {
       ...taskData,
       id: `tsk-${Date.now()}`,
@@ -907,10 +945,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       completionPercentage: taskData.completionPercentage || 0,
       weekNumber: taskData.weekNumber || selectedWeek,
       year: taskData.year || selectedYear,
-      createdBy: taskData.createdBy || creatorName,
+      createdBy: taskData.createdBy || creatorDisplay,
       createdAt: taskData.createdAt || nowIso,
-      priority: taskData.priority || 'Medium',
+      updatedBy: creatorDisplay,
       updatedAt: nowIso,
+      priority: taskData.priority || 'Medium',
+      activityLogs: [initialLog],
     };
     const updated = [...tasks, newTask];
     setTasks(updated);
@@ -918,9 +958,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateTask = (id: string, updates: Partial<Task>) => {
-    const updated = tasks.map((t) =>
-      t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t
-    );
+    const nowIso = new Date().toISOString();
+    const authorName = authSession?.name || 'Thành viên';
+    const authorAccount = authSession?.account || 'member';
+    const authorRole = authSession?.role || 'Member';
+    const updaterDisplay = `${authorName} (@${authorAccount})`;
+
+    const updated = tasks.map((t) => {
+      if (t.id !== id) return t;
+
+      const changes: string[] = [];
+      if (updates.status && updates.status !== t.status) {
+        changes.push(`Trạng thái: "${t.status}" ➔ "${updates.status}"`);
+      }
+      if (updates.completionPercentage !== undefined && updates.completionPercentage !== t.completionPercentage) {
+        changes.push(`Tiến độ: ${t.completionPercentage}% ➔ ${updates.completionPercentage}%`);
+      }
+      if (updates.actualEffort !== undefined && updates.actualEffort !== t.actualEffort) {
+        changes.push(`Effort thực tế: ${t.actualEffort}h ➔ ${updates.actualEffort}h`);
+      }
+      if (updates.estimatedEffort !== undefined && updates.estimatedEffort !== t.estimatedEffort) {
+        changes.push(`Effort ước tính: ${t.estimatedEffort}h ➔ ${updates.estimatedEffort}h`);
+      }
+      if (updates.assigneeAccount !== undefined && updates.assigneeAccount !== t.assigneeAccount) {
+        changes.push(`Người phụ trách: ${t.assigneeAccount || 'Chưa gán'} ➔ ${updates.assigneeAccount || 'Chưa gán'}`);
+      }
+      if (updates.priority && updates.priority !== t.priority) {
+        changes.push(`Độ ưu tiên: ${t.priority || 'Medium'} ➔ ${updates.priority}`);
+      }
+      if (updates.description !== undefined && updates.description !== t.description) {
+        changes.push(`Cập nhật mô tả & hướng dẫn kỹ thuật`);
+      }
+      if (updates.title && updates.title !== t.title) {
+        changes.push(`Đổi tiêu đề: "${updates.title}"`);
+      }
+      if (updates.notes !== undefined && updates.notes !== t.notes) {
+        changes.push(`Cập nhật ghi chú trao đổi`);
+      }
+      if (updates.role && updates.role !== t.role) {
+        changes.push(`Chuyên môn (Role): ${t.role} ➔ ${updates.role}`);
+      }
+      if (updates.assignmentRequestStatus && updates.assignmentRequestStatus !== t.assignmentRequestStatus) {
+        if (updates.assignmentRequestStatus === 'PENDING') {
+          changes.push(`Yêu cầu nhận task bởi @${updates.assignmentRequestedBy || authorAccount}`);
+        } else if (updates.assignmentRequestStatus === 'APPROVED') {
+          changes.push(`Duyệt phân công task cho @${t.assignmentRequestedBy || t.assigneeAccount}`);
+        } else if (updates.assignmentRequestStatus === 'REJECTED') {
+          changes.push(`Từ chối yêu cầu nhận task`);
+        }
+      }
+
+      const summary = changes.length > 0 ? changes.join(' • ') : 'Cập nhật thông tin task';
+      const logEntry: TaskActivityLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: nowIso,
+        authorName,
+        authorAccount,
+        authorRole,
+        actionType: 'GENERAL_UPDATE',
+        summary,
+      };
+
+      const existingLogs = Array.isArray(t.activityLogs) ? t.activityLogs : [];
+
+      return {
+        ...t,
+        ...updates,
+        updatedAt: nowIso,
+        updatedBy: updaterDisplay,
+        activityLogs: [logEntry, ...existingLogs],
+      };
+    });
     setTasks(updated);
     syncTasksToFirebase(updated);
   };
@@ -958,6 +1066,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes?: string
   ) => {
     const now = new Date(simulatedTime);
+    const nowIso = new Date().toISOString();
     const day = now.getDay();
     const hours = now.getHours();
     
@@ -966,8 +1075,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isLate = true;
     }
 
+    const authorName = authSession?.name || 'Người phụ trách';
+    const authorAccount = authSession?.account || 'member';
+    const authorRole = authSession?.role || 'Member';
+    const updaterDisplay = `${authorName} (@${authorAccount})`;
+
     const updated = tasks.map((t) => {
       if (t.id !== taskId) return t;
+
+      const changes: string[] = [];
+      if (status !== t.status) {
+        changes.push(`Trạng thái: "${t.status}" ➔ "${status}"`);
+      }
+      if (completionPercentage !== t.completionPercentage) {
+        changes.push(`Tiến độ: ${t.completionPercentage}% ➔ ${completionPercentage}%`);
+      }
+      if (actualEffort !== t.actualEffort) {
+        changes.push(`Effort: ${t.actualEffort}h ➔ ${actualEffort}h`);
+      }
+      if (notes !== undefined && notes !== t.notes) {
+        changes.push(`Kèm ghi chú báo cáo`);
+      }
+
+      const summary = `Nộp báo cáo tiến độ: ${changes.length > 0 ? changes.join(' • ') : 'Cập nhật tiến độ tuần'}`;
+      const logEntry: TaskActivityLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: nowIso,
+        authorName,
+        authorAccount,
+        authorRole,
+        actionType: 'REPORT_SUBMIT',
+        summary,
+      };
+
+      const existingLogs = Array.isArray(t.activityLogs) ? t.activityLogs : [];
+
       return {
         ...t,
         actualEffort,
@@ -976,7 +1118,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notes: notes !== undefined ? notes : t.notes,
         lastSubmittedAt: now.toISOString(),
         isSubmittedLate: isLate,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
+        updatedBy: updaterDisplay,
+        activityLogs: [logEntry, ...existingLogs],
       };
     });
     setTasks(updated);

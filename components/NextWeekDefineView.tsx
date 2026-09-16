@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Milestone } from '../types/task';
+import { Task, Milestone, User as UserType } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { Dropdown } from './common/Dropdown';
 import { getWeekDateRangeStr } from './WorkHistoryView';
@@ -30,6 +30,7 @@ import {
   Check,
   X,
   MessageSquare,
+  ChevronDown,
 } from 'lucide-react';
 
 interface NextWeekDefineViewProps {
@@ -60,10 +61,56 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [expandedMembers, setExpandedMembers] = useState<Record<string, boolean>>({});
+
+  const toggleMemberExpanded = (account: string) => {
+    setExpandedMembers((prev) => ({
+      ...prev,
+      [account]: !prev[account],
+    }));
+  };
+
+  const toggleAllMembersExpanded = (expand: boolean) => {
+    const newState: Record<string, boolean> = {};
+    if (expand) {
+      unfinishedTasksByMember.forEach((g) => {
+        newState[g.account] = true;
+      });
+    }
+    setExpandedMembers(newState);
+  };
 
   // Role filtering permissions
   const isLeaderOrAdmin = currentUser?.role === 'Leader' || currentUser?.role === 'Admin';
-  const myRole = currentUser?.role === 'Admin' ? 'ALL' : currentUser?.role === 'Leader' ? currentUser.specializations?.[0] || 'BA' : currentUser?.specializations?.[0] || 'BA';
+  const myRole = currentUser?.role === 'Admin' ? 'ALL' : currentUser?.specializations?.[0] || 'ALL';
+
+  // Helper to check if a task strictly belongs to current user's team / scope
+  const isTaskInMyTeamScope = (t: Task): boolean => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'Admin') return true;
+
+    if (currentUser.role === 'Leader') {
+      const leaderSpecs = currentUser.specializations || [];
+      if (leaderSpecs.length === 0) return false;
+
+      // 1. Direct role match on task
+      if (leaderSpecs.includes(t.role)) return true;
+
+      // 2. Or assignee user belongs to leader's team specialization
+      if (t.assigneeAccount) {
+        const assigneeUser = users.find(
+          (u) => u.account.toLowerCase() === t.assigneeAccount.toLowerCase()
+        );
+        if (assigneeUser && assigneeUser.specializations?.some((s) => leaderSpecs.includes(s))) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Member: only own tasks
+    return t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
+  };
 
   // 1. Pending Assignment Requests
   const pendingRequests = React.useMemo(() => {
@@ -74,13 +121,12 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         return t.assignmentRequestedBy === currentUser.account;
       }
       if (currentUser?.role === 'Leader') {
-        // Leader sees requests in their role
-        const leaderRoles = currentUser.specializations || ['BA'];
-        return leaderRoles.includes(t.role);
+        // Leader sees requests in their role / team only
+        return isTaskInMyTeamScope(t);
       }
       return true; // Admin sees all
     });
-  }, [tasks, currentUser]);
+  }, [tasks, currentUser, users]);
 
   // 1.5. Current Week / Previous Week Unfinished Tasks (Incomplete tasks that can be rolled over to next week)
   const currentWeekUnfinishedTasks = React.useMemo(() => {
@@ -90,15 +136,63 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (t.status === 'Done') return false; // Unfinished tasks only
 
       if (currentUser?.role === 'Member') {
-        return t.assigneeAccount === currentUser.account;
+        return t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
       }
       if (currentUser?.role === 'Leader') {
-        const leaderRoles = currentUser.specializations || ['BA'];
-        return leaderRoles.includes(t.role);
+        return isTaskInMyTeamScope(t);
       }
       return true; // Admin sees all
     });
-  }, [tasks, selectedWeek, selectedYear, currentUser]);
+  }, [tasks, selectedWeek, selectedYear, currentUser, users]);
+
+  // Group unfinished tasks by Member (Assignee) for crystal-clear clarity for Leaders & Admin
+  const unfinishedTasksByMember = React.useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        user?: UserType;
+        account: string;
+        tasks: Task[];
+        totalHours: number;
+        unaddedTasks: Task[];
+      }
+    >();
+
+    currentWeekUnfinishedTasks.forEach((t) => {
+      const account = t.assigneeAccount || 'UNKNOWN';
+      const isAlreadyAdded = tasks.some(
+        (nt) =>
+          nt.weekNumber === nextWeek &&
+          nt.year === selectedYear &&
+          (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
+      );
+
+      const existing = map.get(account);
+      if (existing) {
+        existing.tasks.push(t);
+        existing.totalHours += t.estimatedEffort || 0;
+        if (!isAlreadyAdded) {
+          existing.unaddedTasks.push(t);
+        }
+      } else {
+        const u = users.find((user) => user.account.toLowerCase() === account.toLowerCase());
+        map.set(account, {
+          user: u,
+          account,
+          tasks: [t],
+          totalHours: t.estimatedEffort || 0,
+          unaddedTasks: isAlreadyAdded ? [] : [t],
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      // Current user first, then alphabetically by account
+      if (a.account.toLowerCase() === currentUser?.account.toLowerCase()) return -1;
+      if (b.account.toLowerCase() === currentUser?.account.toLowerCase()) return 1;
+      return a.account.localeCompare(b.account);
+    });
+  }, [currentWeekUnfinishedTasks, tasks, nextWeek, selectedYear, users, currentUser]);
 
   // 2. Next Week Planned Tasks (Already assigned for next week)
   const nextWeekAssignedTasks = React.useMemo(() => {
@@ -108,8 +202,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
       // Role check for Leader/Member if not admin
       if (currentUser?.role === 'Leader') {
-        const leaderRoles = currentUser.specializations || ['BA'];
-        if (!leaderRoles.includes(t.role)) return false;
+        if (!isTaskInMyTeamScope(t)) return false;
+      } else if (currentUser?.role === 'Member') {
+        if (t.assigneeAccount?.toLowerCase() !== currentUser.account.toLowerCase()) return false;
       }
 
       if (roleFilter !== 'ALL' && t.role !== roleFilter) return false;
@@ -123,7 +218,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
       return true;
     });
-  }, [tasks, nextWeek, selectedYear, currentUser, roleFilter, searchQuery]);
+  }, [tasks, nextWeek, selectedYear, currentUser, roleFilter, searchQuery, users]);
 
   // Group next week assigned tasks by Role
   const nextWeekTasksByRole = React.useMemo(() => {
@@ -148,10 +243,10 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
       // Filter by role for members/leaders
       if (currentUser?.role === 'Member') {
-        const mySpecs = currentUser.specializations || ['BA'];
+        const mySpecs = currentUser.specializations || [];
         if (!mySpecs.includes(t.role)) return false;
       } else if (currentUser?.role === 'Leader') {
-        const leaderRoles = currentUser.specializations || ['BA'];
+        const leaderRoles = currentUser.specializations || [];
         if (!leaderRoles.includes(t.role)) return false;
       }
 
@@ -210,8 +305,10 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              {isLeaderOrAdmin
-                ? `Role ${currentUser?.role}: Define công việc tuần tới cho bản thân và phân công cho các thành viên trong team (${currentUser?.role === 'Leader' ? currentUser.specializations?.join(', ') || 'BA' : 'Tất cả Role'}).`
+              {currentUser?.role === 'Admin'
+                ? 'Admin: Define công việc tuần tới cho tất cả các team và phân công task.'
+                : currentUser?.role === 'Leader'
+                ? `Leader (${currentUser.specializations?.join(', ') || 'Team'}): Quản lý & lên kế hoạch tuần tới cho các thành viên trong team của bạn.`
                 : `Member (${currentUser?.name}): Tự tạo task mới cho bản thân tuần tới hoặc xin nhận task từ Milestone để Leader duyệt.`}
             </p>
           </div>
@@ -345,107 +442,231 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         </div>
       )}
 
-      {/* SECTION 1.5: UNFINISHED TASKS FROM CURRENT / PREVIOUS WEEK */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+      {/* SECTION 1.5: UNFINISHED TASKS FROM CURRENT / PREVIOUS WEEK GROUPED BY MEMBER */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
           <div>
-            <div className="flex items-center gap-2">
-              <Clock className="w-4.5 h-4.5 text-amber-500" />
-              <h3 className="text-sm font-bold text-slate-800">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Clock className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
                 Task Chưa Hoàn Thành Tuần {selectedWeek} ({currentWeekUnfinishedTasks.length} task)
               </h3>
               {currentWeekUnfinishedTasks.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
-                  Cần lên kế hoạch tuần mới
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs">
+                  {unfinishedTasksByMember.length} thành viên cần lên kế hoạch tiếp
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Các đầu việc chưa hoàn thành (In Progress / To do) từ Tuần {selectedWeek}. Bấm <strong>"+ Thêm Vào Tuần {nextWeek}"</strong> để chính thức đưa vào kế hoạch tuần tới.
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Phân loại theo từng thành viên. Bấm nút chuyển để đưa các task chưa xong vào kế hoạch Tuần {nextWeek}.
             </p>
           </div>
 
           {currentWeekUnfinishedTasks.length > 1 && (
-            <button
-              onClick={() => {
-                confirmDialog({
-                  title: `Đưa tất cả task làm dở vào kế hoạch Tuần ${nextWeek}`,
-                  message: `Bạn có chắc muốn đưa toàn bộ ${currentWeekUnfinishedTasks.length} task chưa hoàn thành từ Tuần ${selectedWeek} vào kế hoạch Tuần ${nextWeek}? (Lịch sử làm việc Tuần ${selectedWeek} sẽ được bảo lưu nguyên vẹn).`,
-                  type: 'info',
-                  onConfirm: () => {
-                    currentWeekUnfinishedTasks.forEach((t) => {
-                      handleTransferToNextWeek(t);
-                    });
-                  },
-                });
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
-            >
-              <ArrowRight className="w-3.5 h-3.5" /> Đưa Tất Cả Sang Tuần {nextWeek}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const anyExpanded = Object.values(expandedMembers).some(Boolean);
+                  toggleAllMembersExpanded(!anyExpanded);
+                }}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-xl transition active:scale-95"
+              >
+                {Object.values(expandedMembers).some(Boolean) ? 'Thu gọn tất cả' : 'Mở rộng tất cả'}
+              </button>
+
+              <button
+                onClick={() => {
+                  confirmDialog({
+                    title: `Đưa tất cả task làm dở vào kế hoạch Tuần ${nextWeek}`,
+                    message: `Bạn có chắc muốn đưa toàn bộ ${currentWeekUnfinishedTasks.length} task chưa hoàn thành từ Tuần ${selectedWeek} của ${unfinishedTasksByMember.length} thành viên vào kế hoạch Tuần ${nextWeek}? (Lịch sử làm việc Tuần ${selectedWeek} sẽ được bảo lưu nguyên vẹn).`,
+                    type: 'info',
+                    onConfirm: () => {
+                      currentWeekUnfinishedTasks.forEach((t) => {
+                        handleTransferToNextWeek(t);
+                      });
+                    },
+                  });
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
+              >
+                <ArrowRight className="w-3.5 h-3.5" /> Chuyển tất cả sang Tuần {nextWeek}
+              </button>
+            </div>
           )}
         </div>
 
         {currentWeekUnfinishedTasks.length === 0 ? (
-          <div className="py-6 text-center bg-slate-50/60 rounded-xl text-xs text-slate-500 space-y-1 border border-dashed border-slate-200">
-            <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
-            <p className="font-semibold text-slate-700">Không có task làm dở nào ở Tuần {selectedWeek}!</p>
+          <div className="py-8 text-center bg-slate-50/60 dark:bg-slate-800/40 rounded-2xl text-xs text-slate-500 space-y-1.5 border border-dashed border-slate-200 dark:border-slate-700">
+            <CheckCircle2 className="w-7 h-7 text-emerald-500 mx-auto" />
+            <p className="font-bold text-slate-700 dark:text-slate-200">Không có task làm dở nào ở Tuần {selectedWeek}!</p>
             <p className="text-[11px] text-slate-400">Tất cả công việc đã được hoàn thành (Done) hoặc đã được đưa vào kế hoạch Tuần {nextWeek}.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {currentWeekUnfinishedTasks.map((t) => {
-              const milestone = milestones.find((m) => m.id === t.milestoneId);
-              const isAlreadyAdded = tasks.some(
-                (nt) =>
-                  nt.weekNumber === nextWeek &&
-                  nt.year === selectedYear &&
-                  (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
-              );
+          <div className="space-y-3">
+            {unfinishedTasksByMember.map((group) => {
+              const isMe = currentUser && group.account.toLowerCase() === currentUser.account.toLowerCase();
+              const displayName = group.user?.name || group.account;
+              const hasUnadded = group.unaddedTasks.length > 0;
+              const isExpanded = !!expandedMembers[group.account];
 
               return (
-                <div key={t.id} className="bg-amber-50/40 p-3.5 rounded-xl border border-amber-200/80 flex flex-col justify-between space-y-3 hover:border-amber-300 transition shadow-2xs">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                        {t.role} • {t.status} ({t.completionPercentage}%)
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400">Tuần {t.weekNumber} • Est: {t.estimatedEffort}h</span>
+                <div
+                  key={group.account}
+                  className={`border rounded-2xl transition-all duration-200 overflow-hidden ${
+                    isExpanded
+                      ? 'bg-slate-50/75 dark:bg-slate-800/50 border-amber-300 dark:border-amber-600/70 shadow-xs'
+                      : 'bg-white dark:bg-slate-850 border-slate-200/90 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-600/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/40'
+                  }`}
+                >
+                  {/* Member Header (Click anywhere to Expand / Collapse) */}
+                  <div
+                    onClick={() => toggleMemberExpanded(group.account)}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-4.5 cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-3">
+                      {/* Chevron Arrow Toggle Indicator */}
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-transform duration-200 shrink-0 ${
+                        isExpanded
+                          ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 rotate-180'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                      }`}>
+                        <ChevronDown className="w-4 h-4" />
+                      </div>
+
+                      {/* Avatar / Initials */}
+                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
+                        {group.account.slice(0, 2).toUpperCase()}
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                            {displayName}
+                          </h4>
+                          <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                            (@{group.account})
+                          </span>
+                          {isMe && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                              Chính bạn
+                            </span>
+                          )}
+                          {group.user?.specializations && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                              {group.user.specializations.join(', ')}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          <span className="font-semibold text-amber-600 dark:text-amber-400">
+                            {group.tasks.length} task dở
+                          </span>
+                          <span>•</span>
+                          <span>
+                            Tổng Effort: <strong className="text-indigo-600 dark:text-indigo-400 font-mono">{group.totalHours}h</strong>
+                          </span>
+                          <span>•</span>
+                          <span className="text-[11px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition">
+                            {isExpanded ? 'Thu gọn' : 'Bấm để xem chi tiết task'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    <h4 className="text-xs font-bold text-slate-800 leading-snug line-clamp-2">{t.title}</h4>
-
-                    <div className="flex items-center gap-2 text-xs text-slate-600">
-                      <span>Phụ trách:</span>
-                      <strong className="text-indigo-700">{t.assigneeAccount}</strong>
+                    {/* Member Quick Transfer All Button */}
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {hasUnadded ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            group.unaddedTasks.forEach((t) => handleTransferToNextWeek(t));
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95"
+                          title={`Chuyển toàn bộ ${group.unaddedTasks.length} task dở của ${displayName} sang Tuần ${nextWeek}`}
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" />
+                          <span>Chuyển tất cả ({group.unaddedTasks.length})</span>
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold rounded-xl">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Đã chuyển hết</span>
+                        </span>
+                      )}
                     </div>
-
-                    {milestone && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-100">
-                        <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> {milestone.title}
-                      </span>
-                    )}
                   </div>
 
-                  <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between">
-                    <span className="text-[10px] text-amber-700 font-semibold">
-                      Chưa hoàn thành
-                    </span>
+                  {/* Member's Tasks Grid (Conditionally Expanded) */}
+                  {isExpanded && (
+                    <div className="p-4 sm:p-5 pt-0 border-t border-slate-200/80 dark:border-slate-700/80 mt-1">
+                      <div className="pt-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {group.tasks.map((t) => {
+                          const milestone = milestones.find((m) => m.id === t.milestoneId);
+                          const isAlreadyAdded = tasks.some(
+                            (nt) =>
+                              nt.weekNumber === nextWeek &&
+                              nt.year === selectedYear &&
+                              (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
+                          );
 
-                    {isAlreadyAdded ? (
-                      <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-lg border border-emerald-200 flex items-center gap-1 shadow-2xs">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Đã Lên Tuần {nextWeek}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleTransferToNextWeek(t)}
-                        className="flex items-center gap-1 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg transition active:scale-95 shadow-2xs"
-                        title={`Thêm công việc này vào kế hoạch Tuần ${nextWeek}`}
-                      >
-                        <ArrowRight className="w-3.5 h-3.5" /> + Thêm Vào Tuần {nextWeek}
-                      </button>
-                    )}
-                  </div>
+                          return (
+                            <div
+                              key={t.id}
+                              className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-700/80 flex flex-col justify-between space-y-3 hover:border-amber-300 dark:hover:border-amber-500/60 transition shadow-2xs"
+                            >
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                    {t.role} • {t.status} ({t.completionPercentage}%)
+                                  </span>
+                                  <span className="text-[10px] font-mono text-slate-400">
+                                    Tuần {t.weekNumber} • Est: <strong className="text-indigo-600 dark:text-indigo-400">{t.estimatedEffort}h</strong>
+                                  </span>
+                                </div>
+
+                                <h5
+                                  onClick={() => setViewingDetailTask(t)}
+                                  className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-snug line-clamp-2 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition"
+                                  title="Bấm để xem chi tiết task"
+                                >
+                                  {t.title}
+                                </h5>
+
+                                {milestone && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-800">
+                                    <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> {milestone.title}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                                  Người làm: <strong className="text-indigo-600 dark:text-indigo-400">@{t.assigneeAccount}</strong>
+                                </span>
+
+                                {isAlreadyAdded ? (
+                                  <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shadow-2xs shrink-0">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Đã chuyển
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleTransferToNextWeek(t)}
+                                    className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition active:scale-95 shadow-2xs shrink-0"
+                                    title={`Đưa task này vào kế hoạch Tuần ${nextWeek}`}
+                                  >
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                    <span>Chuyển sang Tuần {nextWeek}</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -476,15 +697,29 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
               />
             </div>
 
-            <Dropdown
-              value={roleFilter}
-              onChange={setRoleFilter}
-              options={[
-                { value: 'ALL', label: 'Tất cả Role' },
-                ...roles.map((r) => ({ value: r.code, label: `Role: ${r.code}` })),
-              ]}
-              buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200"
-            />
+            {currentUser?.role === 'Admin' ? (
+              <Dropdown
+                value={roleFilter}
+                onChange={setRoleFilter}
+                options={[
+                  { value: 'ALL', label: 'Tất cả Role' },
+                  ...roles.map((r) => ({ value: r.code, label: `Role: ${r.code}` })),
+                ]}
+                buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200"
+              />
+            ) : currentUser?.specializations && currentUser.specializations.length > 1 ? (
+              <Dropdown
+                value={roleFilter}
+                onChange={setRoleFilter}
+                options={[
+                  { value: 'ALL', label: 'Tất cả Role của Team' },
+                  ...roles
+                    .filter((r) => currentUser.specializations.includes(r.code))
+                    .map((r) => ({ value: r.code, label: `Role: ${r.code}` })),
+                ]}
+                buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200"
+              />
+            ) : null}
           </div>
         </div>
 
