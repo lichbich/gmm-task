@@ -17,6 +17,9 @@ import {
   AlertCircle,
   Search,
   X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 import { UserDetailModal } from './UserDetailModal';
@@ -55,6 +58,24 @@ export const UserManagementView: React.FC = () => {
   // SUB-TAB & SEARCH STATE
   const [activeSubTab, setActiveSubTab] = useState<'USERS' | 'ROLES'>('USERS');
   const [userSearchQuery, setUserSearchQuery] = useState('');
+
+  // SORT STATE FOR USER TABLE
+  const [sortField, setSortField] = useState<'account' | 'name' | 'role' | 'level' | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: 'account' | 'name' | 'role' | 'level') => {
+    if (sortField === field) {
+      if (sortOrder === 'asc') {
+        setSortOrder('desc');
+      } else {
+        setSortField(null);
+        setSortOrder('asc');
+      }
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
 
   // SELECTED USER FOR DETAIL MODAL
   const [selectedUserForDetail, setSelectedUserForDetail] = useState<User | null>(null);
@@ -587,11 +608,89 @@ export const UserManagementView: React.FC = () => {
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
                     <th className="py-3 px-3 w-10 text-center">STT</th>
-                    <th className="py-3 px-3">STAFF CODE (USERNAME)</th>
-                    <th className="py-3 px-4">FULL NAME</th>
+
+                    {/* STAFF CODE Header */}
+                    <th
+                      onClick={() => handleSort('account')}
+                      className="py-3 px-3 cursor-pointer select-none hover:text-purple-600 transition group"
+                      title="Bấm để sắp xếp theo Staff Code (A-Z / Z-A)"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>STAFF CODE (USERNAME)</span>
+                        {sortField === 'account' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* FULL NAME Header */}
+                    <th
+                      onClick={() => handleSort('name')}
+                      className="py-3 px-4 cursor-pointer select-none hover:text-purple-600 transition group"
+                      title="Bấm để sắp xếp theo Họ và Tên (A-Z / Z-A)"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>FULL NAME</span>
+                        {sortField === 'name' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+
                     <th className="py-3 px-3">GMAIL / PHONE</th>
-                    <th className="py-3 px-3 text-center">ROLE</th>
-                    <th className="py-3 px-3 text-center">LEVEL</th>
+
+                    {/* ROLE Header */}
+                    <th
+                      onClick={() => handleSort('role')}
+                      className="py-3 px-3 text-center cursor-pointer select-none hover:text-purple-600 transition group"
+                      title="Bấm để sắp xếp theo Role/Chuyên môn (A-Z / Z-A)"
+                    >
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span>ROLE</span>
+                        {sortField === 'role' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+
+                    {/* LEVEL Header */}
+                    <th
+                      onClick={() => handleSort('level')}
+                      className="py-3 px-3 text-center cursor-pointer select-none hover:text-purple-600 transition group"
+                      title="Bấm để sắp xếp theo Cấp Phân Quyền Level"
+                    >
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span>LEVEL</span>
+                        {sortField === 'level' ? (
+                          sortOrder === 'asc' ? (
+                            <ArrowUp className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          ) : (
+                            <ArrowDown className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                        )}
+                      </div>
+                    </th>
+
                     <th className="py-3 px-3">TECHNOLOGY</th>
                     <th className="py-3 px-3 text-right">THAO TÁC</th>
                   </tr>
@@ -610,19 +709,59 @@ export const UserManagementView: React.FC = () => {
                         (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
                       );
                     })
+                    .sort((a, b) => {
+                      if (!sortField) return 0;
+                      let valA = '';
+                      let valB = '';
+
+                      if (sortField === 'account') {
+                        valA = a.account || '';
+                        valB = b.account || '';
+                      } else if (sortField === 'name') {
+                        valA = a.name || '';
+                        valB = b.name || '';
+                      } else if (sortField === 'role') {
+                        valA = (a.specializations || []).join(', ');
+                        valB = (b.specializations || []).join(', ');
+                      } else if (sortField === 'level') {
+                        const levelOrder: Record<string, number> = { Admin: 1, Leader: 2, Advisor: 3, Member: 4 };
+                        const rankA = levelOrder[a.role] || 99;
+                        const rankB = levelOrder[b.role] || 99;
+                        if (rankA !== rankB) {
+                          return sortOrder === 'asc' ? rankA - rankB : rankB - rankA;
+                        }
+                        valA = a.role || '';
+                        valB = b.role || '';
+                      }
+
+                      const cmp = valA.localeCompare(valB, 'vi', { sensitivity: 'base' });
+                      return sortOrder === 'asc' ? cmp : -cmp;
+                    })
                     .map((u, idx) => (
                     <tr key={u.id} className="hover:bg-slate-50 transition">
                       <td className="py-3 px-3 text-center text-slate-400 font-mono text-[11px]">
                         {idx + 1}
                       </td>
                       <td className="py-3 px-3 font-mono font-bold text-indigo-700 bg-indigo-50/40 rounded">
-                        <button
-                          onClick={() => setSelectedUserForDetail(u)}
-                          className="hover:underline text-indigo-700 font-bold focus:outline-none"
-                          title="Xem chi tiết & quản lý thành viên"
-                        >
-                          {u.account}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              u.password && u.password.trim() !== '' ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                            title={
+                              u.password && u.password.trim() !== ''
+                                ? 'Đã kích hoạt hệ thống (Đã có mật khẩu)'
+                                : 'Chưa vào hệ thống (Chưa tạo mật khẩu)'
+                            }
+                          />
+                          <button
+                            onClick={() => setSelectedUserForDetail(u)}
+                            className="hover:underline text-indigo-700 font-bold focus:outline-none"
+                            title="Xem chi tiết & quản lý thành viên"
+                          >
+                            {u.account}
+                          </button>
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-800">
                         <button

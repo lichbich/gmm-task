@@ -215,7 +215,16 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                 >
                   {user.account ? user.account.slice(0, 2).toUpperCase() : 'NV'}
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-900 shadow-xs" />
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 shadow-xs ${
+                    user.password && user.password.trim() !== '' ? 'bg-emerald-500' : 'bg-slate-400'
+                  }`}
+                  title={
+                    user.password && user.password.trim() !== ''
+                      ? 'Trạng thái: Đã tham gia hệ thống (Đã tạo mật khẩu)'
+                      : 'Trạng thái: Chưa tham gia hệ thống (Chưa tạo mật khẩu)'
+                  }
+                />
               </div>
 
               <div className="space-y-1">

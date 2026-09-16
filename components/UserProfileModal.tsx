@@ -260,8 +260,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                   {userRecord.account.slice(0, 2).toUpperCase()}
                 </div>
                 <span
-                  className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-900 shadow-xs"
-                  title="Trạng thái: Hoạt động (Online)"
+                  className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 shadow-xs ${
+                    userRecord.password && userRecord.password.trim() !== '' ? 'bg-emerald-500' : 'bg-slate-400'
+                  }`}
+                  title={
+                    userRecord.password && userRecord.password.trim() !== ''
+                      ? 'Trạng thái: Đã tham gia hệ thống (Đã tạo mật khẩu)'
+                      : 'Trạng thái: Chưa tham gia hệ thống (Chưa tạo mật khẩu)'
+                  }
                 />
               </div>
 

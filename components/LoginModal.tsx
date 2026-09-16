@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Lock, User as UserIcon, CheckCircle, Key, LogIn, Sparkles } from 'lucide-react';
+import { Lock, User as UserIcon, CheckCircle, Key, LogIn, Sparkles, ArrowLeft } from 'lucide-react';
 import { GMMLogo } from './common/GMMLogo';
 
 export const LoginModal: React.FC = () => {
@@ -132,10 +132,10 @@ export const LoginModal: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2"
+              className="group w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/50 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <LogIn className="w-4 h-4" />
-              Đăng Nhập
+              <LogIn className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
+              <span>Đăng Nhập</span>
             </button>
           </form>
         ) : (
@@ -182,13 +182,28 @@ export const LoginModal: React.FC = () => {
               </div>
             </div>
 
-            <button
-              type="submit"
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" />
-              Hoàn Tất & Đăng Nhập
-            </button>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFirstTimeSetup(false);
+                  setNewPassword('');
+                  setConfirmPassword('');
+                  setErrorMsg('');
+                }}
+                className="group flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all duration-200 flex items-center justify-center gap-2 border border-slate-200 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform duration-200" />
+                <span>Quay Lại</span>
+              </button>
+              <button
+                type="submit"
+                className="group flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-600/30 hover:shadow-emerald-500/50 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <CheckCircle className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" />
+                <span>Hoàn Tất & Đăng Nhập</span>
+              </button>
+            </div>
           </form>
         )}
       </div>

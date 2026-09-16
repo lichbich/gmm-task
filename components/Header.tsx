@@ -145,8 +145,16 @@ export const Header: React.FC<HeaderProps> = ({
                       {currentUser.account.slice(0, 2).toUpperCase()}
                     </div>
                     <span
-                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow-xs"
-                      title="Online"
+                      className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 shadow-xs ${
+                        (userRecord?.password && userRecord.password.trim() !== '') || (currentUser.password && currentUser.password.trim() !== '')
+                          ? 'bg-emerald-500'
+                          : 'bg-slate-400'
+                      }`}
+                      title={
+                        (userRecord?.password && userRecord.password.trim() !== '') || (currentUser.password && currentUser.password.trim() !== '')
+                          ? 'Đã kích hoạt'
+                          : 'Chưa tạo mật khẩu'
+                      }
                     />
                   </div>
 
