@@ -445,13 +445,14 @@ export const UserManagementView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner with Sub-Tabs */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                <Users className="w-6 h-6 text-purple-600" />
-                Quản Trị Hệ Thống & Phân Quyền
+              <h2 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                <Users className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
+                <span className="sm:hidden">Quản Trị Hệ Thống</span>
+                <span className="hidden sm:inline">Quản Trị Hệ Thống & Phân Quyền</span>
               </h2>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-300">
                 Admin Only
@@ -468,7 +469,7 @@ export const UserManagementView: React.FC = () => {
                 <>
                   <button
                     onClick={handleBatchReset}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold rounded-xl shadow-xs transition shrink-0 active:scale-95 cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold rounded-xl shadow-xs transition shrink-0 active:scale-95 cursor-pointer"
                     title={
                       needNewTempUsers.length > 0
                         ? `Cấp mật khẩu tạm cho ${needNewTempUsers.length} người mới chưa có (giữ nguyên người đã có)`
@@ -476,7 +477,10 @@ export const UserManagementView: React.FC = () => {
                     }
                   >
                     <KeyRound className="w-4 h-4 text-amber-600" />
-                    <span>
+                    <span className="sm:hidden">
+                      {needNewTempUsers.length > 0 ? `Cấp MK (${needNewTempUsers.length})` : `DS MK (${pendingFirstLoginUsers.length})`}
+                    </span>
+                    <span className="hidden sm:inline">
                       {needNewTempUsers.length > 0
                         ? `Cấp MK Tạm Cho Người Mới (${needNewTempUsers.length})`
                         : `DS Mật Khẩu Tạm (${pendingFirstLoginUsers.length})`}
@@ -485,19 +489,21 @@ export const UserManagementView: React.FC = () => {
 
                   <button
                     onClick={handleOpenAddUser}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-purple-600/20 transition shrink-0 active:scale-95 cursor-pointer"
+                    className="flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-purple-600/20 transition shrink-0 active:scale-95 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    Tạo Tài Khoản Mới
+                    <span className="sm:hidden">Thêm TK</span>
+                    <span className="hidden sm:inline">Tạo Tài Khoản Mới</span>
                   </button>
                 </>
               ) : (
                 <button
                   onClick={handleOpenAddRole}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition shrink-0 active:scale-95 cursor-pointer"
+                  className="flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition shrink-0 active:scale-95 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  Thêm Role Mới
+                  <span className="sm:hidden">Thêm Role</span>
+                  <span className="hidden sm:inline">Thêm Role Mới</span>
                 </button>
               )}
             </div>
@@ -505,34 +511,36 @@ export const UserManagementView: React.FC = () => {
         </div>
 
         {/* Navigation Sub-Tabs Switcher */}
-        <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 max-w-fit gap-1">
+        <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 w-full sm:w-fit gap-1">
           <button
             onClick={() => {
               setActiveSubTab('USERS');
               setIsRoleFormOpen(false);
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
               activeSubTab === 'USERS'
                 ? 'bg-white text-purple-700 shadow-sm shadow-slate-200'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
             }`}
           >
             <Users className="w-3.5 h-3.5 text-purple-600" />
-            Tài Khoản Thành Viên ({users.length})
+            <span className="sm:hidden">Tài Khoản ({users.length})</span>
+            <span className="hidden sm:inline">Tài Khoản Thành Viên ({users.length})</span>
           </button>
           <button
             onClick={() => {
               setActiveSubTab('ROLES');
               setIsUserFormOpen(false);
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
               activeSubTab === 'ROLES'
                 ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
             }`}
           >
             <Shield className="w-3.5 h-3.5 text-indigo-600" />
-            Danh Mục Role & Chuyên Môn ({roles.length})
+            <span className="sm:hidden">Role & Chuyên Môn ({roles.length})</span>
+            <span className="hidden sm:inline">Danh Mục Role & Chuyên Môn ({roles.length})</span>
           </button>
         </div>
       </div>
@@ -779,7 +787,8 @@ export const UserManagementView: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* DESKTOP TABLE VIEW */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
@@ -1036,6 +1045,136 @@ export const UserManagementView: React.FC = () => {
                     })}
                 </tbody>
               </table>
+            </div>
+
+            {/* MOBILE CARD VIEW */}
+            <div className="md:hidden p-3 space-y-3">
+              {users
+                .filter((u) => {
+                  if (!showDisabledUsers && (u.disabled || u.status === 'disabled')) return false;
+
+                  if (!userSearchQuery.trim()) return true;
+                  const q = userSearchQuery.toLowerCase().trim();
+                  return (
+                    u.name.toLowerCase().includes(q) ||
+                    u.account.toLowerCase().includes(q) ||
+                    (u.email && u.email.toLowerCase().includes(q)) ||
+                    (u.phone && u.phone.toLowerCase().includes(q)) ||
+                    (u.technologies && u.technologies.toLowerCase().includes(q)) ||
+                    (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
+                  );
+                })
+                .map((u) => {
+                  const isDisabled = u.disabled || u.status === 'disabled';
+                  return (
+                    <div
+                      key={`mobile-user-${u.id}`}
+                      className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
+                        isDisabled ? 'bg-slate-50 opacity-75 border-slate-200' : 'bg-white border-slate-200 shadow-2xs'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0">
+                            {u.account.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <button
+                              onClick={() => setSelectedUserForDetail(u)}
+                              className="font-bold text-xs text-slate-800 text-left hover:text-purple-600 block leading-tight cursor-pointer"
+                            >
+                              {u.name}
+                            </button>
+                            <span className="font-mono text-[11px] text-indigo-600 font-bold">
+                              @{u.account}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                            u.role === 'Admin'
+                              ? 'bg-purple-100 text-purple-700 border-purple-300'
+                              : u.role === 'Leader'
+                              ? 'bg-amber-100 text-amber-700 border-amber-300'
+                              : u.role === 'Advisor'
+                              ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                              : 'bg-blue-100 text-blue-700 border-blue-300'
+                          }`}
+                        >
+                          {u.role}
+                        </span>
+                      </div>
+
+                      {/* Specializations & Tech */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {(u.specializations || ['BA']).map((s) => {
+                          const rObj = roles.find((r) => r.code === s);
+                          const style = getRoleStyle(rObj?.color);
+                          return (
+                            <span
+                              key={s}
+                              className={`px-2 py-0.5 rounded ${style.bg} ${style.text} border ${style.border} font-bold text-[10px]`}
+                            >
+                              {s}
+                            </span>
+                          );
+                        })}
+                        {u.technologies && (
+                          <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                            {u.technologies}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Contact Info & Actions */}
+                      <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100 gap-2">
+                        <div className="text-[10px] text-slate-500 truncate">
+                          {u.email || u.phone || 'Chưa cập nhật liên hệ'}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setSelectedUserForDetail(u)}
+                            className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold rounded-lg transition active:scale-95 cursor-pointer"
+                          >
+                            Chi tiết
+                          </button>
+                          {currentUser?.role === 'Admin' && (
+                            <>
+                              {!isDisabled && (
+                                <button
+                                  onClick={() => handleResetPassword(u)}
+                                  className="p-1.5 bg-amber-50 text-amber-600 rounded-lg active:scale-95 cursor-pointer"
+                                  title="Đặt lại mật khẩu"
+                                >
+                                  <KeyRound className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {isDisabled ? (
+                                <button
+                                  onClick={() => handleRestoreUser(u)}
+                                  className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg active:scale-95 cursor-pointer"
+                                  title="Khôi phục tài khoản"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleDeleteUser(u)}
+                                  className="p-1.5 bg-red-50 text-red-500 rounded-lg active:scale-95 cursor-pointer"
+                                  title="Vô hiệu hóa"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
         </div>

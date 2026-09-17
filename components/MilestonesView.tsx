@@ -293,15 +293,16 @@ export const MilestonesView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight">
-                Quản Lý Milestones & Break Tasks
+              <h2 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight">
+                <span className="sm:hidden">Quản Lý Milestones</span>
+                <span className="hidden sm:inline">Quản Lý Milestones & Break Tasks</span>
               </h2>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
-                Chức năng cho Leader
+                {currentUser?.role === 'Leader' || currentUser?.role === 'Admin' ? 'Leader & Admin' : 'Thành viên'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
@@ -314,7 +315,7 @@ export const MilestonesView: React.FC = () => {
               {subTab === 'MILESTONES' ? (
                 <button
                   onClick={() => setIsAddMsOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded-xl shadow-md shadow-amber-500/20 transition active:scale-95 shrink-0"
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded-xl shadow-md shadow-amber-500/20 transition active:scale-95 shrink-0 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   Tạo Milestone Mới
@@ -322,7 +323,7 @@ export const MilestonesView: React.FC = () => {
               ) : (
                 <button
                   onClick={handleOpenCreateAdhocTask}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0"
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   Tạo Task Tự Do Mới
@@ -333,36 +334,38 @@ export const MilestonesView: React.FC = () => {
         </div>
 
         {/* Navigation Sub-Tabs Switcher & Role Filter */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
-          <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 max-w-fit gap-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+          <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 w-full sm:w-fit gap-1">
             <button
               onClick={() => setSubTab('MILESTONES')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
                 subTab === 'MILESTONES'
                   ? 'bg-white text-amber-700 shadow-sm shadow-slate-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
               <Flag className="w-3.5 h-3.5 text-amber-500" />
-              Cột Mốc Milestone ({filteredMilestones.length})
+              <span className="sm:hidden">Milestones ({filteredMilestones.length})</span>
+              <span className="hidden sm:inline">Cột Mốc Milestone ({filteredMilestones.length})</span>
             </button>
             <button
               onClick={() => setSubTab('ADHOC')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
                 subTab === 'ADHOC'
                   ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
               <Inbox className="w-3.5 h-3.5 text-indigo-500" />
-              Task Tự Do & Phát Sinh ({filteredAdhocTasks.length})
+              <span className="sm:hidden">Task Tự Do ({filteredAdhocTasks.length})</span>
+              <span className="hidden sm:inline">Task Tự Do & Phát Sinh ({filteredAdhocTasks.length})</span>
             </button>
           </div>
 
           {/* Role Selector Dropdown */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between sm:justify-end gap-2">
             <span className="text-xs font-semibold text-slate-600 shrink-0">
-              Lọc xem Role:
+              Lọc Role:
             </span>
             <Dropdown
               value={adminSelectedRole}
@@ -624,230 +627,380 @@ export const MilestonesView: React.FC = () => {
                         const isOver = dragOverTaskId === t.id && !isDragging;
 
                         return (
-                          <div
-                            key={t.id}
-                            draggable={currentUser?.role === 'Leader' || currentUser?.role === 'Admin'}
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData('text/plain', t.id);
-                              e.dataTransfer.effectAllowed = 'move';
-                              setDraggedMilestoneTaskId(t.id);
-                            }}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              e.dataTransfer.dropEffect = 'move';
-                              if (dragOverTaskId !== t.id && draggedMilestoneTaskId !== t.id) {
-                                setDragOverTaskId(t.id);
-                              }
-                            }}
-                            onDragLeave={(e) => {
-                              if (dragOverTaskId === t.id) {
+                          <React.Fragment key={t.id}>
+                            {/* DESKTOP ROW VIEW */}
+                            <div
+                              draggable={currentUser?.role === 'Leader' || currentUser?.role === 'Admin'}
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData('text/plain', t.id);
+                                e.dataTransfer.effectAllowed = 'move';
+                                setDraggedMilestoneTaskId(t.id);
+                              }}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                if (dragOverTaskId !== t.id && draggedMilestoneTaskId !== t.id) {
+                                  setDragOverTaskId(t.id);
+                                }
+                              }}
+                              onDragLeave={(e) => {
+                                if (dragOverTaskId === t.id) {
+                                  setDragOverTaskId(null);
+                                }
+                              }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const sourceId = e.dataTransfer.getData('text/plain') || draggedMilestoneTaskId;
                                 setDragOverTaskId(null);
-                              }
-                            }}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const sourceId = e.dataTransfer.getData('text/plain') || draggedMilestoneTaskId;
-                              setDragOverTaskId(null);
-                              setDraggedMilestoneTaskId(null);
-                              if (sourceId && sourceId !== t.id) {
-                                handleReorderMilestoneTasks(ms.id, sourceId, t.id);
-                              }
-                            }}
-                            onDragEnd={() => {
-                              setDraggedMilestoneTaskId(null);
-                              setDragOverTaskId(null);
-                            }}
-                            onClick={() => setViewingDetailTask(t)}
-                            className={`p-3.5 transition-all flex items-center justify-between gap-4 text-xs cursor-pointer group select-none ${
-                              isDone ? 'bg-slate-50/60 opacity-80 hover:opacity-100' : 'hover:bg-slate-50/90'
-                            } ${
-                              isDragging ? 'opacity-35 bg-indigo-50/40 border border-dashed border-indigo-300' : ''
-                            } ${
-                              isOver ? 'border-t-2 border-indigo-500 bg-indigo-50/70' : ''
-                            }`}
-                            title="Kéo thả để sắp xếp thứ tự ưu tiên, hoặc bấm để xem chi tiết"
-                          >
-                            {/* Left: Drag Handle, Checkbox, Index & Info */}
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              {/* Reorder Drag Handle for Leader/Admin */}
-                              {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
-                                <div
-                                  className="text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing p-1 -ml-1 transition"
-                                  title="Kéo thả để sắp xếp thứ tự ưu tiên"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <GripVertical className="w-4 h-4" />
-                                </div>
-                              )}
-
-                              {/* Interactive Checkbox: Replaces arrow buttons */}
-                              {(() => {
-                                const canToggle = canToggleTaskCheck(t);
-                                return (
-                                  <button
-                                    type="button"
-                                    disabled={!canToggle}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleToggleTaskDone(t);
-                                    }}
-                                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
-                                      !canToggle
-                                        ? 'cursor-not-allowed opacity-40 ' +
-                                          (isDone
-                                            ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
-                                            : 'border-2 border-slate-200 bg-slate-100 text-transparent')
-                                        : 'active:scale-90 cursor-pointer ' +
-                                          (isDone
-                                            ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
-                                            : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
-                                    }`}
-                                    title={
-                                      !canToggle
-                                        ? 'Chỉ người được giao việc hoặc Leader/Admin mới có quyền đánh dấu hoàn thành'
-                                        : isDone
-                                        ? 'Đánh dấu chưa hoàn thành'
-                                        : 'Đánh dấu đã hoàn thành'
-                                    }
+                                setDraggedMilestoneTaskId(null);
+                                if (sourceId && sourceId !== t.id) {
+                                  handleReorderMilestoneTasks(ms.id, sourceId, t.id);
+                                }
+                              }}
+                              onDragEnd={() => {
+                                setDraggedMilestoneTaskId(null);
+                                setDragOverTaskId(null);
+                              }}
+                              onClick={() => setViewingDetailTask(t)}
+                              className={`p-3.5 transition-all hidden md:flex items-center justify-between gap-4 text-xs cursor-pointer group select-none ${
+                                isDone ? 'bg-slate-50/60 opacity-80 hover:opacity-100' : 'hover:bg-slate-50/90'
+                              } ${
+                                isDragging ? 'opacity-35 bg-indigo-50/40 border border-dashed border-indigo-300' : ''
+                              } ${
+                                isOver ? 'border-t-2 border-indigo-500 bg-indigo-50/70' : ''
+                              }`}
+                              title="Kéo thả để sắp xếp thứ tự ưu tiên, hoặc bấm để xem chi tiết"
+                            >
+                              {/* Left: Drag Handle, Checkbox, Index & Info */}
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                {/* Reorder Drag Handle for Leader/Admin */}
+                                {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+                                  <div
+                                    className="text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing p-1 -ml-1 transition"
+                                    title="Kéo thả để sắp xếp thứ tự ưu tiên"
+                                    onClick={(e) => e.stopPropagation()}
                                   >
-                                    <Check className={`w-3.5 h-3.5 ${isDone ? 'stroke-[3]' : 'stroke-[2]'}`} />
-                                  </button>
-                                );
-                              })()}
-
-                              <span className="w-5 text-center font-mono text-slate-400 font-bold shrink-0 text-[11px]">
-                                #{idx + 1}
-                              </span>
-
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`font-semibold transition truncate ${
-                                      isDone
-                                        ? 'line-through text-slate-400'
-                                        : 'text-slate-800 group-hover:text-indigo-600'
-                                    }`}
-                                  >
-                                    {t.title}
-                                  </span>
-                                  {t.priority === 'High' && (
-                                    <span
-                                      className="text-[9px] px-1.5 py-0.5 rounded border bg-red-100 text-red-700 border-red-200 font-bold shrink-0 inline-flex items-center gap-0.5 shadow-2xs"
-                                      title="Mức độ ưu tiên: Cao"
-                                    >
-                                      <Flame className="w-2.5 h-2.5 text-red-500 fill-red-500" />
-                                      Ưu tiên cao
-                                    </span>
-                                  )}
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-semibold shrink-0">
-                                    {t.role}
-                                  </span>
-                                  {isDone && (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold shrink-0">
-                                      Đã xong
-                                    </span>
-                                  )}
-                                </div>
-
-                                {t.description && (
-                                  <p
-                                    className={`text-[11px] line-clamp-1 italic flex items-center gap-1 mt-0.5 ${
-                                      isDone ? 'text-slate-400 line-through' : 'text-slate-500'
-                                    }`}
-                                  >
-                                    <FileText className="w-3 h-3 text-slate-400 shrink-0" />
-                                    <span className="truncate">{t.description}</span>
-                                  </p>
+                                    <GripVertical className="w-4 h-4" />
+                                  </div>
                                 )}
 
-                                <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
-                                  <span>Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong></span>
-                                  <span>•</span>
-                                  <span>Phân công: <strong className="text-slate-600">{t.assigneeAccount || 'Chưa gán'}</strong></span>
+                                {/* Interactive Checkbox */}
+                                {(() => {
+                                  const canToggle = canToggleTaskCheck(t);
+                                  return (
+                                    <button
+                                      type="button"
+                                      disabled={!canToggle}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleTaskDone(t);
+                                      }}
+                                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                                        !canToggle
+                                          ? 'cursor-not-allowed opacity-40 ' +
+                                            (isDone
+                                              ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
+                                              : 'border-2 border-slate-200 bg-slate-100 text-transparent')
+                                          : 'active:scale-90 cursor-pointer ' +
+                                            (isDone
+                                              ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
+                                              : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
+                                      }`}
+                                      title={
+                                        !canToggle
+                                          ? 'Chỉ người được giao việc hoặc Leader/Admin mới có quyền đánh dấu hoàn thành'
+                                          : isDone
+                                          ? 'Đánh dấu chưa hoàn thành'
+                                          : 'Đánh dấu đã hoàn thành'
+                                      }
+                                    >
+                                      <Check className={`w-3.5 h-3.5 ${isDone ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                                    </button>
+                                  );
+                                })()}
+
+                                <span className="w-5 text-center font-mono text-slate-400 font-bold shrink-0 text-[11px]">
+                                  #{idx + 1}
+                                </span>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className={`font-semibold transition truncate ${
+                                        isDone
+                                          ? 'line-through text-slate-400'
+                                          : 'text-slate-800 group-hover:text-indigo-600'
+                                      }`}
+                                    >
+                                      {t.title}
+                                    </span>
+                                    {t.priority === 'High' && (
+                                      <span
+                                        className="text-[9px] px-1.5 py-0.5 rounded border bg-red-100 text-red-700 border-red-200 font-bold shrink-0 inline-flex items-center gap-0.5 shadow-2xs"
+                                        title="Mức độ ưu tiên: Cao"
+                                      >
+                                        <Flame className="w-2.5 h-2.5 text-red-500 fill-red-500" />
+                                        Ưu tiên cao
+                                      </span>
+                                    )}
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-semibold shrink-0">
+                                      {t.role}
+                                    </span>
+                                    {isDone && (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold shrink-0">
+                                        Đã xong
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {t.description && (
+                                    <p
+                                      className={`text-[11px] line-clamp-1 italic flex items-center gap-1 mt-0.5 ${
+                                        isDone ? 'text-slate-400 line-through' : 'text-slate-500'
+                                      }`}
+                                    >
+                                      <FileText className="w-3 h-3 text-slate-400 shrink-0" />
+                                      <span className="truncate">{t.description}</span>
+                                    </p>
+                                  )}
+
+                                  <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+                                    <span>Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong></span>
+                                    <span>•</span>
+                                    <span>Phân công: <strong className="text-slate-600">{t.assigneeAccount || 'Chưa gán'}</strong></span>
+                                  </div>
                                 </div>
+                              </div>
+
+                              {/* Right: Status & Actions */}
+                              <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <span
+                                  className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border ${
+                                    isDone
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                      : t.status === 'In Progress'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-300'
+                                      : 'bg-slate-100 text-slate-500 border-slate-300'
+                                  }`}
+                                >
+                                  {t.status} ({t.completionPercentage}%)
+                                </span>
+
+                                {(() => {
+                                  const isUnread = hasUnreadNote(t);
+                                  return (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        markNoteAsRead(t.id, t.notes);
+                                        setDiscussingTask(t);
+                                      }}
+                                      className={`relative p-1.5 rounded-lg transition active:scale-95 ${
+                                        isUnread
+                                          ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 dark:ring-amber-400 ring-offset-1 dark:ring-offset-slate-900 shadow-amber-400/40 animate-pulse'
+                                          : t.notes
+                                          ? 'text-slate-600 dark:text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800'
+                                          : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                      }`}
+                                      title={
+                                        isUnread
+                                          ? 'Có trao đổi / ghi chú mới chưa đọc! Bấm để xem'
+                                          : 'Ghi chú & Trao đổi luồng task'
+                                      }
+                                    >
+                                      <MessageSquare className="w-3.5 h-3.5" />
+                                      {isUnread && (
+                                        <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white dark:border-slate-900 shadow-xs" />
+                                      )}
+                                    </button>
+                                  );
+                                })()}
+
+                                {(canEditTask(t) || currentUser?.role === 'Admin') && (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingTask(t);
+                                        setTargetMilestoneId(t.milestoneId || ms.id);
+                                        setModalInitialRole(t.role);
+                                        setIsTaskModalOpen(true);
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                                      title="Sửa task"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        confirmDialog({
+                                          title: 'Xác nhận xóa đầu việc',
+                                          message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"? Thao tác này không thể hoàn tác.`,
+                                          confirmText: 'Xác nhận xóa',
+                                          type: 'danger',
+                                          onConfirm: () => deleteTask(t.id),
+                                        });
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                                      title="Xóa task"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </div>
 
-                            {/* Right: Status & Actions */}
-                            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                              <span
-                                className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border ${
-                                  isDone
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                                    : t.status === 'In Progress'
-                                    ? 'bg-blue-50 text-blue-700 border-blue-300'
-                                    : 'bg-slate-100 text-slate-500 border-slate-300'
+                            {/* MOBILE CARD VIEW */}
+                            <div
+                              onClick={() => setViewingDetailTask(t)}
+                              className={`md:hidden p-3.5 transition-all space-y-2.5 cursor-pointer ${
+                                isDone ? 'bg-slate-50/70' : 'bg-white'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {/* Checkbox */}
+                                  {(() => {
+                                    const canToggle = canToggleTaskCheck(t);
+                                    return (
+                                      <button
+                                        type="button"
+                                        disabled={!canToggle}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleTaskDone(t);
+                                        }}
+                                        className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                                          !canToggle
+                                            ? 'cursor-not-allowed opacity-40 ' +
+                                              (isDone
+                                                ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
+                                                : 'border-2 border-slate-200 bg-slate-100 text-transparent')
+                                            : 'active:scale-90 cursor-pointer ' +
+                                              (isDone
+                                                ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
+                                                : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
+                                        }`}
+                                      >
+                                        <Check className={`w-3.5 h-3.5 ${isDone ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                                      </button>
+                                    );
+                                  })()}
+                                  <span className="font-mono text-slate-400 font-bold text-xs">
+                                    #{idx + 1}
+                                  </span>
+                                  <span className="text-[10px] px-2 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-bold">
+                                    {t.role}
+                                  </span>
+                                  {t.priority === 'High' && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded border bg-red-100 text-red-700 border-red-200 font-bold inline-flex items-center gap-1">
+                                      <Flame className="w-3 h-3 text-red-500 fill-red-500" />
+                                      Ưu tiên cao
+                                    </span>
+                                  )}
+                                </div>
+
+                                <span
+                                  className={`px-2 py-0.5 text-[10px] font-bold rounded-full border shrink-0 ${
+                                    isDone
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                      : t.status === 'In Progress'
+                                      ? 'bg-blue-50 text-blue-700 border-blue-300'
+                                      : 'bg-slate-100 text-slate-500 border-slate-300'
+                                  }`}
+                                >
+                                  {t.status}
+                                </span>
+                              </div>
+
+                              {/* Title */}
+                              <h4
+                                className={`text-xs font-bold leading-snug ${
+                                  isDone ? 'line-through text-slate-400' : 'text-slate-800'
                                 }`}
                               >
-                                {t.status} ({t.completionPercentage}%)
-                              </span>
+                                {t.title}
+                              </h4>
 
-                              {(() => {
-                                const isUnread = hasUnreadNote(t);
-                                return (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      markNoteAsRead(t.id, t.notes);
-                                      setDiscussingTask(t);
-                                    }}
-                                    className={`relative p-1.5 rounded-lg transition active:scale-95 ${
-                                      isUnread
-                                        ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 dark:ring-amber-400 ring-offset-1 dark:ring-offset-slate-900 shadow-amber-400/40 animate-pulse'
-                                        : t.notes
-                                        ? 'text-slate-600 dark:text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800'
-                                        : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                                    }`}
-                                    title={
-                                      isUnread
-                                        ? 'Có trao đổi / ghi chú mới chưa đọc! Bấm để xem'
-                                        : 'Ghi chú & Trao đổi luồng task'
-                                    }
-                                  >
-                                    <MessageSquare className="w-3.5 h-3.5" />
-                                    {isUnread && (
-                                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white dark:border-slate-900 shadow-xs" />
-                                    )}
-                                  </button>
-                                );
-                              })()}
-
-                              {(canEditTask(t) || currentUser?.role === 'Admin') && (
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingTask(t);
-                                      setTargetMilestoneId(t.milestoneId || ms.id);
-                                      setModalInitialRole(t.role);
-                                      setIsTaskModalOpen(true);
-                                    }}
-                                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                                    title="Sửa task"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      confirmDialog({
-                                        title: 'Xác nhận xóa đầu việc',
-                                        message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"? Thao tác này không thể hoàn tác.`,
-                                        confirmText: 'Xác nhận xóa',
-                                        type: 'danger',
-                                        onConfirm: () => deleteTask(t.id),
-                                      });
-                                    }}
-                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                                    title="Xóa task"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
+                              {t.description && (
+                                <p className="text-[11px] text-slate-500 line-clamp-2 italic">
+                                  {t.description}
+                                </p>
                               )}
+
+                              {/* Assignee & Effort Row */}
+                              <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 gap-2">
+                                <div className="text-[11px] text-slate-500">
+                                  👤 <strong className="text-slate-700">{t.assigneeAccount || 'Chưa gán'}</strong>
+                                  <span className="mx-1.5">•</span>
+                                  Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong>
+                                </div>
+
+                                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  {/* Discussion Button */}
+                                  {(() => {
+                                    const isUnread = hasUnreadNote(t);
+                                    return (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          markNoteAsRead(t.id, t.notes);
+                                          setDiscussingTask(t);
+                                        }}
+                                        className={`p-1.5 rounded-lg text-xs font-semibold transition active:scale-95 flex items-center gap-1 ${
+                                          isUnread
+                                            ? 'bg-amber-400 text-amber-950 font-bold ring-2 ring-amber-300'
+                                            : t.notes
+                                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                            : 'bg-slate-100 text-slate-600'
+                                        }`}
+                                      >
+                                        <MessageSquare className="w-3.5 h-3.5" />
+                                      </button>
+                                    );
+                                  })()}
+
+                                  {/* Edit / Delete */}
+                                  {(canEditTask(t) || currentUser?.role === 'Admin') && (
+                                    <>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingTask(t);
+                                          setTargetMilestoneId(t.milestoneId || ms.id);
+                                          setModalInitialRole(t.role);
+                                          setIsTaskModalOpen(true);
+                                        }}
+                                        className="p-1.5 bg-slate-100 text-slate-600 rounded-lg active:scale-95"
+                                        title="Sửa task"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          confirmDialog({
+                                            title: 'Xác nhận xóa đầu việc',
+                                            message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"?`,
+                                            confirmText: 'Xác nhận xóa',
+                                            type: 'danger',
+                                            onConfirm: () => deleteTask(t.id),
+                                          });
+                                        }}
+                                        className="p-1.5 bg-slate-100 text-slate-400 hover:text-red-500 rounded-lg active:scale-95"
+                                        title="Xóa task"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          </React.Fragment>
                         );
                       })
                     )}
@@ -903,209 +1056,382 @@ export const MilestonesView: React.FC = () => {
               filteredAdhocTasks.map((t, idx) => {
                 const isDone = t.status === 'Done';
                 return (
-                  <div
-                    key={t.id}
-                    onClick={() => setViewingDetailTask(t)}
-                    className={`p-3.5 hover:bg-slate-50/90 transition flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs cursor-pointer group ${
-                      isDone ? 'bg-slate-50/60 opacity-80 hover:opacity-100' : ''
-                    }`}
-                    title="Bấm để xem chi tiết và trao đổi luồng task"
-                  >
-                    {/* Left info */}
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {/* Checkbox button */}
-                      {(() => {
-                        const canToggle = canToggleTaskCheck(t);
-                        return (
-                          <button
-                            type="button"
-                            disabled={!canToggle}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleTaskDone(t);
-                            }}
-                            className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
-                              !canToggle
-                                ? 'cursor-not-allowed opacity-40 ' +
-                                  (isDone
-                                    ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
-                                    : 'border-2 border-slate-200 bg-slate-100 text-transparent')
-                                : 'active:scale-90 cursor-pointer ' +
-                                  (isDone
-                                    ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
-                                    : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
-                            }`}
-                            title={
-                              !canToggle
-                                ? 'Chỉ người được giao việc hoặc Leader/Admin mới có quyền đánh dấu hoàn thành'
-                                : isDone
-                                ? 'Đánh dấu chưa hoàn thành'
-                                : 'Đánh dấu đã hoàn thành'
-                            }
-                          >
-                            <Check className={`w-3.5 h-3.5 ${isDone ? 'stroke-[3]' : 'stroke-[2]'}`} />
-                          </button>
-                        );
-                      })()}
-
-                      <span className="w-5 text-center font-mono text-slate-400 font-bold shrink-0 text-[11px]">
-                        #{idx + 1}
-                      </span>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`font-semibold transition truncate ${
-                              isDone
-                                ? 'line-through text-slate-400'
-                                : 'text-slate-800 group-hover:text-indigo-600'
-                            }`}
-                          >
-                            {t.title}
-                          </span>
-                          {t.priority === 'High' && (
-                            <span
-                              className="text-[9px] px-1.5 py-0.5 rounded border bg-red-100 text-red-700 border-red-200 font-bold shrink-0 inline-flex items-center gap-0.5 shadow-2xs"
-                              title="Mức độ ưu tiên: Cao"
+                  <React.Fragment key={t.id}>
+                    {/* DESKTOP ROW VIEW */}
+                    <div
+                      onClick={() => setViewingDetailTask(t)}
+                      className={`p-3.5 hover:bg-slate-50/90 transition hidden md:flex items-center justify-between gap-3 text-xs cursor-pointer group ${
+                        isDone ? 'bg-slate-50/60 opacity-80 hover:opacity-100' : ''
+                      }`}
+                      title="Bấm để xem chi tiết và trao đổi luồng task"
+                    >
+                      {/* Left info */}
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {/* Checkbox button */}
+                        {(() => {
+                          const canToggle = canToggleTaskCheck(t);
+                          return (
+                            <button
+                              type="button"
+                              disabled={!canToggle}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleTaskDone(t);
+                              }}
+                              className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                                !canToggle
+                                  ? 'cursor-not-allowed opacity-40 ' +
+                                    (isDone
+                                      ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
+                                      : 'border-2 border-slate-200 bg-slate-100 text-transparent')
+                                  : 'active:scale-90 cursor-pointer ' +
+                                    (isDone
+                                      ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
+                                      : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
+                              }`}
+                              title={
+                                !canToggle
+                                  ? 'Chỉ người được giao việc hoặc Leader/Admin mới có quyền đánh dấu hoàn thành'
+                                  : isDone
+                                  ? 'Đánh dấu chưa hoàn thành'
+                                  : 'Đánh dấu đã hoàn thành'
+                              }
                             >
-                              <Flame className="w-2.5 h-2.5 text-red-500 fill-red-500" />
-                              Ưu tiên cao
+                              <Check className={`w-3.5 h-3.5 ${isDone ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                            </button>
+                          );
+                        })()}
+
+                        <span className="w-5 text-center font-mono text-slate-400 font-bold shrink-0 text-[11px]">
+                          #{idx + 1}
+                        </span>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`font-semibold transition truncate ${
+                                isDone
+                                  ? 'line-through text-slate-400'
+                                  : 'text-slate-800 group-hover:text-indigo-600'
+                              }`}
+                            >
+                              {t.title}
                             </span>
-                          )}
-                          <span className="text-[9px] px-1.5 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-semibold shrink-0">
-                            {t.role}
-                          </span>
-                          {isDone && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold shrink-0">
-                              Đã xong
+                            {t.priority === 'High' && (
+                              <span
+                                className="text-[9px] px-1.5 py-0.5 rounded border bg-red-100 text-red-700 border-red-200 font-bold shrink-0 inline-flex items-center gap-0.5 shadow-2xs"
+                                title="Mức độ ưu tiên: Cao"
+                              >
+                                <Flame className="w-2.5 h-2.5 text-red-500 fill-red-500" />
+                                Ưu tiên cao
+                              </span>
+                            )}
+                            <span className="text-[9px] px-1.5 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-semibold shrink-0">
+                              {t.role}
                             </span>
+                            {isDone && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold shrink-0">
+                                Đã xong
+                              </span>
+                            )}
+                          </div>
+                          {t.description && (
+                            <p
+                              className={`text-[11px] line-clamp-1 italic flex items-center gap-1 mt-0.5 ${
+                                isDone ? 'text-slate-400 line-through' : 'text-slate-500'
+                              }`}
+                            >
+                              <FileText className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{t.description}</span>
+                            </p>
                           )}
+                          <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+                            <span>
+                              Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong>
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Phân công: <strong className="text-slate-600">{t.assigneeAccount || 'Chưa gán'}</strong>
+                            </span>
+                          </div>
                         </div>
-                        {t.description && (
-                          <p
-                            className={`text-[11px] line-clamp-1 italic flex items-center gap-1 mt-0.5 ${
-                              isDone ? 'text-slate-400 line-through' : 'text-slate-500'
-                            }`}
-                          >
-                            <FileText className="w-3 h-3 text-slate-400 shrink-0" />
-                            <span className="truncate">{t.description}</span>
-                          </p>
+                      </div>
+
+                      {/* Right: Quick Assign Milestone & Controls */}
+                      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                        {/* Quick Assign Dropdown */}
+                        {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+                          <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[10px] text-slate-500 font-medium pl-1 hidden lg:inline">
+                              Gán vào:
+                            </span>
+                            <Dropdown
+                              value=""
+                              onChange={(newMsId) => {
+                                if (newMsId) {
+                                  updateTask(t.id, { milestoneId: newMsId });
+                                }
+                              }}
+                              placeholder="-- Chọn Milestone để gán --"
+                              options={filteredMilestones.map((m) => ({
+                                value: m.id,
+                                label: `🚩 ${m.title}`,
+                              }))}
+                              size="sm"
+                              buttonClassName="py-1 px-2.5 text-[11px] font-semibold text-indigo-700 bg-white border-slate-200"
+                            />
+                          </div>
                         )}
-                        <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
-                          <span>
-                            Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong>
-                          </span>
-                          <span>•</span>
-                          <span>
-                            Phân công: <strong className="text-slate-600">{t.assigneeAccount || 'Chưa gán'}</strong>
-                          </span>
-                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border ${
+                            t.status === 'Done'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                              : t.status === 'In Progress'
+                              ? 'bg-blue-50 text-blue-700 border-blue-300'
+                              : 'bg-slate-100 text-slate-500 border-slate-300'
+                          }`}
+                        >
+                          {t.status}
+                        </span>
+
+                        {(() => {
+                          const isUnread = hasUnreadNote(t);
+                          return (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markNoteAsRead(t.id, t.notes);
+                                setDiscussingTask(t);
+                              }}
+                              className={`relative p-1.5 rounded-lg transition active:scale-95 ${
+                                isUnread
+                                  ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 dark:ring-amber-400 ring-offset-1 dark:ring-offset-slate-900 shadow-amber-400/40 animate-pulse'
+                                  : t.notes
+                                  ? 'text-slate-600 dark:text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800'
+                                  : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+                              }`}
+                              title={
+                                isUnread
+                                  ? 'Có trao đổi / ghi chú mới chưa đọc! Bấm để xem'
+                                  : 'Ghi chú & Trao đổi luồng task'
+                              }
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              {isUnread && (
+                                <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white dark:border-slate-900 shadow-xs" />
+                              )}
+                            </button>
+                          );
+                        })()}
+
+                        {(canEditTask(t) || currentUser?.role === 'Admin') && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingTask(t);
+                                setTargetMilestoneId('');
+                                setModalInitialRole(t.role);
+                                setIsTaskModalOpen(true);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                              title="Sửa task"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmDialog({
+                                  title: 'Xác nhận xóa đầu việc tự do',
+                                  message: `Bạn có chắc chắn muốn xóa đầu việc tự do "${t.title}"? Thao tác này không thể hoàn tác.`,
+                                  confirmText: 'Xác nhận xóa',
+                                  type: 'danger',
+                                  onConfirm: () => deleteTask(t.id),
+                                });
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                              title="Xóa task"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                  {/* Right: Quick Assign Milestone & Controls */}
-                  <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                    {/* Quick Assign Dropdown */}
-                    {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
-                      <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
-                        <span className="text-[10px] text-slate-500 font-medium pl-1 hidden lg:inline">
-                          Gán vào:
-                        </span>
-                        <Dropdown
-                          value=""
-                          onChange={(newMsId) => {
-                            if (newMsId) {
-                              updateTask(t.id, { milestoneId: newMsId });
-                            }
-                          }}
-                          placeholder="-- Chọn Milestone để gán --"
-                          options={filteredMilestones.map((m) => ({
-                            value: m.id,
-                            label: `🚩 ${m.title}`,
-                          }))}
-                          size="sm"
-                          buttonClassName="py-1 px-2.5 text-[11px] font-semibold text-indigo-700 bg-white border-slate-200"
-                        />
-                      </div>
-                    )}
-
-                    <span
-                      className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border ${
-                        t.status === 'Done'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                          : t.status === 'In Progress'
-                          ? 'bg-blue-50 text-blue-700 border-blue-300'
-                          : 'bg-slate-100 text-slate-500 border-slate-300'
+                    {/* MOBILE CARD VIEW */}
+                    <div
+                      onClick={() => setViewingDetailTask(t)}
+                      className={`md:hidden p-3.5 transition-all space-y-2.5 cursor-pointer ${
+                        isDone ? 'bg-slate-50/70' : 'bg-white'
                       }`}
                     >
-                      {t.status}
-                    </span>
-
-                    {(() => {
-                      const isUnread = hasUnreadNote(t);
-                      return (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            markNoteAsRead(t.id, t.notes);
-                            setDiscussingTask(t);
-                          }}
-                          className={`relative p-1.5 rounded-lg transition active:scale-95 ${
-                            isUnread
-                              ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 dark:ring-amber-400 ring-offset-1 dark:ring-offset-slate-900 shadow-amber-400/40 animate-pulse'
-                              : t.notes
-                              ? 'text-slate-600 dark:text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800'
-                              : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                          }`}
-                          title={
-                            isUnread
-                              ? 'Có trao đổi / ghi chú mới chưa đọc! Bấm để xem'
-                              : 'Ghi chú & Trao đổi luồng task'
-                          }
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          {isUnread && (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white dark:border-slate-900 shadow-xs" />
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Checkbox */}
+                          {(() => {
+                            const canToggle = canToggleTaskCheck(t);
+                            return (
+                              <button
+                                type="button"
+                                disabled={!canToggle}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleTaskDone(t);
+                                }}
+                                className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                                  !canToggle
+                                    ? 'cursor-not-allowed opacity-40 ' +
+                                      (isDone
+                                        ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
+                                        : 'border-2 border-slate-200 bg-slate-100 text-transparent')
+                                    : 'active:scale-90 cursor-pointer ' +
+                                      (isDone
+                                        ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
+                                        : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
+                                }`}
+                              >
+                                <Check className={`w-3.5 h-3.5 ${isDone ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                              </button>
+                            );
+                          })()}
+                          <span className="font-mono text-slate-400 font-bold text-xs">
+                            #{idx + 1}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-bold">
+                            {t.role}
+                          </span>
+                          {t.priority === 'High' && (
+                            <span className="text-[10px] px-2 py-0.5 rounded border bg-red-100 text-red-700 border-red-200 font-bold inline-flex items-center gap-1">
+                              <Flame className="w-3 h-3 text-red-500 fill-red-500" />
+                              Ưu tiên cao
+                            </span>
                           )}
-                        </button>
-                      );
-                    })()}
+                        </div>
 
-                    {(canEditTask(t) || currentUser?.role === 'Admin') && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingTask(t);
-                            setTargetMilestoneId('');
-                            setModalInitialRole(t.role);
-                            setIsTaskModalOpen(true);
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                          title="Sửa task"
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-bold rounded-full border shrink-0 ${
+                            isDone
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                              : t.status === 'In Progress'
+                              ? 'bg-blue-50 text-blue-700 border-blue-300'
+                              : 'bg-slate-100 text-slate-500 border-slate-300'
+                          }`}
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            confirmDialog({
-                              title: 'Xác nhận xóa đầu việc tự do',
-                              message: `Bạn có chắc chắn muốn xóa đầu việc tự do "${t.title}"? Thao tác này không thể hoàn tác.`,
-                              confirmText: 'Xác nhận xóa',
-                              type: 'danger',
-                              onConfirm: () => deleteTask(t.id),
-                            });
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                          title="Xóa task"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          {t.status}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                </div>
+
+                      {/* Title */}
+                      <h4
+                        className={`text-xs font-bold leading-snug ${
+                          isDone ? 'line-through text-slate-400' : 'text-slate-800'
+                        }`}
+                      >
+                        {t.title}
+                      </h4>
+
+                      {t.description && (
+                        <p className="text-[11px] text-slate-500 line-clamp-2 italic">
+                          {t.description}
+                        </p>
+                      )}
+
+                      {/* Quick Assign Dropdown on Mobile */}
+                      {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+                        <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-[10px] text-slate-500 font-bold">Gán vào:</span>
+                          <Dropdown
+                            value=""
+                            onChange={(newMsId) => {
+                              if (newMsId) {
+                                updateTask(t.id, { milestoneId: newMsId });
+                              }
+                            }}
+                            placeholder="-- Chọn Milestone --"
+                            options={filteredMilestones.map((m) => ({
+                              value: m.id,
+                              label: `🚩 ${m.title}`,
+                            }))}
+                            size="sm"
+                            className="flex-1"
+                            buttonClassName="py-1 px-2 text-[10px] font-semibold text-indigo-700 bg-white border-slate-200"
+                          />
+                        </div>
+                      )}
+
+                      {/* Assignee & Effort Row */}
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 gap-2">
+                        <div className="text-[11px] text-slate-500">
+                          👤 <strong className="text-slate-700">{t.assigneeAccount || 'Chưa gán'}</strong>
+                          <span className="mx-1.5">•</span>
+                          Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong>
+                        </div>
+
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          {/* Discussion Button */}
+                          {(() => {
+                            const isUnread = hasUnreadNote(t);
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  markNoteAsRead(t.id, t.notes);
+                                  setDiscussingTask(t);
+                                }}
+                                className={`p-1.5 rounded-lg text-xs font-semibold transition active:scale-95 flex items-center gap-1 ${
+                                  isUnread
+                                    ? 'bg-amber-400 text-amber-950 font-bold ring-2 ring-amber-300'
+                                    : t.notes
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </button>
+                            );
+                          })()}
+
+                          {/* Edit / Delete */}
+                          {(canEditTask(t) || currentUser?.role === 'Admin') && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTask(t);
+                                  setTargetMilestoneId('');
+                                  setModalInitialRole(t.role);
+                                  setIsTaskModalOpen(true);
+                                }}
+                                className="p-1.5 bg-slate-100 text-slate-600 rounded-lg active:scale-95"
+                                title="Sửa task"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  confirmDialog({
+                                    title: 'Xác nhận xóa đầu việc tự do',
+                                    message: `Bạn có chắc chắn muốn xóa đầu việc tự do "${t.title}"?`,
+                                    confirmText: 'Xác nhận xóa',
+                                    type: 'danger',
+                                    onConfirm: () => deleteTask(t.id),
+                                  });
+                                }}
+                                className="p-1.5 bg-slate-100 text-slate-400 hover:text-red-500 rounded-lg active:scale-95"
+                                title="Xóa task"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </React.Fragment>
               );
             })
           )}

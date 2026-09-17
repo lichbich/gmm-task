@@ -46,7 +46,7 @@ function MainApp() {
             setActiveTaskTab={setActiveTaskTab}
           />
 
-          <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+          <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
             {/* MAIN SECTION 1: TASK MANAGEMENT */}
             {activeMainSection === 'tasks' && (
               <div key={activeTaskTab} className="animate-in fade-in duration-200">

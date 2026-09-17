@@ -24,6 +24,9 @@ import {
   FileText,
   Flame,
   CalendarPlus,
+  SlidersHorizontal,
+  RotateCcw,
+  X,
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
@@ -59,6 +62,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const [selectedAccount, setSelectedAccount] = useState<string>('ALL');
   const [selectedMilestone, setSelectedMilestone] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
@@ -68,6 +72,22 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   useEffect(() => {
     setSubTab('MY_TASKS');
   }, []);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedRole !== 'ALL') count++;
+    if (selectedMilestone !== 'ALL') count++;
+    if (selectedStatus !== 'ALL') count++;
+    if (subTab === 'ALL_TASKS' && selectedAccount !== 'ALL') count++;
+    return count;
+  }, [selectedRole, selectedMilestone, selectedStatus, selectedAccount, subTab]);
+
+  const handleResetFilters = () => {
+    setSelectedRole('ALL');
+    setSelectedMilestone('ALL');
+    setSelectedStatus('ALL');
+    setSelectedAccount('ALL');
+  };
 
   const roleOptions: DropdownOption[] = [
     { value: 'ALL', label: 'Tất cả Role' },
@@ -588,60 +608,308 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     );
   };
 
+  const renderMobileTaskCard = (t: Task, displayIdx: number) => {
+    const isAssignedToMe =
+      currentUser &&
+      t.assigneeAccount &&
+      t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase();
+
+    const isTopEffort = isTopEffortAccount(t.assigneeAccount);
+    const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
+    const deadline = getWeekDeadline(t.weekNumber || selectedWeek, t.year || selectedYear);
+    const nowTime = new Date(simulatedTime).getTime();
+    const isPastDeadline = nowTime > deadline.getTime();
+    const isReportWindowOpen = nowTime >= sundayNoon.getTime();
+
+    const isTaskDone = t.status === 'Done' || t.completionPercentage === 100;
+    const isReported =
+      isTaskDone ||
+      (!!t.lastSubmittedAt &&
+        new Date(t.lastSubmittedAt).getTime() >= sundayNoon.getTime());
+
+    const isUnsubmittedLate = !isReported && isPastDeadline && !!t.assigneeAccount;
+    const isSubmittedLate = isReported && !isTaskDone && !!t.isSubmittedLate;
+    const isLate = isSubmittedLate || isUnsubmittedLate;
+
+    const unread = hasUnreadNote(t);
+    const milestone = milestones.find((m) => m.id === t.milestoneId);
+
+    return (
+      <div
+        key={t.id}
+        className={`bg-white dark:bg-slate-900 border rounded-2xl p-4 shadow-xs space-y-3 transition-all ${
+          isTaskDone
+            ? 'border-emerald-200/80 dark:border-emerald-900/40 bg-emerald-50/15 dark:bg-emerald-950/10'
+            : t.priority === 'High'
+            ? 'border-red-200/80 dark:border-red-900/40 bg-red-50/10 dark:bg-red-950/10'
+            : 'border-slate-200/90 dark:border-slate-800'
+        }`}
+      >
+        {/* Top Header: STT, Role, Priority, Status */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+              #{displayIdx}
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getRoleStyle(t.role)}`}>
+              {t.role}
+            </span>
+            {t.priority === 'High' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950/70 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 font-bold text-[10px]">
+                <Flame className="w-3 h-3 text-red-500 fill-red-500" />
+                Ưu tiên cao
+              </span>
+            ) : t.priority === 'Low' ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-medium text-[10px]">
+                Ưu tiên thấp
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 font-medium text-[10px]">
+                Ưu tiên bình thường
+              </span>
+            )}
+          </div>
+
+          <span className={`whitespace-nowrap px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${getStatusBadge(t.status)}`}>
+            {t.status}
+          </span>
+        </div>
+
+        {/* Task Title (Clickable) */}
+        <div>
+          <button
+            onClick={() => setViewingDetailTask(t)}
+            className="text-left font-bold text-slate-800 dark:text-slate-100 text-sm hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors block w-full leading-snug cursor-pointer"
+          >
+            {t.title}
+          </button>
+
+          {/* Milestone Info */}
+          <div className="mt-1.5 flex items-center gap-2">
+            {milestone ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200/80 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-[10px] font-medium">
+                <Flag className="w-3 h-3 text-indigo-500 shrink-0" />
+                {milestone.title}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-[10px]">
+                <FolderOpen className="w-3 h-3 text-slate-400 shrink-0" />
+                Ngoài Milestone
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Stats Box: Assignee, Effort, Progress */}
+        <div className="bg-slate-50/80 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            {/* Assignee */}
+            <div className="flex items-center gap-1.5">
+              {t.assigneeAccount ? (
+                <>
+                  <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[9px] font-bold text-indigo-700 dark:text-indigo-300">
+                    {t.assigneeAccount.slice(0, 2)}
+                  </div>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs">
+                    {t.assigneeAccount}
+                  </span>
+                </>
+              ) : (
+                <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
+                  <UserX className="w-3 h-3" /> Chưa giao
+                </span>
+              )}
+            </div>
+
+            {/* Effort */}
+            <div className="text-right">
+              <span className="text-[11px] text-slate-400 dark:text-slate-400 mr-1">Effort:</span>
+              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs">
+                {isReported ? `${t.actualEffort ?? t.estimatedEffort}h` : t.actualEffort !== undefined && t.actualEffort > 0 ? `${t.actualEffort}h` : `${t.estimatedEffort}h`}
+              </span>
+              {((isReported && t.actualEffort !== undefined && t.actualEffort !== t.estimatedEffort) || (!isReported && t.actualEffort !== undefined && t.actualEffort > 0 && t.actualEffort !== t.estimatedEffort)) && (
+                <span className="text-[10px] text-slate-400 ml-1 font-mono">
+                  (est: {t.estimatedEffort}h)
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-[10px]">
+              <span className="text-slate-500 dark:text-slate-400 font-medium">Tiến độ</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300 font-mono">{t.completionPercentage}%</span>
+            </div>
+            <div className="w-full bg-slate-200/80 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  t.completionPercentage === 100
+                    ? 'bg-emerald-500'
+                    : t.completionPercentage > 0
+                    ? 'bg-blue-500'
+                    : 'bg-slate-300 dark:bg-slate-600'
+                }`}
+                style={{ width: `${t.completionPercentage}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Penalty / Award Alert if any */}
+        {(isLate || isTopEffort) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {isUnsubmittedLate && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 text-[10px] font-bold rounded-full">
+                <AlertTriangle className="w-3 h-3 text-red-500" />
+                PHẠT (Chưa nộp báo cáo - quá 22h CN)
+              </span>
+            )}
+            {!isUnsubmittedLate && isSubmittedLate && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded-full">
+                <Clock className="w-3 h-3 text-amber-600" />
+                PHẠT (Nộp muộn sau 22h CN)
+              </span>
+            )}
+            {isTopEffort && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-full">
+                <Award className="w-3 h-3 text-emerald-600" />
+                THƯỞNG (Top Effort)
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Action Buttons Row */}
+        <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800 gap-2">
+          {/* Discussion Button */}
+          <button
+            onClick={() => {
+              markNoteAsRead(t.id, t.notes);
+              setDiscussingTask(t);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition active:scale-95 cursor-pointer ${
+              unread
+                ? 'bg-amber-400 text-amber-950 font-bold ring-2 ring-amber-300 animate-pulse'
+                : t.notes
+                ? 'bg-amber-50 dark:bg-slate-800 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-slate-700'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Thảo luận</span>
+            {unread && <span className="w-2 h-2 rounded-full bg-red-500" />}
+          </button>
+
+          <div className="flex items-center gap-1.5">
+            {/* Edit Button */}
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+              <button
+                onClick={() => onOpenTaskModal?.(t)}
+                className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Chỉnh sửa task"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Delete Button */}
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+              <button
+                onClick={() => {
+                  confirmDialog({
+                    title: 'Xác nhận xóa đầu việc',
+                    message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"?`,
+                    confirmText: 'Xác nhận xóa',
+                    type: 'danger',
+                    onConfirm: () => deleteTask(t.id),
+                  });
+                }}
+                className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950 text-slate-400 hover:text-red-600 rounded-xl transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Xóa task"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Báo cáo Button (For Assignee) */}
+            {isAssignedToMe && (
+              <button
+                onClick={() => setReportingTask(t)}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer ${
+                  isReported
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20'
+                    : isReportWindowOpen
+                    ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-600/20'
+                    : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>{isReported ? 'Đã báo cáo' : isReportWindowOpen ? 'Báo cáo' : 'Cập nhật'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       {/* Header & Sub-tabs Switcher */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-slate-800 tracking-tight">
-                Work Schedules (Bảng Công Việc Chi Tiết)
+              <h2 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                <span className="sm:hidden">Work Schedules</span>
+                <span className="hidden sm:inline">Work Schedules (Bảng Công Việc Chi Tiết)</span>
               </h2>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 {filteredTasks.length} đầu việc
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Quản lý tiến độ, giờ làm thực tế (Effort) và trao đổi ghi chú với Leader.
             </p>
           </div>
         </div>
 
-        {/* Navigation Sub-Tabs Switcher (Below title & description, identical to Milestones) */}
-        <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 max-w-fit gap-1">
+        {/* Navigation Sub-Tabs Switcher */}
+        <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 w-full sm:w-fit overflow-x-auto no-scrollbar gap-1">
           <button
             onClick={() => setSubTab('MY_TASKS')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${
               subTab === 'MY_TASKS'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
                 : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-slate-700/60'
             }`}
           >
             <UserCheck className={`w-3.5 h-3.5 ${subTab === 'MY_TASKS' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-            Task Của Tôi
+            <span>Task Của Tôi</span>
           </button>
           <button
             onClick={() => setSubTab('ALL_TASKS')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${
               subTab === 'ALL_TASKS'
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
                 : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-slate-700/60'
             }`}
           >
             <Globe className={`w-3.5 h-3.5 ${subTab === 'ALL_TASKS' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-            Tất Cả Công Việc
+            <span>Tất Cả Công Việc</span>
           </button>
           <button
             onClick={() => setSubTab('DEFINE_NEXT_WEEK')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${
               subTab === 'DEFINE_NEXT_WEEK'
                 ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20'
                 : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-700/60'
             }`}
           >
             <CalendarPlus className={`w-3.5 h-3.5 ${subTab === 'DEFINE_NEXT_WEEK' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-            Define Tuần Tới (Tuần {selectedWeek + 1})
+            <span className="sm:hidden">Define Tuần {selectedWeek + 1}</span>
+            <span className="hidden sm:inline">Define Tuần {selectedWeek + 1}</span>
           </button>
         </div>
       </div>
@@ -651,202 +919,449 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       ) : (
         <>
           {/* Filter Toolbar */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-2 border-t border-slate-100">
-          {/* Search */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm task..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
-            />
-          </div>
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-5 shadow-sm space-y-3">
+            {/* MOBILE COMPACT SEARCH & FILTER BUTTON ROW (< sm) */}
+            <div className="flex sm:hidden items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm task..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                    title="Xóa tìm kiếm"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
-          {/* Role Filter */}
-          <div className="w-full">
-            <Dropdown
-              value={selectedRole}
-              onChange={setSelectedRole}
-              options={roleOptions}
-              className="w-full"
-              buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
-            />
-          </div>
-
-          {/* Account Filter */}
-          {subTab === 'ALL_TASKS' && (
-            <div className="w-full">
-              <Dropdown
-                value={selectedAccount}
-                onChange={setSelectedAccount}
-                options={accountOptions}
-                className="w-full"
-                buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
-              />
+              {/* Round Filter Button */}
+              <button
+                onClick={() => setIsMobileFilterOpen(true)}
+                className={`relative w-9 h-9 rounded-xl flex items-center justify-center border transition-all shrink-0 cursor-pointer active:scale-95 ${
+                  activeFilterCount > 0
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/25'
+                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
+                }`}
+                title="Mở bộ lọc tìm kiếm"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
             </div>
-          )}
 
-          {/* Milestone Filter */}
-          <div className="w-full">
-            <Dropdown
-              value={selectedMilestone}
-              onChange={setSelectedMilestone}
-              options={milestoneOptions}
-              className="w-full"
-              buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
-            />
-          </div>
+            {/* DESKTOP INLINE FILTER GRID (>= sm) */}
+            <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
+              {/* Search */}
+              <div className="relative col-span-1 md:col-span-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm task..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
+                />
+              </div>
 
-          {/* Status Filter */}
-          <div className="w-full">
-            <Dropdown
-              value={selectedStatus}
-              onChange={setSelectedStatus}
-              options={statusOptions}
-              className="w-full"
-              buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
-            />
-          </div>
-        </div>
-      </div>
+              {/* Role Filter */}
+              <div className="w-full">
+                <Dropdown
+                  value={selectedRole}
+                  onChange={setSelectedRole}
+                  options={roleOptions}
+                  className="w-full"
+                  buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                />
+              </div>
 
-      {/* Table Grid */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
-                <th className="py-3.5 px-4 w-12 text-center">STT</th>
-                <th className="py-3.5 px-4 min-w-[280px]">Task Name (Bấm xem chi tiết)</th>
-                <th className="py-3.5 px-3 w-24">Role</th>
-                <th className="py-3.5 px-3 w-24 text-center">Effort (h)</th>
-                <th className="py-3.5 px-3 w-28 text-center">Status</th>
-                <th className="py-3.5 px-3 w-36">Account</th>
-                <th className="py-3.5 px-3 w-36">Tiến độ (%)</th>
-                <th className="py-3.5 px-3 w-32 text-center">Alert</th>
-                <th className="py-3.5 px-4 min-w-[130px] w-36 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
-              {filteredTasks.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
-                    {subTab === 'MY_TASKS'
-                      ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
-                      : 'Không tìm thấy đầu việc nào phù hợp.'}
-                  </td>
-                </tr>
-              ) : subTab === 'ALL_TASKS' ? (
-                groupedTasksByRole.map((group) => {
-                  const cfg = getRoleConfig(group.role);
-                  const groupTotalEst = group.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0);
-                  const groupTotalActual = group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0);
-
-                  return (
-                    <React.Fragment key={`role-group-${group.role}`}>
-                      {/* Role Section Header */}
-                      <tr className={`${cfg.bg} border-y ${cfg.border} select-none`}>
-                        <td colSpan={9} className="py-2.5 px-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                              <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${cfg.badgeBg}`}>
-                                {group.role}
-                              </span>
-                              <span className={`text-xs font-bold ${cfg.text} tracking-tight`}>
-                                {cfg.label}
-                              </span>
-                              <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-white/80 dark:bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
-                                {group.tasks.length} đầu việc
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-3 text-xs">
-                              <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                                Tổng Effort:{' '}
-                                <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
-                                  {group.tasks.some((item) => !!item.lastSubmittedAt)
-                                    ? groupTotalActual
-                                    : groupTotalEst}
-                                  h
-                                </strong>
-                                {group.tasks.some((item) => !!item.lastSubmittedAt) &&
-                                  groupTotalActual !== groupTotalEst && (
-                                    <span className="text-slate-400 dark:text-slate-400 font-mono ml-1">
-                                      (est: {groupTotalEst}h)
-                                    </span>
-                                  )}
-                              </span>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-
-                      {/* Group Tasks by Account */}
-                      {(() => {
-                        const tasksByAccountMap = new Map<string, Task[]>();
-                        group.tasks.forEach((t) => {
-                          const acc = t.assigneeAccount || 'Unassigned';
-                          const list = tasksByAccountMap.get(acc) || [];
-                          list.push(t);
-                          tasksByAccountMap.set(acc, list);
-                        });
-
-                        const accountGroups = Array.from(tasksByAccountMap.entries());
-
-                        return accountGroups.map(([acc, accTasks], accIdx) => (
-                          <React.Fragment key={`acc-group-${group.role}-${acc}`}>
-                            {/* Thin blank separator row (half height of normal row) between different accounts */}
-                            {accIdx > 0 && (
-                              <tr className="h-4 bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-100/80 dark:border-slate-800 select-none">
-                                <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
-                              </tr>
-                            )}
-                            {[...accTasks].sort(sortByPriority).map((t) => {
-                              const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                              const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                              return renderTaskRow(t, displayIdx);
-                            })}
-                          </React.Fragment>
-                        ));
-                      })()}
-                    </React.Fragment>
-                  );
-                })
-              ) : (
-                filteredTasks.map((t, idx) => {
-                  const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                  const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
-                  return renderTaskRow(t, displayIdx);
-                })
+              {/* Account Filter */}
+              {subTab === 'ALL_TASKS' && (
+                <div className="w-full">
+                  <Dropdown
+                    value={selectedAccount}
+                    onChange={setSelectedAccount}
+                    options={accountOptions}
+                    className="w-full"
+                    buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                  />
+                </div>
               )}
-            </tbody>
-            {/* Table Footer Totals */}
-            <tfoot>
-              <tr className="bg-slate-50 border-t border-slate-200 text-slate-700 font-semibold">
-                <td colSpan={3} className="py-3 px-4 text-right uppercase text-[10px] tracking-wider text-slate-500">
-                  Tổng Cộng ({filteredTasks.length} task):
-                </td>
-                <td className="py-3 px-3 text-center font-mono text-indigo-600 font-bold">
-                  {filteredTasks.some((t) => !!t.lastSubmittedAt)
-                    ? `${totalActualEffort}h`
-                    : `${totalEstimatedEffort}h`}
-                  {filteredTasks.some((t) => !!t.lastSubmittedAt) &&
-                    totalActualEffort !== totalEstimatedEffort && (
-                      <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
-                        (est: {totalEstimatedEffort}h)
-                      </span>
-                    )}
-                </td>
-                <td colSpan={5}></td>
-              </tr>
-            </tfoot>
-          </table>
+
+              {/* Milestone Filter */}
+              <div className="w-full">
+                <Dropdown
+                  value={selectedMilestone}
+                  onChange={setSelectedMilestone}
+                  options={milestoneOptions}
+                  className="w-full"
+                  buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="w-full">
+                <Dropdown
+                  value={selectedStatus}
+                  onChange={(val) => setSelectedStatus(val as TaskStatus | 'ALL')}
+                  options={statusOptions}
+                  className="w-full"
+                  buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* DESKTOP VIEW: Table Grid */}
+          <div className="hidden md:block bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+                    <th className="py-3.5 px-4 w-12 text-center">STT</th>
+                    <th className="py-3.5 px-4 min-w-[280px]">Task Name (Bấm xem chi tiết)</th>
+                    <th className="py-3.5 px-3 w-24">Role</th>
+                    <th className="py-3.5 px-3 w-24 text-center">Effort (h)</th>
+                    <th className="py-3.5 px-3 w-28 text-center">Status</th>
+                    <th className="py-3.5 px-3 w-36">Account</th>
+                    <th className="py-3.5 px-3 w-36">Tiến độ (%)</th>
+                    <th className="py-3.5 px-3 w-32 text-center">Alert</th>
+                    <th className="py-3.5 px-4 min-w-[130px] w-36 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {filteredTasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-slate-400">
+                        {subTab === 'MY_TASKS'
+                          ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
+                          : 'Không tìm thấy đầu việc nào phù hợp.'}
+                      </td>
+                    </tr>
+                  ) : subTab === 'ALL_TASKS' ? (
+                    groupedTasksByRole.map((group) => {
+                      const cfg = getRoleConfig(group.role);
+                      const groupTotalEst = group.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0);
+                      const groupTotalActual = group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0);
+
+                      return (
+                        <React.Fragment key={`role-group-${group.role}`}>
+                          {/* Role Section Header */}
+                          <tr className={`${cfg.bg} border-y ${cfg.border} select-none`}>
+                            <td colSpan={9} className="py-2.5 px-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                  <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${cfg.badgeBg}`}>
+                                    {group.role}
+                                  </span>
+                                  <span className={`text-xs font-bold ${cfg.text} tracking-tight`}>
+                                    {cfg.label}
+                                  </span>
+                                  <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-white/80 dark:bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
+                                    {group.tasks.length} đầu việc
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="text-slate-600 dark:text-slate-400 text-[11px]">
+                                    Tổng Effort:{' '}
+                                    <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
+                                      {group.tasks.some((item) => !!item.lastSubmittedAt)
+                                        ? groupTotalActual
+                                        : groupTotalEst}
+                                      h
+                                    </strong>
+                                    {group.tasks.some((item) => !!item.lastSubmittedAt) &&
+                                      groupTotalActual !== groupTotalEst && (
+                                        <span className="text-slate-400 dark:text-slate-400 font-mono ml-1">
+                                          (est: {groupTotalEst}h)
+                                        </span>
+                                      )}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Group Tasks by Account */}
+                          {(() => {
+                            const tasksByAccountMap = new Map<string, Task[]>();
+                            group.tasks.forEach((t) => {
+                              const acc = t.assigneeAccount || 'Unassigned';
+                              const list = tasksByAccountMap.get(acc) || [];
+                              list.push(t);
+                              tasksByAccountMap.set(acc, list);
+                            });
+
+                            const accountGroups = Array.from(tasksByAccountMap.entries());
+
+                            return accountGroups.map(([acc, accTasks], accIdx) => (
+                              <React.Fragment key={`acc-group-${group.role}-${acc}`}>
+                                {accIdx > 0 && (
+                                  <tr className="h-4 bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-100/80 dark:border-slate-800 select-none">
+                                    <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
+                                  </tr>
+                                )}
+                                {[...accTasks].sort(sortByPriority).map((t) => {
+                                  const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                                  const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
+                                  return renderTaskRow(t, displayIdx);
+                                })}
+                              </React.Fragment>
+                            ));
+                          })()}
+                        </React.Fragment>
+                      );
+                    })
+                  ) : (
+                    filteredTasks.map((t, idx) => {
+                      const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                      const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
+                      return renderTaskRow(t, displayIdx);
+                    })
+                  )}
+                </tbody>
+                {/* Table Footer Totals */}
+                <tfoot>
+                  <tr className="bg-slate-50 border-t border-slate-200 text-slate-700 font-semibold">
+                    <td colSpan={3} className="py-3 px-4 text-right uppercase text-[10px] tracking-wider text-slate-500">
+                      Tổng Cộng ({filteredTasks.length} task):
+                    </td>
+                    <td className="py-3 px-3 text-center font-mono text-indigo-600 font-bold">
+                      {filteredTasks.some((t) => !!t.lastSubmittedAt)
+                        ? `${totalActualEffort}h`
+                        : `${totalEstimatedEffort}h`}
+                      {filteredTasks.some((t) => !!t.lastSubmittedAt) &&
+                        totalActualEffort !== totalEstimatedEffort && (
+                          <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
+                            (est: {totalEstimatedEffort}h)
+                          </span>
+                        )}
+                    </td>
+                    <td colSpan={5}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* MOBILE VIEW: Card List */}
+          <div className="md:hidden space-y-3">
+            {filteredTasks.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-400 text-xs">
+                {subTab === 'MY_TASKS'
+                  ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
+                  : 'Không tìm thấy đầu việc nào phù hợp.'}
+              </div>
+            ) : subTab === 'ALL_TASKS' ? (
+              groupedTasksByRole.map((group) => {
+                const cfg = getRoleConfig(group.role);
+                const groupTotalEst = group.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0);
+                const groupTotalActual = group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0);
+
+                const tasksByAccountMap = new Map<string, Task[]>();
+                group.tasks.forEach((t) => {
+                  const acc = t.assigneeAccount || 'Unassigned';
+                  const list = tasksByAccountMap.get(acc) || [];
+                  list.push(t);
+                  tasksByAccountMap.set(acc, list);
+                });
+                const accountGroups = Array.from(tasksByAccountMap.entries());
+
+                return (
+                  <div key={`mobile-role-${group.role}`} className="space-y-2.5">
+                    {/* Mobile Role Group Header */}
+                    <div className={`${cfg.bg} border ${cfg.border} p-3 rounded-2xl flex items-center justify-between shadow-2xs`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${cfg.badgeBg}`}>
+                          {group.role}
+                        </span>
+                        <span className={`text-xs font-bold ${cfg.text}`}>
+                          {cfg.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <span className="bg-white/80 dark:bg-slate-800 px-2 py-0.5 rounded-full font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
+                          {group.tasks.length} task
+                        </span>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          {group.tasks.some((item) => !!item.lastSubmittedAt) ? groupTotalActual : groupTotalEst}h
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Account Subgroups / Task Cards */}
+                    <div className="space-y-2.5">
+                      {accountGroups.map(([acc, accTasks]) => (
+                        <div key={`mobile-acc-${group.role}-${acc}`} className="space-y-2">
+                          {accountGroups.length > 1 && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                👤 {acc} ({accTasks.length})
+                              </span>
+                              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+                            </div>
+                          )}
+                          {[...accTasks].sort(sortByPriority).map((t) => {
+                            const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                            const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
+                            return renderMobileTaskCard(t, displayIdx);
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              filteredTasks.map((t, idx) => {
+                const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
+                return renderMobileTaskCard(t, displayIdx);
+              })
+            )}
+
+            {/* Mobile Summary Card */}
+            {filteredTasks.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                  Tổng cộng ({filteredTasks.length} task):
+                </span>
+                <div className="text-right">
+                  <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-sm">
+                    {filteredTasks.some((t) => !!t.lastSubmittedAt) ? `${totalActualEffort}h` : `${totalEstimatedEffort}h`}
+                  </span>
+                  {filteredTasks.some((t) => !!t.lastSubmittedAt) && totalActualEffort !== totalEstimatedEffort && (
+                    <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
+                      (est: {totalEstimatedEffort}h)
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* MOBILE FILTER MODAL / BOTTOM SHEET */}
+      {isMobileFilterOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 dark:text-slate-100">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-800/40">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    Bộ Lọc Công Việc
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {activeFilterCount > 0 ? `Đang chọn ${activeFilterCount} bộ lọc` : 'Tất cả điều kiện mặc định'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsMobileFilterOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 overflow-y-auto text-xs">
+              {/* Role Filter */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 dark:text-slate-200 block">
+                  Vị Trí Chuyên Môn (Role):
+                </label>
+                <Dropdown
+                  value={selectedRole}
+                  onChange={setSelectedRole}
+                  options={roleOptions}
+                  className="w-full"
+                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+                />
+              </div>
+
+              {/* Account Filter (if ALL_TASKS) */}
+              {subTab === 'ALL_TASKS' && (
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-700 dark:text-slate-200 block">
+                    Thành Viên Phụ Trách:
+                  </label>
+                  <Dropdown
+                    value={selectedAccount}
+                    onChange={setSelectedAccount}
+                    options={accountOptions}
+                    className="w-full"
+                    buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+                  />
+                </div>
+              )}
+
+              {/* Milestone Filter */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 dark:text-slate-200 block">
+                  Cột Mốc (Milestone):
+                </label>
+                <Dropdown
+                  value={selectedMilestone}
+                  onChange={setSelectedMilestone}
+                  options={milestoneOptions}
+                  className="w-full"
+                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700 dark:text-slate-200 block">
+                  Trạng Thái Task:
+                </label>
+                <Dropdown
+                  value={selectedStatus}
+                  onChange={(val) => setSelectedStatus(val as TaskStatus | 'ALL')}
+                  options={statusOptions}
+                  className="w-full"
+                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between gap-3 shrink-0">
+              <button
+                onClick={handleResetFilters}
+                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer active:scale-95"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Đặt lại
+              </button>
+
+              <button
+                onClick={() => setIsMobileFilterOpen(false)}
+                className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition cursor-pointer active:scale-95 text-center"
+              >
+                Áp Dụng ({filteredTasks.length} task)
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-      </>
       )}
 
       {/* Task Discussion Modal (Only Notes & Stream) */}

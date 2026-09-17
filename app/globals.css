@@ -443,3 +443,19 @@ html.dark .bg-slate-100 {
   opacity: 0;
   transform: scale(0.95) translateY(10px);
 }
+
+/* Hide scrollbar for smooth horizontal scrolling on mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Better touch tap experience */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+

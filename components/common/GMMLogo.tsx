@@ -95,13 +95,13 @@ export const GMMLogo: React.FC<GMMLogoProps> = ({
       </div>
 
       {showText && (
-        <div className="leading-tight">
+        <div className="leading-tight min-w-0">
           <div className="flex items-center gap-1.5">
-            <h1 className={`text-lg font-black text-slate-800 tracking-tight ${textClassName}`}>
+            <h1 className={`text-sm sm:text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight whitespace-nowrap truncate ${textClassName}`}>
               Saho Task System
             </h1>
           </div>
-          <p className={`text-xs text-slate-500 font-medium ${subtextClassName}`}>
+          <p className={`hidden sm:block text-xs text-slate-500 dark:text-slate-400 font-medium truncate ${subtextClassName}`}>
             Hệ thống quản lý task & báo cáo thưởng/phạt 10h CN
           </p>
         </div>
