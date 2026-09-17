@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { Task, TaskStatus } from '../types/task';
 import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
+import { getWeekDeadline } from './WorkHistoryView';
 
 interface WeeklyReportModalProps {
   task: Task | null;
@@ -48,8 +49,9 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     handleClose();
   };
 
+  const deadline = getWeekDeadline(task.weekNumber, task.year);
   const simDate = new Date(simulatedTime);
-  const isLateSimulated = simDate.getDay() === 0 && simDate.getHours() >= 22;
+  const isLateSimulated = simDate.getTime() > deadline.getTime();
 
   return (
     <div
@@ -183,7 +185,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               />
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              💡 Người có số giờ làm việc thực tế cao nhất tuần sẽ được Thưởng (Top Effort).
+              💡 Kể cả số giờ làm là 0h (chưa làm trong tuần), bạn vẫn cần bấm <strong>"Nộp Báo Cáo Tuần"</strong> trước 22:00 Chủ Nhật để hệ thống ghi nhận đúng hạn và tránh bị phạt.
             </p>
           </div>
 

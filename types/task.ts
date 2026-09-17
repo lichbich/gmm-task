@@ -102,8 +102,11 @@ export interface WeeklyAwardSummary {
   submittedCount: number;
   totalTasks: number;
   isTopEffort: boolean; // Báo Xanh
-  isLate: boolean; // Báo Đỏ
+  isLate: boolean; // Báo Đỏ (Nộp muộn hoặc Chưa nộp quá hạn)
   lastSubmittedAt?: string;
+  isMissingReport?: boolean; // Chưa nộp báo cáo khi đã quá hạn 22:00 CN
+  penaltyType?: 'LATE' | 'MISSING' | 'NONE';
+  penaltyReason?: string;
 }
 
 export interface WeeklyHistoryArchive {

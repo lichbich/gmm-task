@@ -22,6 +22,23 @@ export function getCurrentISOWeekAndYear(d: Date = new Date()): { week: number; 
   return { week: sheetWeekNumber, year: date.getFullYear() };
 }
 
+export function getWeekDeadline(weekNo: number, year: number = 2026): Date {
+  const isoWeekNo = weekNo > 50 ? weekNo - 55 : weekNo;
+
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7;
+  const firstMonday = new Date(jan4);
+  firstMonday.setDate(jan4.getDate() - dayOfWeek + 1);
+
+  const start = new Date(firstMonday);
+  start.setDate(firstMonday.getDate() + (isoWeekNo - 1) * 7);
+
+  const deadline = new Date(start);
+  deadline.setDate(start.getDate() + 6);
+  deadline.setHours(22, 0, 0, 0); // 22:00 Sunday
+  return deadline;
+}
+
 export const DEFAULT_ROLES: RoleItem[] = [
   {
     id: 'role-ba',
@@ -108,7 +125,7 @@ interface AppContextType {
   
   tasks: Task[];
   addTask: (task: Omit<Task, 'id' | 'orderInMilestone'>) => void;
-  updateTask: (id: string, updates: Partial<Task>) => void;
+  updateTask: (id: string, updates: Partial<Task>, options?: { skipLog?: boolean }) => void;
   deleteTask: (id: string) => void;
   reorderTasksInMilestone: (milestoneId: string, taskIds: string[]) => void;
   
@@ -957,7 +974,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncTasksToFirebase(updated);
   };
 
-  const updateTask = (id: string, updates: Partial<Task>) => {
+  const updateTask = (id: string, updates: Partial<Task>, options?: { skipLog?: boolean }) => {
     const nowIso = new Date().toISOString();
     const authorName = authSession?.name || 'Thành viên';
     const authorAccount = authSession?.account || 'member';
@@ -966,6 +983,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updated = tasks.map((t) => {
       if (t.id !== id) return t;
+
+      if (options?.skipLog) {
+        return {
+          ...t,
+          ...updates,
+          updatedAt: nowIso,
+          updatedBy: updaterDisplay,
+        };
+      }
 
       const changes: string[] = [];
       if (updates.status && updates.status !== t.status) {
@@ -1065,15 +1091,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     status: TaskStatus,
     notes?: string
   ) => {
+    const targetTask = tasks.find((t) => t.id === taskId);
+    const weekNo = targetTask?.weekNumber || selectedWeek;
+    const year = targetTask?.year || selectedYear;
+    const deadline = getWeekDeadline(weekNo, year);
     const now = new Date(simulatedTime);
     const nowIso = new Date().toISOString();
-    const day = now.getDay();
-    const hours = now.getHours();
-    
-    let isLate = false;
-    if (day === 0 && hours >= 22) {
-      isLate = true;
-    }
+
+    const isLate = now.getTime() > deadline.getTime();
 
     const authorName = authSession?.name || 'Người phụ trách';
     const authorAccount = authSession?.account || 'member';
@@ -1219,7 +1244,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (t) => t.weekNumber === selectedWeek && t.year === selectedYear
     );
 
-    const userEffortMap = new Map<string, { totalEffort: number; count: number; total: number; isLate: boolean; lastSubmittedAt?: string }>();
+    const deadline = getWeekDeadline(selectedWeek, selectedYear);
+    const now = new Date(simulatedTime);
+    const isPastDeadline = now.getTime() > deadline.getTime();
+
+    const userEffortMap = new Map<
+      string,
+      {
+        totalEffort: number;
+        count: number;
+        total: number;
+        isLate: boolean;
+        hasUnsubmitted: boolean;
+        lastSubmittedAt?: string;
+      }
+    >();
 
     users.forEach((u) => {
       userEffortMap.set(u.account, {
@@ -1227,6 +1266,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         count: 0,
         total: 0,
         isLate: false,
+        hasUnsubmitted: false,
       });
     });
 
@@ -1237,15 +1277,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         count: 0,
         total: 0,
         isLate: false,
+        hasUnsubmitted: false,
       };
       entry.total += 1;
       entry.totalEffort += task.actualEffort || 0;
       if (task.lastSubmittedAt) {
         entry.count += 1;
         entry.lastSubmittedAt = task.lastSubmittedAt;
-      }
-      if (task.isSubmittedLate) {
-        entry.isLate = true;
+        if (task.isSubmittedLate) {
+          entry.isLate = true;
+        }
+      } else {
+        entry.hasUnsubmitted = true;
+        if (isPastDeadline) {
+          entry.isLate = true;
+        }
       }
       userEffortMap.set(task.assigneeAccount, entry);
     });
@@ -1265,7 +1311,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         count: 0,
         total: 0,
         isLate: false,
+        hasUnsubmitted: false,
       };
+
+      const isMissingReport = isPastDeadline && stats.total > 0 && stats.count < stats.total;
+      const isLateSubmission = stats.isLate && !isMissingReport;
+
+      let penaltyType: 'LATE' | 'MISSING' | 'NONE' = 'NONE';
+      let penaltyReason = '';
+
+      if (isMissingReport) {
+        penaltyType = 'MISSING';
+        penaltyReason = `Chưa nộp báo cáo (${stats.count}/${stats.total} task) quá hạn 22:00 CN`;
+      } else if (isLateSubmission) {
+        penaltyType = 'LATE';
+        penaltyReason = `Nộp báo cáo muộn sau 22:00 CN`;
+      }
 
       awards.push({
         account: u.account,
@@ -1276,8 +1337,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         submittedCount: stats.count,
         totalTasks: stats.total,
         isTopEffort: maxEffort > 0 && stats.totalEffort === maxEffort,
-        isLate: stats.isLate,
+        isLate: stats.isLate || isMissingReport,
         lastSubmittedAt: stats.lastSubmittedAt,
+        isMissingReport,
+        penaltyType,
+        penaltyReason,
       });
     });
 

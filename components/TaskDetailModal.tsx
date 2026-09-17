@@ -18,6 +18,7 @@ import {
   Trash2,
   Edit3,
   RotateCcw,
+  CheckSquare,
   FileText,
   User,
   Calendar,
@@ -33,6 +34,11 @@ import {
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { parseNoteLine, formatNewNoteLine, formatEditedNoteLine } from '../lib/notesHelper';
+import {
+  parseDescription,
+  toggleDescriptionCheckbox,
+  insertCheckboxToText,
+} from '../lib/descriptionHelper';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -58,12 +64,13 @@ const formatDateTime = (isoOrStr?: string): string => {
 };
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
-  task,
+  task: taskProp,
   isOpen,
   onClose,
   onOpenReport,
 }) => {
   const {
+    tasks,
     milestones,
     updateTaskNotes,
     updateTask,
@@ -77,6 +84,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     markNoteAsRead,
   } = useApp();
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
+
+  // Keep task updated in real-time with context
+  const task = tasks.find((t) => t.id === taskProp?.id) || taskProp;
 
   const [notesText, setNotesText] = useState('');
   const [quickComment, setQuickComment] = useState('');
@@ -100,13 +110,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setIsSaved(false);
       setEditingNoteIndex(null);
       setEditingNoteText('');
-      setIsEditingDesc(false);
-      setIsSavedDesc(false);
       if (task.notes) {
         markNoteAsRead(task.id, task.notes);
       }
     }
-  }, [task]);
+  }, [task?.id, task?.description, task?.notes]);
 
   // Find assignee user
   const assigneeUser = useMemo(() => {
@@ -150,6 +158,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     return logs;
   }, [task, assigneeUser]);
 
+  // Parse description for interactive checklist / sub-tasks (Hook at top level before conditional return)
+  const parsedDesc = useMemo(() => parseDescription(task?.description), [task?.description]);
+
   if (!isRendered || !task) return null;
 
   const milestone = milestones.find((m) => m.id === task.milestoneId);
@@ -183,6 +194,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     setIsEditingDesc(false);
     setIsSavedDesc(true);
     setTimeout(() => setIsSavedDesc(false), 2500);
+  };
+
+  // Handle interactive checkbox toggle in description view (without logging to activity history)
+  const handleToggleCheckbox = (lineIndex: number) => {
+    const newDesc = toggleDescriptionCheckbox(task.description || '', lineIndex);
+    updateTask(task.id, { description: newDesc }, { skipLog: true });
+    setDescText(newDesc);
+  };
+
+  const handleAddCheckboxInEdit = () => {
+    setDescText((prev) => insertCheckboxToText(prev));
   };
 
   // Handle appending quick discussion / exchange note
@@ -431,11 +453,25 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
             {isEditingDesc ? (
               <form onSubmit={handleSaveDescription} className="space-y-2 pt-1">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleAddCheckboxInEdit}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 rounded-lg border border-indigo-200/80 dark:border-indigo-800/80 transition shadow-2xs"
+                    title="Chèn thêm checkbox / việc con"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    + Thêm Checkbox / Sub-task
+                  </button>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                    Gõ <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-indigo-600 dark:text-indigo-400">- [ ] Việc con</code> để tạo checkbox
+                  </span>
+                </div>
                 <textarea
-                  rows={4}
+                  rows={5}
                   value={descText}
                   onChange={(e) => setDescText(e.target.value)}
-                  placeholder="Nhập mô tả chi tiết công việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên..."
+                  placeholder="Nhập mô tả chi tiết công việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên...&#10;Ví dụ:&#10;- [ ] Bước 1: Thiết kế wireframe&#10;- [ ] Bước 2: Review với Leader"
                   className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition resize-none leading-relaxed"
                   autoFocus
                 />
@@ -463,9 +499,46 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <div>
                 {task.description ? (
                   <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3">
-                    <p className="text-slate-700 dark:text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-normal">
-                      {task.description}
-                    </p>
+                    {/* Description Items & Interactive Checkboxes */}
+                    <div className="space-y-1 text-xs sm:text-sm leading-relaxed">
+                      {parsedDesc.items.map((item) => {
+                        if (item.isCheckbox) {
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => handleToggleCheckbox(item.id)}
+                              className="flex items-start gap-2.5 py-1 px-2 -mx-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition select-none group"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={item.isChecked}
+                                onChange={() => handleToggleCheckbox(item.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600 cursor-pointer accent-indigo-600"
+                              />
+                              <span
+                                className={`text-xs leading-relaxed transition flex-1 break-words ${
+                                  item.isChecked
+                                    ? 'line-through text-slate-400 dark:text-slate-500'
+                                    : 'text-slate-700 dark:text-slate-200 font-medium'
+                                }`}
+                              >
+                                {item.text}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <p
+                            key={item.id}
+                            className="text-slate-700 dark:text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-normal"
+                          >
+                            {item.text}
+                          </p>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <div
@@ -474,7 +547,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   >
                     <div className="font-medium text-slate-600 dark:text-slate-300">Chưa có mô tả chi tiết cho task này</div>
                     <div className="text-[11px] text-slate-400 dark:text-slate-400">
-                      Bấm vào đây để thêm nội dung hướng dẫn hoặc yêu cầu nghiệm thu từ Leader.
+                      Bấm vào đây để thêm nội dung hướng dẫn hoặc danh sách checklist / việc con cho thành viên.
                     </div>
                   </div>
                 )}

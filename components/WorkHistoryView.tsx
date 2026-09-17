@@ -63,6 +63,23 @@ export const getWeekDateRangeStr = (weekNo: number, year: number = 2026): { star
   };
 };
 
+export const getWeekDeadline = (weekNo: number, year: number = 2026): Date => {
+  const isoWeekNo = weekNo > 50 ? weekNo - 55 : weekNo;
+
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7;
+  const firstMonday = new Date(jan4);
+  firstMonday.setDate(jan4.getDate() - dayOfWeek + 1);
+
+  const start = new Date(firstMonday);
+  start.setDate(firstMonday.getDate() + (isoWeekNo - 1) * 7);
+
+  const deadline = new Date(start);
+  deadline.setDate(start.getDate() + 6);
+  deadline.setHours(22, 0, 0, 0); // 22:00 Sunday
+  return deadline;
+};
+
 export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
   const {
     tasks,

@@ -403,7 +403,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
                             <span>
                               Effort:{' '}
                               <strong className="text-indigo-600 font-mono">
-                                {t.actualEffort > 0 ? `${t.actualEffort}h / ${t.estimatedEffort}h` : `${t.estimatedEffort}h`}
+                                {t.lastSubmittedAt
+                                  ? `${t.actualEffort ?? 0}h / ${t.estimatedEffort}h`
+                                  : `${t.estimatedEffort}h`}
                               </strong>
                             </span>
                             <span className="font-bold text-slate-700">{t.completionPercentage}%</span>

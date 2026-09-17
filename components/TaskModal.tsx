@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, Specialization, TaskStatus } from '../types/task';
-import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText } from 'lucide-react';
+import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown, DropdownOption } from './common/Dropdown';
+import { insertCheckboxToText } from '../lib/descriptionHelper';
 
 interface TaskModalProps {
   task?: Task | null;
@@ -216,16 +217,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
             {/* Chi Tiết Task (Mô tả công việc chi tiết cho thành viên) */}
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
                 <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                  Chi Tiết Task (Mô tả công việc):
+                  Chi Tiết Task (Mô tả & Checklist việc con):
                 </label>
-                <span className="text-[10px] text-slate-400">Leader mô tả chi tiết yêu cầu & tiêu chí hoàn thành</span>
+                <button
+                  type="button"
+                  onClick={() => setDescription((prev) => insertCheckboxToText(prev))}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 hover:underline transition"
+                  title="Chèn thêm checkbox / việc con"
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  + Thêm Checkbox
+                </button>
               </div>
               <textarea
                 rows={3}
-                placeholder="Mô tả chi tiết nội dung đầu việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên hiểu..."
+                placeholder="Mô tả chi tiết nội dung đầu việc, hướng dẫn thực hiện, hoặc checklist việc con cho thành viên... (Gõ - [ ] Tên việc con để tạo checkbox)"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300/90 rounded-xl p-3 text-slate-800 text-xs focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition resize-none leading-relaxed"

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
+import { getWeekDeadline } from './WorkHistoryView';
 
 interface WorkScheduleTableProps {
   onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
@@ -46,6 +47,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     markNoteAsRead,
     roles,
     selectedWeek,
+    selectedYear,
+    simulatedTime,
   } = useApp();
 
   // Sub-tabs state: ALWAYS DEFAULT to 'MY_TASKS' when accessing
@@ -258,7 +261,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   // Reusable task row renderer
   const renderTaskRow = (t: Task, displayIdx: number) => {
     const isTopEffort = isTopEffortAccount(t.assigneeAccount);
-    const isLate = t.isSubmittedLate;
+    const deadline = getWeekDeadline(t.weekNumber || selectedWeek, t.year || selectedYear);
+    const isPastDeadline = new Date(simulatedTime).getTime() > deadline.getTime();
+    const isUnsubmittedLate = !t.lastSubmittedAt && isPastDeadline && !!t.assigneeAccount;
+    const isSubmittedLate = !!t.isSubmittedLate;
+    const isLate = isSubmittedLate || isUnsubmittedLate;
     const isAssignedToMe = canReportTask(t);
     const hasAlert = isLate || isTopEffort;
 
@@ -338,13 +345,26 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         {/* Effort */}
         <td className="py-3 px-3 text-center font-mono">
           <div className="flex flex-col items-center">
-            <span className="font-bold text-indigo-600 dark:text-indigo-400">
-              {t.actualEffort > 0 ? t.actualEffort : t.estimatedEffort}h
-            </span>
-            {t.actualEffort > 0 && t.actualEffort !== t.estimatedEffort && (
-              <span className="text-[9px] text-slate-400 dark:text-slate-400">
-                est: {t.estimatedEffort}h
-              </span>
+            {t.lastSubmittedAt ? (
+              <>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                  {t.actualEffort ?? 0}h
+                </span>
+                {t.actualEffort !== t.estimatedEffort && (
+                  <span className="text-[9px] text-slate-400 dark:text-slate-400">
+                    est: {t.estimatedEffort}h
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {t.estimatedEffort}h
+                </span>
+                <span className="text-[9px] text-slate-400 dark:text-slate-500">
+                  (est)
+                </span>
+              </>
             )}
           </div>
         </td>
@@ -400,19 +420,28 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         {/* Alert Status (Clean: Blank if no alert exists) */}
         <td className="py-3 px-3 text-center">
           {hasAlert ? (
-            <div className="flex items-center justify-center gap-1">
-              {isLate && (
+            <div className="flex items-center justify-center gap-1 flex-wrap">
+              {isUnsubmittedLate && (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold rounded-full"
-                  title="Báo cáo nộp sau 10h tối Chủ Nhật (Bị phạt)"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 text-[10px] font-bold rounded-full animate-pulse"
+                  title="Chưa nộp báo cáo quá hạn 22:00 Chủ Nhật (Bị phạt)"
                 >
                   <AlertTriangle className="w-3 h-3 text-red-500" />
-                  PHẠT
+                  PHẠT (Chưa BC)
+                </span>
+              )}
+              {!isUnsubmittedLate && isSubmittedLate && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded-full"
+                  title="Báo cáo nộp sau 22:00 Chủ Nhật (Bị phạt)"
+                >
+                  <Clock className="w-3 h-3 text-amber-600" />
+                  PHẠT (Nộp muộn)
                 </span>
               )}
               {isTopEffort && (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold rounded-full"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-full"
                   title="Người có tổng giờ làm nhiều nhất tuần (Được thưởng)"
                 >
                   <Award className="w-3 h-3 text-emerald-600" />
@@ -461,11 +490,19 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             {isAssignedToMe && (
               <button
                 onClick={() => setReportingTask(t)}
-                className="whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 hover:text-white dark:hover:text-white border border-indigo-200/90 dark:border-indigo-800 rounded-xl text-xs font-semibold shadow-xs hover:shadow-md active:scale-95 transition-all"
-                title="Nộp báo cáo số giờ làm & % hoàn thành"
+                className={`whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-xs hover:shadow-md active:scale-95 transition-all ${
+                  t.lastSubmittedAt
+                    ? 'bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-300 hover:text-white dark:hover:text-white border border-emerald-200/90 dark:border-emerald-800'
+                    : 'bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 hover:text-white dark:hover:text-white border border-indigo-200/90 dark:border-indigo-800'
+                }`}
+                title={
+                  t.lastSubmittedAt
+                    ? `Đã nộp báo cáo (${t.actualEffort || 0}h). Bấm để cập nhật lại nếu cần`
+                    : 'Nộp báo cáo số giờ làm & % hoàn thành'
+                }
               >
                 <Clock className="w-3.5 h-3.5 shrink-0" />
-                <span>Báo cáo</span>
+                <span>{t.lastSubmittedAt ? 'Đã báo cáo' : 'Báo cáo'}</span>
               </button>
             )}
 
@@ -679,10 +716,19 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
                             <div className="flex items-center gap-3 text-xs">
                               <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                                Tổng Effort: <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">{groupTotalActual > 0 ? groupTotalActual : groupTotalEst}h</strong>
-                                {groupTotalActual > 0 && groupTotalActual !== groupTotalEst && (
-                                  <span className="text-slate-400 dark:text-slate-400 font-mono ml-1">(est: {groupTotalEst}h)</span>
-                                )}
+                                Tổng Effort:{' '}
+                                <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
+                                  {group.tasks.some((item) => !!item.lastSubmittedAt)
+                                    ? groupTotalActual
+                                    : groupTotalEst}
+                                  h
+                                </strong>
+                                {group.tasks.some((item) => !!item.lastSubmittedAt) &&
+                                  groupTotalActual !== groupTotalEst && (
+                                    <span className="text-slate-400 dark:text-slate-400 font-mono ml-1">
+                                      (est: {groupTotalEst}h)
+                                    </span>
+                                  )}
                               </span>
                             </div>
                           </div>
@@ -735,7 +781,15 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   Tổng Cộng ({filteredTasks.length} task):
                 </td>
                 <td className="py-3 px-3 text-center font-mono text-indigo-600 font-bold">
-                  {totalActualEffort > 0 ? `${totalActualEffort}h` : `${totalEstimatedEffort}h`}
+                  {filteredTasks.some((t) => !!t.lastSubmittedAt)
+                    ? `${totalActualEffort}h`
+                    : `${totalEstimatedEffort}h`}
+                  {filteredTasks.some((t) => !!t.lastSubmittedAt) &&
+                    totalActualEffort !== totalEstimatedEffort && (
+                      <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
+                        (est: {totalEstimatedEffort}h)
+                      </span>
+                    )}
                 </td>
                 <td colSpan={5}></td>
               </tr>
