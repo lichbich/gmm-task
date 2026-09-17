@@ -31,6 +31,7 @@ import {
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
+import { useModalAnimation } from '../hooks/useModalAnimation';
 
 interface WorkScheduleTableProps {
   onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
@@ -63,6 +64,15 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const [selectedMilestone, setSelectedMilestone] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
+  // Smooth Bottom Sheet animation hook
+  const {
+    isRendered: isFilterRendered,
+    isVisible: isFilterVisible,
+    handleClose: handleCloseFilter,
+    handleBackdropMouseDown: handleFilterBackdropMouseDown,
+    handleBackdropClick: handleFilterBackdropClick,
+  } = useModalAnimation(isMobileFilterOpen, () => setIsMobileFilterOpen(false));
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
@@ -1264,14 +1274,20 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       )}
 
       {/* MOBILE FILTER MODAL / BOTTOM SHEET */}
-      {isMobileFilterOpen && (
+      {isFilterRendered && (
         <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsMobileFilterOpen(false);
-          }}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-300 animate-in fade-in"
+          onMouseDown={handleFilterBackdropMouseDown}
+          onClick={handleFilterBackdropClick}
+          className={`fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bottomsheet-backdrop-transition ${
+            isFilterVisible ? 'bottomsheet-backdrop-open' : 'bottomsheet-backdrop-closed'
+          }`}
         >
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 dark:text-slate-100 transition-all duration-300 ease-out animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95">
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 dark:text-slate-100 bottomsheet-dialog-transition ${
+              isFilterVisible ? 'bottomsheet-dialog-open' : 'bottomsheet-dialog-closed'
+            }`}
+          >
             {/* Drag Handle on Mobile */}
             <div className="sm:hidden w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-2.5 mb-0.5 shrink-0" />
 
@@ -1292,7 +1308,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               </div>
 
               <button
-                onClick={() => setIsMobileFilterOpen(false)}
+                type="button"
+                onClick={handleCloseFilter}
                 className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 flex items-center justify-center transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1363,6 +1380,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between gap-3 shrink-0">
               <button
+                type="button"
                 onClick={handleResetFilters}
                 className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer active:scale-95"
               >
@@ -1371,7 +1389,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               </button>
 
               <button
-                onClick={() => setIsMobileFilterOpen(false)}
+                type="button"
+                onClick={handleCloseFilter}
                 className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition cursor-pointer active:scale-95 text-center"
               >
                 Áp Dụng ({filteredTasks.length} task)
