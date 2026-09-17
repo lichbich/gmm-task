@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskStatus } from '../types/task';
-import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare } from 'lucide-react';
+import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare, Info } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
-import { getWeekDeadline } from './WorkHistoryView';
+import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 
 interface WeeklyReportModalProps {
   task: Task | null;
@@ -49,8 +49,11 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     handleClose();
   };
 
+  const sundayNoon = getWeekSundayNoon(task.weekNumber, task.year);
   const deadline = getWeekDeadline(task.weekNumber, task.year);
   const simDate = new Date(simulatedTime);
+  const isBeforeSundayNoon = simDate.getTime() < sundayNoon.getTime();
+  const isSundayReportOpen = simDate.getTime() >= sundayNoon.getTime() && simDate.getTime() <= deadline.getTime();
   const isLateSimulated = simDate.getTime() > deadline.getTime();
 
   return (
@@ -70,7 +73,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
           <div>
             <span className="text-xs uppercase font-bold tracking-wider text-indigo-600 flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
-              Báo Cáo Tiến Độ Tuần
+              {isBeforeSundayNoon ? 'Cập Nhật Tiến Độ Task' : 'Báo Cáo Tiến Độ Tuần'}
             </span>
             <h3 className="text-base font-bold text-slate-900 mt-0.5 leading-snug break-words">
               {task.title}
@@ -85,8 +88,32 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
         </div>
 
         <form onSubmit={handleSave} className="space-y-4 pt-4">
-          {/* Late submission alert */}
-          {isLateSimulated && (
+          {/* Status Banners */}
+          {status === 'Done' || completionPercentage === 100 ? (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-700">
+              <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block text-emerald-800">CÔNG VIỆC HOÀN THÀNH (DONE 100%)</span>
+                Task hoàn thành 100% sẽ được hệ thống tự động ghi nhận là "Đã báo cáo" hoàn tất cho tuần này.
+              </div>
+            </div>
+          ) : isBeforeSundayNoon ? (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5 text-xs text-blue-700">
+              <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block text-blue-800">CẬP NHẬT TIẾN ĐỘ TRONG TUẦN</span>
+                Bạn đang cập nhật tiến độ công việc. Cổng nộp báo cáo tuần chính thức sẽ mở từ <strong>12:00 trưa Chủ Nhật</strong> đến <strong>22:00 tối Chủ Nhật</strong>.
+              </div>
+            </div>
+          ) : isSundayReportOpen ? (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-700">
+              <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block text-emerald-800">CỔNG BÁO CÁO ĐANG MỞ (12h - 22h Chủ Nhật)</span>
+                Báo cáo của bạn được cập nhật đúng hạn trước 22:00 Chủ Nhật.
+              </div>
+            </div>
+          ) : isLateSimulated ? (
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-700">
               <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
               <div>
@@ -94,17 +121,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 Bạn đang nộp báo cáo sau 22:00 Chủ Nhật. Hệ thống sẽ ghi nhận trạng thái nộp trễ và tính phạt cho tuần này.
               </div>
             </div>
-          )}
-
-          {!isLateSimulated && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-700">
-              <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold block text-emerald-800">Nộp Đúng Hạn (Trước 10h Tối CN)</span>
-                Báo cáo của bạn được cập nhật trước 22:00 Chủ Nhật.
-              </div>
-            </div>
-          )}
+          ) : null}
 
           {/* Task Info Summary */}
           <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
@@ -185,7 +202,9 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               />
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              💡 Kể cả số giờ làm là 0h (chưa làm trong tuần), bạn vẫn cần bấm <strong>"Nộp Báo Cáo Tuần"</strong> trước 22:00 Chủ Nhật để hệ thống ghi nhận đúng hạn và tránh bị phạt.
+              {isBeforeSundayNoon
+                ? '💡 Đây là cập nhật tiến độ trong tuần. Vào Chủ Nhật (từ 12:00 trưa đến 22:00 tối), bạn hãy vào nộp báo cáo tuần chính thức (kể cả 0h) để được tính là "Đã báo cáo".'
+                : '💡 Kể cả số giờ làm là 0h (chưa làm trong tuần), bạn vẫn cần bấm "Nộp Báo Cáo Tuần" trước 22:00 Chủ Nhật để hệ thống ghi nhận đúng hạn và tránh bị phạt.'}
             </p>
           </div>
 
@@ -242,10 +261,24 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
             <button
               type="submit"
               disabled={!isMyTaskToReport}
-              className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition disabled:opacity-50"
+              className={`flex items-center gap-2 px-5 py-2 text-white text-sm font-semibold rounded-xl shadow-sm transition disabled:opacity-50 ${
+                status === 'Done' || completionPercentage === 100
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : isBeforeSundayNoon
+                  ? 'bg-blue-600 hover:bg-blue-700'
+                  : isLateSimulated
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
             >
               <Save className="w-4 h-4" />
-              Nộp Báo Cáo Tuần
+              {status === 'Done' || completionPercentage === 100
+                ? 'Lưu & Hoàn Thành Báo Cáo'
+                : isBeforeSundayNoon
+                ? 'Lưu Cập Nhật Tiến Độ'
+                : isLateSimulated
+                ? 'Nộp Báo Cáo Tuần (Muộn)'
+                : 'Nộp Báo Cáo Tuần'}
             </button>
           </div>
         </form>

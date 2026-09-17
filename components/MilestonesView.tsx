@@ -134,6 +134,12 @@ export const MilestonesView: React.FC = () => {
     return t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase();
   };
 
+  const getPriorityRank = (priority?: string): number => {
+    if (priority === 'High') return 1;
+    if (priority === 'Low') return 3;
+    return 2;
+  };
+
   // Filtered milestones and adhoc tasks
   const filteredMilestones = milestones
     .filter(isMilestoneRoleMatch)
@@ -142,6 +148,9 @@ export const MilestonesView: React.FC = () => {
   const filteredAdhocTasks = tasks
     .filter((t) => (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) && isTaskRoleMatch(t.role))
     .sort((a, b) => {
+      const rankA = getPriorityRank(a.priority);
+      const rankB = getPriorityRank(b.priority);
+      if (rankA !== rankB) return rankA - rankB;
       const aDone = a.status === 'Done';
       const bDone = b.status === 'Done';
       if (aDone !== bDone) return aDone ? 1 : -1;
@@ -478,6 +487,9 @@ export const MilestonesView: React.FC = () => {
                   const aDone = a.status === 'Done';
                   const bDone = b.status === 'Done';
                   if (aDone !== bDone) return aDone ? 1 : -1;
+                  const rankA = getPriorityRank(a.priority);
+                  const rankB = getPriorityRank(b.priority);
+                  if (rankA !== rankB) return rankA - rankB;
                   return (a.orderInMilestone || 0) - (b.orderInMilestone || 0);
                 });
 

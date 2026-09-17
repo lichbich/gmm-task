@@ -22,6 +22,23 @@ export function getCurrentISOWeekAndYear(d: Date = new Date()): { week: number; 
   return { week: sheetWeekNumber, year: date.getFullYear() };
 }
 
+export function getWeekSundayNoon(weekNo: number, year: number = 2026): Date {
+  const isoWeekNo = weekNo > 50 ? weekNo - 55 : weekNo;
+
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7;
+  const firstMonday = new Date(jan4);
+  firstMonday.setDate(jan4.getDate() - dayOfWeek + 1);
+
+  const start = new Date(firstMonday);
+  start.setDate(firstMonday.getDate() + (isoWeekNo - 1) * 7);
+
+  const sundayNoon = new Date(start);
+  sundayNoon.setDate(start.getDate() + 6);
+  sundayNoon.setHours(12, 0, 0, 0); // 12:00 Sunday
+  return sundayNoon;
+}
+
 export function getWeekDeadline(weekNo: number, year: number = 2026): Date {
   const isoWeekNo = weekNo > 50 ? weekNo - 55 : weekNo;
 
@@ -1094,10 +1111,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetTask = tasks.find((t) => t.id === taskId);
     const weekNo = targetTask?.weekNumber || selectedWeek;
     const year = targetTask?.year || selectedYear;
+    const sundayNoon = getWeekSundayNoon(weekNo, year);
     const deadline = getWeekDeadline(weekNo, year);
     const now = new Date(simulatedTime);
     const nowIso = new Date().toISOString();
 
+    const isSundayNoonOrLater = now.getTime() >= sundayNoon.getTime();
+    const isDone = status === 'Done' || completionPercentage === 100;
+    const isOfficialReport = isDone || isSundayNoonOrLater;
     const isLate = now.getTime() > deadline.getTime();
 
     const authorName = authSession?.name || 'Người phụ trách';
@@ -1122,14 +1143,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         changes.push(`Kèm ghi chú báo cáo`);
       }
 
-      const summary = `Nộp báo cáo tiến độ: ${changes.length > 0 ? changes.join(' • ') : 'Cập nhật tiến độ tuần'}`;
+      const summary = isOfficialReport
+        ? `Nộp báo cáo tiến độ tuần: ${changes.length > 0 ? changes.join(' • ') : 'Cập nhật tiến độ tuần'}`
+        : `Cập nhật tiến độ trong tuần: ${changes.length > 0 ? changes.join(' • ') : 'Cập nhật thông tin task'}`;
+
       const logEntry: TaskActivityLog = {
         id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         timestamp: nowIso,
         authorName,
         authorAccount,
         authorRole,
-        actionType: 'REPORT_SUBMIT',
+        actionType: isOfficialReport ? 'REPORT_SUBMIT' : 'GENERAL_UPDATE',
         summary,
       };
 
@@ -1141,8 +1165,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         completionPercentage,
         status,
         notes: notes !== undefined ? notes : t.notes,
-        lastSubmittedAt: now.toISOString(),
-        isSubmittedLate: isLate,
+        lastSubmittedAt: isOfficialReport ? now.toISOString() : t.lastSubmittedAt,
+        isSubmittedLate: isOfficialReport ? (isDone ? false : isLate) : t.isSubmittedLate,
         updatedAt: nowIso,
         updatedBy: updaterDisplay,
         activityLogs: [logEntry, ...existingLogs],
@@ -1244,6 +1268,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (t) => t.weekNumber === selectedWeek && t.year === selectedYear
     );
 
+    const sundayNoon = getWeekSundayNoon(selectedWeek, selectedYear);
     const deadline = getWeekDeadline(selectedWeek, selectedYear);
     const now = new Date(simulatedTime);
     const isPastDeadline = now.getTime() > deadline.getTime();
@@ -1281,10 +1306,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       entry.total += 1;
       entry.totalEffort += task.actualEffort || 0;
-      if (task.lastSubmittedAt) {
+
+      const isTaskDone = task.status === 'Done' || task.completionPercentage === 100;
+      const isTaskReported =
+        isTaskDone ||
+        (!!task.lastSubmittedAt &&
+          new Date(task.lastSubmittedAt).getTime() >= sundayNoon.getTime());
+
+      if (isTaskReported) {
         entry.count += 1;
         entry.lastSubmittedAt = task.lastSubmittedAt;
-        if (task.isSubmittedLate) {
+        if (task.isSubmittedLate && !isTaskDone) {
           entry.isLate = true;
         }
       } else {

@@ -63,6 +63,23 @@ export const getWeekDateRangeStr = (weekNo: number, year: number = 2026): { star
   };
 };
 
+export const getWeekSundayNoon = (weekNo: number, year: number = 2026): Date => {
+  const isoWeekNo = weekNo > 50 ? weekNo - 55 : weekNo;
+
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7;
+  const firstMonday = new Date(jan4);
+  firstMonday.setDate(jan4.getDate() - dayOfWeek + 1);
+
+  const start = new Date(firstMonday);
+  start.setDate(firstMonday.getDate() + (isoWeekNo - 1) * 7);
+
+  const sundayNoon = new Date(start);
+  sundayNoon.setDate(start.getDate() + 6);
+  sundayNoon.setHours(12, 0, 0, 0); // 12:00 Sunday
+  return sundayNoon;
+};
+
 export const getWeekDeadline = (weekNo: number, year: number = 2026): Date => {
   const isoWeekNo = weekNo > 50 ? weekNo - 55 : weekNo;
 

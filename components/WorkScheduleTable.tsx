@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
-import { getWeekDeadline } from './WorkHistoryView';
+import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 
 interface WorkScheduleTableProps {
   onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
@@ -102,33 +102,54 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     { value: 'Done', label: 'Done (Đã hoàn thành)' },
   ];
 
-  // Filter Tasks
-  const filteredTasks = tasks.filter((t) => {
-    // Sub-tab filter: My Tasks default
-    if (subTab === 'MY_TASKS') {
-      if (!currentUser || !t.assigneeAccount || t.assigneeAccount.toLowerCase() !== currentUser.account.toLowerCase()) {
-        return false;
-      }
-    }
+  const getPriorityRank = (priority?: string): number => {
+    if (priority === 'High') return 1;
+    if (priority === 'Low') return 3;
+    return 2; // Medium or undefined
+  };
 
-    // Sub-tab filter: All Tasks only shows assigned tasks (tasks with an assignee)
-    if (subTab === 'ALL_TASKS') {
-      if (!t.assigneeAccount || !t.assigneeAccount.trim()) {
-        return false;
-      }
+  const sortByPriority = (a: Task, b: Task): number => {
+    const rankA = getPriorityRank(a.priority);
+    const rankB = getPriorityRank(b.priority);
+    if (rankA !== rankB) {
+      return rankA - rankB;
     }
+    const idxA = tasks.findIndex((item) => item.id === a.id);
+    const idxB = tasks.findIndex((item) => item.id === b.id);
+    return idxA - idxB;
+  };
 
-    if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (selectedRole !== 'ALL' && t.role !== selectedRole) return false;
-    if (selectedAccount !== 'ALL' && t.assigneeAccount !== selectedAccount) return false;
-    if (selectedMilestone === 'NO_MILESTONE') {
-      if (t.milestoneId && milestones.some((m) => m.id === t.milestoneId)) return false;
-    } else if (selectedMilestone !== 'ALL') {
-      if (t.milestoneId !== selectedMilestone) return false;
-    }
-    if (selectedStatus !== 'ALL' && t.status !== selectedStatus) return false;
-    return true;
-  });
+  // Filter & Sort Tasks by Priority (High -> Medium -> Low)
+  const filteredTasks = useMemo(() => {
+    return tasks
+      .filter((t) => {
+        // Sub-tab filter: My Tasks default
+        if (subTab === 'MY_TASKS') {
+          if (!currentUser || !t.assigneeAccount || t.assigneeAccount.toLowerCase() !== currentUser.account.toLowerCase()) {
+            return false;
+          }
+        }
+
+        // Sub-tab filter: All Tasks only shows assigned tasks (tasks with an assignee)
+        if (subTab === 'ALL_TASKS') {
+          if (!t.assigneeAccount || !t.assigneeAccount.trim()) {
+            return false;
+          }
+        }
+
+        if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        if (selectedRole !== 'ALL' && t.role !== selectedRole) return false;
+        if (selectedAccount !== 'ALL' && t.assigneeAccount !== selectedAccount) return false;
+        if (selectedMilestone === 'NO_MILESTONE') {
+          if (t.milestoneId && milestones.some((m) => m.id === t.milestoneId)) return false;
+        } else if (selectedMilestone !== 'ALL') {
+          if (t.milestoneId !== selectedMilestone) return false;
+        }
+        if (selectedStatus !== 'ALL' && t.status !== selectedStatus) return false;
+        return true;
+      })
+      .sort(sortByPriority);
+  }, [tasks, subTab, currentUser, searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus, milestones]);
 
   const ROLE_ORDER: Specialization[] = roles.map((r) => r.code);
 
@@ -214,7 +235,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
     roleMap.forEach((tasksInRole, role) => {
       if (tasksInRole.length > 0) {
-        groups.push({ role, tasks: tasksInRole });
+        groups.push({ role, tasks: [...tasksInRole].sort(sortByPriority) });
       }
     });
 
@@ -261,10 +282,21 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   // Reusable task row renderer
   const renderTaskRow = (t: Task, displayIdx: number) => {
     const isTopEffort = isTopEffortAccount(t.assigneeAccount);
+    const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
     const deadline = getWeekDeadline(t.weekNumber || selectedWeek, t.year || selectedYear);
-    const isPastDeadline = new Date(simulatedTime).getTime() > deadline.getTime();
-    const isUnsubmittedLate = !t.lastSubmittedAt && isPastDeadline && !!t.assigneeAccount;
-    const isSubmittedLate = !!t.isSubmittedLate;
+    const nowTime = new Date(simulatedTime).getTime();
+    const isPastDeadline = nowTime > deadline.getTime();
+    const isReportWindowOpen = nowTime >= sundayNoon.getTime();
+
+    const isTaskDone = t.status === 'Done' || t.completionPercentage === 100;
+    // A task is officially reported if it is Done 100% OR submitted at/after Sunday 12:00 PM of that week
+    const isReported =
+      isTaskDone ||
+      (!!t.lastSubmittedAt &&
+        new Date(t.lastSubmittedAt).getTime() >= sundayNoon.getTime());
+
+    const isUnsubmittedLate = !isReported && isPastDeadline && !!t.assigneeAccount;
+    const isSubmittedLate = isReported && !isTaskDone && !!t.isSubmittedLate;
     const isLate = isSubmittedLate || isUnsubmittedLate;
     const isAssignedToMe = canReportTask(t);
     const hasAlert = isLate || isTopEffort;
@@ -345,10 +377,21 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         {/* Effort */}
         <td className="py-3 px-3 text-center font-mono">
           <div className="flex flex-col items-center">
-            {t.lastSubmittedAt ? (
+            {isReported ? (
               <>
                 <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                  {t.actualEffort ?? 0}h
+                  {t.actualEffort ?? t.estimatedEffort}h
+                </span>
+                {t.actualEffort !== undefined && t.actualEffort !== t.estimatedEffort && (
+                  <span className="text-[9px] text-slate-400 dark:text-slate-400">
+                    est: {t.estimatedEffort}h
+                  </span>
+                )}
+              </>
+            ) : t.actualEffort !== undefined && t.actualEffort > 0 ? (
+              <>
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {t.actualEffort}h
                 </span>
                 {t.actualEffort !== t.estimatedEffort && (
                   <span className="text-[9px] text-slate-400 dark:text-slate-400">
@@ -491,18 +534,24 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               <button
                 onClick={() => setReportingTask(t)}
                 className={`whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-xs hover:shadow-md active:scale-95 transition-all ${
-                  t.lastSubmittedAt
+                  isReported
                     ? 'bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-300 hover:text-white dark:hover:text-white border border-emerald-200/90 dark:border-emerald-800'
+                    : isReportWindowOpen
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
                     : 'bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 hover:text-white dark:hover:text-white border border-indigo-200/90 dark:border-indigo-800'
                 }`}
                 title={
-                  t.lastSubmittedAt
-                    ? `Đã nộp báo cáo (${t.actualEffort || 0}h). Bấm để cập nhật lại nếu cần`
-                    : 'Nộp báo cáo số giờ làm & % hoàn thành'
+                  isReported
+                    ? `Đã nộp báo cáo tuần (${t.actualEffort || 0}h). Bấm để cập nhật lại nếu cần`
+                    : isReportWindowOpen
+                    ? 'Cổng báo cáo tuần đang mở (12h - 22h CN). Bấm để nộp báo cáo tuần'
+                    : 'Cập nhật tiến độ task (Cổng nộp báo cáo tuần mở từ 12:00 trưa Chủ Nhật)'
                 }
               >
                 <Clock className="w-3.5 h-3.5 shrink-0" />
-                <span>{t.lastSubmittedAt ? 'Đã báo cáo' : 'Báo cáo'}</span>
+                <span>
+                  {isReported ? 'Đã báo cáo' : isReportWindowOpen ? 'Báo cáo' : 'Cập nhật'}
+                </span>
               </button>
             )}
 
@@ -755,7 +804,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                                 <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
                               </tr>
                             )}
-                            {accTasks.map((t) => {
+                            {[...accTasks].sort(sortByPriority).map((t) => {
                               const taskIdx = tasks.findIndex((item) => item.id === t.id);
                               const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
                               return renderTaskRow(t, displayIdx);

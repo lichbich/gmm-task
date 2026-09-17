@@ -82,6 +82,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
     },
   ];
 
+  const getPriorityRank = (priority?: string): number => {
+    if (priority === 'High') return 1;
+    if (priority === 'Low') return 3;
+    return 2;
+  };
+
+  const sortByPriority = (a: Task, b: Task): number => {
+    const rankA = getPriorityRank(a.priority);
+    const rankB = getPriorityRank(b.priority);
+    return rankA - rankB;
+  };
+
   const isTopEffortAccount = (acc: string) => {
     if (!acc) return false;
     const award = weeklyAwards.find((w) => w.account === acc);
@@ -186,7 +198,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
       {/* Kanban Columns Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-stretch h-[calc(100vh-210px)] min-h-[640px] max-h-[900px]">
         {columns.map((col) => {
-          const colTasks = tasks.filter((t) => t.status === col.status);
+          const colTasks = [...tasks.filter((t) => t.status === col.status)].sort(sortByPriority);
           const isOver = dragOverColumn === col.status;
           const activeTask = tasks.find((t) => t.id === draggedTaskIdRef.current);
           const isTargetDifferent = activeTask && activeTask.status !== col.status;
