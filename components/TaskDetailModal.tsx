@@ -17,6 +17,7 @@ import {
   FolderOpen,
   Trash2,
   Edit3,
+  RotateCcw,
   FileText,
   User,
   Calendar,
@@ -31,6 +32,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
+import { parseNoteLine, formatNewNoteLine, formatEditedNoteLine } from '../lib/notesHelper';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -78,8 +80,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   const [notesText, setNotesText] = useState('');
   const [quickComment, setQuickComment] = useState('');
-  const [isEditingRaw, setIsEditingRaw] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
 
   // Task description states
   const [descText, setDescText] = useState('');
@@ -95,7 +98,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setDescText(task.description || '');
       setQuickComment('');
       setIsSaved(false);
-      setIsEditingRaw(false);
+      setEditingNoteIndex(null);
+      setEditingNoteText('');
       setIsEditingDesc(false);
       setIsSavedDesc(false);
       if (task.notes) {
@@ -186,11 +190,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     e.preventDefault();
     if (!quickComment.trim()) return;
 
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const userRole = currentUser?.specializations?.[0] || currentUser?.role || 'Member';
-    const senderTag = currentUser ? `${currentUser.name} (${userRole})` : 'Thành viên';
-    const newEntry = `[${senderTag} - ${timeStr}]: ${quickComment.trim()}`;
+    const newEntry = formatNewNoteLine(quickComment, currentUser);
     const updated = notesText ? `${notesText}\n${newEntry}` : newEntry;
 
     setNotesText(updated);
@@ -200,13 +200,49 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     setTimeout(() => setIsSaved(false), 2500);
   };
 
-  // Handle direct raw notes update
-  const handleSaveRawNotes = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateTaskNotes(task.id, notesText);
-    setIsEditingRaw(false);
+  const handleStartEditNote = (index: number, currentBody: string) => {
+    setEditingNoteIndex(index);
+    setEditingNoteText(currentBody);
+  };
+
+  const handleCancelEditNote = () => {
+    setEditingNoteIndex(null);
+    setEditingNoteText('');
+  };
+
+  const handleSaveEditNote = (index: number) => {
+    if (!editingNoteText.trim()) return;
+
+    const updatedLine = formatEditedNoteLine(noteLines[index], editingNoteText, currentUser);
+    const updatedLines = [...noteLines];
+    updatedLines[index] = updatedLine;
+    const updated = updatedLines.join('\n');
+
+    setNotesText(updated);
+    updateTaskNotes(task.id, updated);
+    setEditingNoteIndex(null);
+    setEditingNoteText('');
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
+  };
+
+  const handleRecallNote = (index: number) => {
+    confirmDialog({
+      title: 'Thu hồi ghi chú',
+      message: 'Bạn có chắc chắn muốn thu hồi ghi chú này không? Ghi chú sẽ bị xóa khỏi luồng trao đổi.',
+      confirmText: 'Thu hồi',
+      type: 'danger',
+      onConfirm: () => {
+        const updatedLines = noteLines.filter((_, idx) => idx !== index);
+        const updated = updatedLines.join('\n');
+        setNotesText(updated);
+        updateTaskNotes(task.id, updated);
+        if (editingNoteIndex === index) {
+          setEditingNoteIndex(null);
+          setEditingNoteText('');
+        }
+      },
+    });
   };
 
   const handleDelete = () => {
@@ -522,119 +558,156 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                Luồng Trao Đổi & Ghi Chú Task (Notes & Discussion):
+                Luồng Trao Đổi & Ghi Chú Task ({noteLines.length}):
               </label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditingRaw(!isEditingRaw)}
-                  className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-medium flex items-center gap-1 hover:underline"
-                >
-                  <Edit3 className="w-3 h-3" />
-                  {isEditingRaw ? 'Quay lại xem trao đổi' : 'Sửa trực tiếp toàn bộ note'}
-                </button>
-              </div>
             </div>
 
-            {isEditingRaw ? (
-              /* Direct RAW Note Edit */
-              <form onSubmit={handleSaveRawNotes} className="space-y-2">
-                <textarea
-                  rows={5}
-                  value={notesText}
-                  onChange={(e) => setNotesText(e.target.value)}
-                  placeholder="Nhập toàn bộ ghi chú công việc..."
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-2xl p-3 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 resize-none font-mono"
-                />
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingRaw(false)}
-                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-xl transition"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    Lưu Thay Đổi Note
-                  </button>
-                </div>
-              </form>
-            ) : (
-              /* Rich Thread Display & Quick Discussion Post */
-              <div className="space-y-2.5">
-                {/* Discussion History Container */}
-                <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-52 overflow-y-auto custom-scrollbar space-y-2">
-                  {noteLines.length === 0 ? (
-                    <div className="text-center py-5 text-slate-400 dark:text-slate-400 text-xs flex flex-col items-center gap-1.5">
-                      <MessageSquare className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-                      <span>Chưa có ghi chú hoặc trao đổi nào cho task này.</span>
-                      <span className="text-[11px] text-slate-400 dark:text-slate-400">Hãy nhập phản hồi bên dưới để bắt đầu trao đổi luồng task!</span>
-                    </div>
-                  ) : (
-                    noteLines.map((line, idx) => {
-                      const isTaggedMessage = line.startsWith('[') && line.includes(']:');
-                      if (isTaggedMessage) {
-                        const match = line.match(/^\[(.*?)\]:\s*(.*)$/);
-                        const authorInfo = match ? match[1] : '';
-                        const messageBody = match ? match[2] : line;
-                        return (
-                          <div
-                            key={idx}
-                            className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 shadow-2xs text-xs space-y-1"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-semibold text-indigo-600 dark:text-indigo-300 text-[11px] bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-800/80">
-                                {authorInfo}
-                              </span>
-                            </div>
-                            <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed whitespace-pre-wrap pl-1">
-                              {messageBody}
-                            </p>
-                          </div>
-                        );
-                      }
+            {/* Rich Thread Display & Quick Discussion Post */}
+            <div className="space-y-2.5">
+              {/* Discussion History Container */}
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-56 overflow-y-auto custom-scrollbar space-y-2">
+                {noteLines.length === 0 ? (
+                  <div className="text-center py-5 text-slate-400 dark:text-slate-400 text-xs flex flex-col items-center gap-1.5">
+                    <MessageSquare className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                    <span>Chưa có ghi chú hoặc trao đổi nào cho task này.</span>
+                    <span className="text-[11px] text-slate-400 dark:text-slate-400">Hãy nhập phản hồi bên dưới để bắt đầu trao đổi luồng task!</span>
+                  </div>
+                ) : (
+                  noteLines.map((line, idx) => {
+                    const parsed = parseNoteLine(line, currentUser);
+                    const isEditingThis = editingNoteIndex === idx;
+
+                    if (parsed.isTagged) {
                       return (
                         <div
                           key={idx}
-                          className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap"
+                          className={`rounded-xl p-2.5 shadow-2xs text-xs space-y-1.5 transition ${
+                            parsed.isMyMessage
+                              ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/90 dark:border-indigo-800/80 ml-2'
+                              : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 mr-2'
+                          }`}
                         >
-                          {line}
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`font-semibold text-[11px] px-2 py-0.5 rounded-md ${
+                                  parsed.isMyMessage
+                                    ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 font-bold'
+                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                }`}
+                              >
+                                {parsed.baseAuthor}
+                              </span>
+
+                              {parsed.editedTime && (
+                                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-normal italic">
+                                  <Clock className="w-3 h-3 text-slate-400" />
+                                  (đã sửa {parsed.editedTime})
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Author Actions (Only for message owner) */}
+                            {parsed.isMyMessage && !isEditingThis && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditNote(idx, parsed.messageBody)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition"
+                                  title="Chỉnh sửa nội dung ghi chú của bạn"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  <span>Sửa</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRecallNote(idx)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition"
+                                  title="Thu hồi ghi chú này"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>Thu hồi</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Message Body or Inline Editor */}
+                          {isEditingThis ? (
+                            <div className="pt-1 space-y-2">
+                              <textarea
+                                rows={2}
+                                value={editingNoteText}
+                                onChange={(e) => setEditingNoteText(e.target.value)}
+                                placeholder="Nhập nội dung ghi chú chỉnh sửa..."
+                                className="w-full bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none leading-relaxed"
+                                autoFocus
+                              />
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={handleCancelEditNote}
+                                  className="px-2.5 py-1 bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium rounded-lg transition"
+                                >
+                                  Hủy
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!editingNoteText.trim()}
+                                  onClick={() => handleSaveEditNote(idx)}
+                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-lg shadow-xs transition flex items-center gap-1"
+                                >
+                                  <Save className="w-3 h-3" />
+                                  Lưu thay đổi
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed whitespace-pre-wrap pl-1 break-words">
+                              {parsed.messageBody}
+                            </p>
+                          )}
                         </div>
                       );
-                    })
-                  )}
-                </div>
+                    }
 
-                {/* Collaborative Input Field for ANY team member */}
-                <form onSubmit={handleSendComment} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={quickComment}
-                    onChange={(e) => setQuickComment(e.target.value)}
-                    placeholder={`Gửi ghi chú/trao đổi luồng task với vai trò ${currentUser?.name || 'thành viên'}...`}
-                    className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!quickComment.trim()}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 shrink-0 active:scale-95"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    Gửi Phản Hồi
-                  </button>
-                </form>
-
-                {isSaved && (
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-fade-in">
-                    <CheckCircle className="w-3.5 h-3.5" /> Đã lưu và đồng bộ ghi chú task thành công!
-                  </div>
+                    return (
+                      <div
+                        key={idx}
+                        className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap"
+                      >
+                        {line}
+                      </div>
+                    );
+                  })
                 )}
               </div>
-            )}
+
+              {/* Collaborative Input Field for ANY team member */}
+              <form onSubmit={handleSendComment} className="flex gap-2">
+                <input
+                  type="text"
+                  value={quickComment}
+                  onChange={(e) => setQuickComment(e.target.value)}
+                  placeholder={`Gửi ghi chú/trao đổi luồng task với vai trò ${currentUser?.name || 'thành viên'}...`}
+                  className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                />
+                <button
+                  type="submit"
+                  disabled={!quickComment.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 shrink-0 active:scale-95"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Gửi Phản Hồi
+                </button>
+              </form>
+
+              {isSaved && (
+                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-fade-in">
+                  <CheckCircle className="w-3.5 h-3.5" /> Đã lưu và đồng bộ ghi chú task thành công!
+                </div>
+              )}
+            </div>
           </div>
 
           {/* SECTION: Lịch Sử & Nhật Ký Cập Nhật (Activity Log) */}
