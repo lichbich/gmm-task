@@ -70,46 +70,65 @@ html.dark [class*="to-slate-50"] {
 }
 
 /* Fix Role Group Header Rows in Tables (BA, Design, FE, BE, QA Header Rows) */
-html.dark [class*="bg-purple-50"],
+html.dark [class*="bg-purple-50"]:not([class*="bg-purple-500"]),
 html.dark [class*="bg-purple-100"] {
   background-color: #191226 !important; /* Pitch Dark Navy-Purple */
   border-color: #2b1d42 !important;
 }
 
-html.dark [class*="bg-amber-50"],
+html.dark [class*="bg-amber-50"]:not([class*="bg-amber-500"]),
 html.dark [class*="bg-amber-100"] {
   background-color: #20150c !important; /* Pitch Dark Navy-Amber */
   border-color: #382516 !important;
 }
 
-html.dark [class*="bg-blue-50"],
+html.dark [class*="bg-blue-50"]:not([class*="bg-blue-500"]),
 html.dark [class*="bg-blue-100"] {
   background-color: #0e172a !important; /* Pitch Dark Navy-Blue */
   border-color: #1b2a4c !important;
 }
 
-html.dark [class*="bg-emerald-50"],
+html.dark [class*="bg-emerald-50"]:not([class*="bg-emerald-500"]),
 html.dark [class*="bg-emerald-100"] {
   background-color: #0a1b15 !important; /* Pitch Dark Navy-Emerald */
   border-color: #15382b !important;
 }
 
-html.dark [class*="bg-rose-50"],
+html.dark [class*="bg-rose-50"]:not([class*="bg-rose-500"]),
 html.dark [class*="bg-rose-100"] {
   background-color: #221016 !important; /* Pitch Dark Navy-Rose */
   border-color: #3b1c26 !important;
 }
 
-html.dark [class*="bg-indigo-50"],
+html.dark [class*="bg-indigo-50"]:not([class*="bg-indigo-500"]),
 html.dark [class*="bg-indigo-100"] {
   background-color: #111a2e !important; /* Pitch Dark Navy-Indigo */
   border-color: #1e2e50 !important;
 }
 
-html.dark [class*="bg-cyan-50"],
+html.dark [class*="bg-cyan-50"]:not([class*="bg-cyan-500"]),
 html.dark [class*="bg-cyan-100"] {
   background-color: #0b1a28 !important; /* Pitch Dark Navy-Cyan */
   border-color: #133248 !important;
+}
+
+/* Explicit Bright Indicators for Note Icon, Unread Dot & Avatar Online Dot in Dark Theme */
+html.dark .bg-amber-400,
+html.dark [class*="bg-amber-400"] {
+  background-color: #fbbf24 !important;
+  color: #0f172a !important;
+}
+
+html.dark .bg-amber-500,
+html.dark [class*="bg-amber-500"] {
+  background-color: #f59e0b !important;
+}
+
+html.dark .bg-emerald-400,
+html.dark [class*="bg-emerald-400"],
+html.dark .bg-emerald-500,
+html.dark [class*="bg-emerald-500"] {
+  background-color: #10b981 !important;
 }
 
 /* Tab Hover States - Dark Navy-Slate Hover ONLY (No Light Gray/White Hovers!) */
@@ -239,6 +258,10 @@ html.dark .text-amber-600,
 html.dark .text-amber-700,
 html.dark .text-amber-800 {
   color: #fbbf24 !important; /* Bright Amber Yellow */
+}
+
+html.dark .text-amber-950 {
+  color: #0f172a !important; /* Pure dark icon/text for contrast on amber buttons */
 }
 
 html.dark .text-rose-500,

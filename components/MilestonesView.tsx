@@ -782,10 +782,10 @@ export const MilestonesView: React.FC = () => {
                                     }}
                                     className={`relative p-1.5 rounded-lg transition active:scale-95 ${
                                       isUnread
-                                        ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 ring-offset-1 shadow-amber-400/40 animate-pulse'
+                                        ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 dark:ring-amber-400 ring-offset-1 dark:ring-offset-slate-900 shadow-amber-400/40 animate-pulse'
                                         : t.notes
-                                        ? 'text-slate-600 hover:text-amber-600 hover:bg-amber-50'
-                                        : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                                        ? 'text-slate-600 dark:text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800'
+                                        : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
                                     }`}
                                     title={
                                       isUnread
@@ -795,7 +795,7 @@ export const MilestonesView: React.FC = () => {
                                   >
                                     <MessageSquare className="w-3.5 h-3.5" />
                                     {isUnread && (
-                                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white shadow-xs" />
+                                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white dark:border-slate-900 shadow-xs" />
                                     )}
                                   </button>
                                 );
@@ -1040,10 +1040,10 @@ export const MilestonesView: React.FC = () => {
                           }}
                           className={`relative p-1.5 rounded-lg transition active:scale-95 ${
                             isUnread
-                              ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 ring-offset-1 shadow-amber-400/40 animate-pulse'
+                              ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 dark:ring-amber-400 ring-offset-1 dark:ring-offset-slate-900 shadow-amber-400/40 animate-pulse'
                               : t.notes
-                              ? 'text-slate-600 hover:text-amber-600 hover:bg-amber-50'
-                              : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                              ? 'text-slate-600 dark:text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800'
+                              : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
                           }`}
                           title={
                             isUnread
@@ -1053,7 +1053,7 @@ export const MilestonesView: React.FC = () => {
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                           {isUnread && (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white shadow-xs" />
+                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full border-2 border-white dark:border-slate-900 shadow-xs" />
                           )}
                         </button>
                       );

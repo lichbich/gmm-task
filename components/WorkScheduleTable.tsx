@@ -438,10 +438,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   }}
                   className={`relative p-1.5 rounded-xl transition-all shadow-xs active:scale-95 ${
                     isUnread
-                      ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 ring-offset-1 shadow-amber-400/40 animate-pulse'
+                      ? 'bg-amber-400 hover:bg-amber-500 text-amber-950 font-bold ring-2 ring-amber-300 dark:ring-amber-400 ring-offset-1 dark:ring-offset-slate-900 shadow-amber-400/40 animate-pulse'
                       : t.notes
-                      ? 'bg-slate-100 hover:bg-amber-50 hover:text-amber-600 text-slate-600'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-400'
+                      ? 'bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-slate-700 text-slate-600 dark:text-amber-400'
+                      : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-400'
                   }`}
                   title={
                     isUnread
@@ -451,7 +451,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                   {isUnread && (
-                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-white shadow-xs" />
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-white dark:border-slate-900 shadow-xs" />
                   )}
                 </button>
               );

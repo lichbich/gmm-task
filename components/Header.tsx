@@ -147,8 +147,8 @@ export const Header: React.FC<HeaderProps> = ({
                     <span
                       className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-slate-900 shadow-xs ${
                         (userRecord?.password && userRecord.password.trim() !== '') || (currentUser.password && currentUser.password.trim() !== '')
-                          ? 'bg-emerald-500'
-                          : 'bg-slate-400'
+                          ? 'bg-emerald-500 dark:bg-emerald-400'
+                          : 'bg-slate-400 dark:bg-slate-400'
                       }`}
                       title={
                         (userRecord?.password && userRecord.password.trim() !== '') || (currentUser.password && currentUser.password.trim() !== '')
