@@ -176,7 +176,15 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const getRoleConfig = (roleCode: string) => {
     const rObj = roles.find((r) => r.code === roleCode);
     const color = rObj?.color || 'indigo';
-    const label = rObj ? `${rObj.code} (${rObj.name})` : `${roleCode} Team`;
+
+    // Rút gọn tên chuyên môn cho mobile (bỏ phần chú thích tiếng Việt dài dòng)
+    let cleanMobileName = rObj ? rObj.name : roleCode;
+    cleanMobileName = cleanMobileName
+      .replace(/\s*\([^)]*(Nghiệp vụ|Thiết kế|Kiểm thử|Lập trình|Vận hành|Hạ tầng|Phân tích|FE|BE)[^)]*\)/gi, '')
+      .trim();
+
+    const desktopLabel = rObj ? `${rObj.code} (${rObj.name})` : `${roleCode} Team`;
+    const mobileLabel = cleanMobileName || roleCode;
 
     const colorClasses: Record<string, { bg: string; text: string; badgeBg: string; border: string }> = {
       purple: {
@@ -230,7 +238,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     };
 
     return {
-      label,
+      label: desktopLabel,
+      mobileLabel,
       ...(colorClasses[color] || colorClasses.indigo),
     };
   };
@@ -1182,20 +1191,20 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                 return (
                   <div key={`mobile-role-${group.role}`} className="space-y-2.5">
                     {/* Mobile Role Group Header */}
-                    <div className={`${cfg.bg} border ${cfg.border} p-3 rounded-2xl flex items-center justify-between shadow-2xs`}>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${cfg.badgeBg}`}>
+                    <div className={`${cfg.bg} border ${cfg.border} p-2.5 sm:p-3 rounded-2xl flex items-center justify-between shadow-2xs gap-2`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${cfg.badgeBg}`}>
                           {group.role}
                         </span>
-                        <span className={`text-xs font-bold ${cfg.text}`}>
-                          {cfg.label}
+                        <span className={`text-xs font-bold ${cfg.text} truncate`}>
+                          {cfg.mobileLabel}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-[11px]">
-                        <span className="bg-white/80 dark:bg-slate-800 px-2 py-0.5 rounded-full font-semibold text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
+                      <div className="flex items-center gap-1.5 text-[11px] shrink-0">
+                        <span className="bg-white/90 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap">
                           {group.tasks.length} task
                         </span>
-                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
                           {group.tasks.some((item) => !!item.lastSubmittedAt) ? groupTotalActual : groupTotalEst}h
                         </span>
                       </div>
@@ -1256,8 +1265,16 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
       {/* MOBILE FILTER MODAL / BOTTOM SHEET */}
       {isMobileFilterOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 dark:text-slate-100">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsMobileFilterOpen(false);
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-300 animate-in fade-in"
+        >
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 dark:text-slate-100 transition-all duration-300 ease-out animate-in slide-in-from-bottom-8 sm:slide-in-from-bottom-0 sm:zoom-in-95">
+            {/* Drag Handle on Mobile */}
+            <div className="sm:hidden w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-2.5 mb-0.5 shrink-0" />
+
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-800/40">
               <div className="flex items-center gap-2">

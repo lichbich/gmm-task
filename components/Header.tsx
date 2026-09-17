@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserProfileModal } from './UserProfileModal';
 import { GMMLogo } from './common/GMMLogo';
@@ -38,6 +38,39 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { currentUser, users, logout, theme: currentTheme, toggleTheme } = useApp();
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [showHeader, setShowHeader] = useState(true);
+
+  useEffect(() => {
+    let prevScrollY = window.scrollY;
+    const threshold = 10;
+
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+
+      // Luôn hiện khi ở gần đầu trang
+      if (currentScrollY <= 40) {
+        setShowHeader(true);
+        prevScrollY = currentScrollY;
+        return;
+      }
+
+      const delta = currentScrollY - prevScrollY;
+      if (Math.abs(delta) < threshold) return;
+
+      if (delta > 0 && currentScrollY > 60) {
+        // Vuốt lên / cuộn xuống nội dung -> ẩn header trên mobile để tăng không gian
+        setShowHeader(false);
+      } else if (delta < 0) {
+        // Vuốt xuống / cuộn ngược lên -> hiện header
+        setShowHeader(true);
+      }
+
+      prevScrollY = currentScrollY;
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const userRecord = currentUser
     ? users.find((u) => u.account.toLowerCase() === currentUser.account.toLowerCase()) || currentUser
@@ -66,7 +99,12 @@ export const Header: React.FC<HeaderProps> = ({
   const theme = getRoleTheme(currentUser?.role);
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <>
+      <header
+        className={`bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 shadow-sm transition-transform duration-300 ease-in-out ${
+          showHeader ? 'translate-y-0' : '-translate-y-full md:translate-y-0'
+        }`}
+      >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* TOP HEADER ROW: LOGO, MAIN 3 MANAGEMENT TABS, USER PROFILE */}
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-4">
@@ -297,121 +335,122 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
       </div>
-
-      {/* MOBILE FLOATING BOTTOM NAVIGATION BAR */}
-      {activeMainSection === 'tasks' && (
-        <nav
-          aria-label="Mobile Navigation"
-          className="md:hidden fixed bottom-3 inset-x-3 z-40 max-w-md mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] rounded-2xl p-1.5 mb-[env(safe-area-inset-bottom)]"
-        >
-          <div className="grid grid-cols-5 items-center gap-1">
-            {/* 1. Schedule / Task Table */}
-            <button
-              onClick={() => setActiveTaskTab('schedule')}
-              className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
-                activeTaskTab === 'schedule'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
-              }`}
-            >
-              <LayoutGrid className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'schedule' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
-              <span
-                className={`text-[10px] sm:text-[11px] leading-tight mt-0.5 truncate max-w-full ${
-                  activeTaskTab === 'schedule' ? 'font-bold text-white' : 'font-medium'
-                }`}
-              >
-                Bảng Task
-              </span>
-            </button>
-
-            {/* 2. Milestones */}
-            <button
-              onClick={() => setActiveTaskTab('milestones')}
-              className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
-                activeTaskTab === 'milestones'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
-              }`}
-            >
-              <ListOrdered className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'milestones' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
-              <span
-                className={`text-[10px] sm:text-[11px] leading-tight mt-0.5 truncate max-w-full ${
-                  activeTaskTab === 'milestones' ? 'font-bold text-white' : 'font-medium'
-                }`}
-              >
-                Milestones
-              </span>
-            </button>
-
-            {/* 3. Kanban */}
-            <button
-              onClick={() => setActiveTaskTab('kanban')}
-              className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
-                activeTaskTab === 'kanban'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
-              }`}
-            >
-              <Kanban className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'kanban' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
-              <span
-                className={`text-[10px] sm:text-[11px] leading-tight mt-0.5 truncate max-w-full ${
-                  activeTaskTab === 'kanban' ? 'font-bold text-white' : 'font-medium'
-                }`}
-              >
-                Kanban
-              </span>
-            </button>
-
-            {/* 4. Awards */}
-            <button
-              onClick={() => setActiveTaskTab('awards')}
-              className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
-                activeTaskTab === 'awards'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
-              }`}
-            >
-              <Trophy
-                className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${
-                  activeTaskTab === 'awards' ? 'scale-105 text-white' : 'text-amber-500 group-active:scale-90'
-                }`}
-              />
-              <span
-                className={`text-[10px] sm:text-[11px] leading-tight mt-0.5 truncate max-w-full ${
-                  activeTaskTab === 'awards' ? 'font-bold text-white' : 'font-medium'
-                }`}
-              >
-                Thưởng/Phạt
-              </span>
-            </button>
-
-            {/* 5. History */}
-            <button
-              onClick={() => setActiveTaskTab('history')}
-              className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
-                activeTaskTab === 'history'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
-              }`}
-            >
-              <History className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'history' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
-              <span
-                className={`text-[10px] sm:text-[11px] leading-tight mt-0.5 truncate max-w-full ${
-                  activeTaskTab === 'history' ? 'font-bold text-white' : 'font-medium'
-                }`}
-              >
-                Lịch Sử
-              </span>
-            </button>
-          </div>
-        </nav>
-      )}
-
-      {/* Profile & Password Modal */}
-      <UserProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-      />
     </header>
-  );
+
+    {/* MOBILE FLOATING BOTTOM NAVIGATION BAR */}
+    {activeMainSection === 'tasks' && (
+      <nav
+        aria-label="Mobile Navigation"
+        className="md:hidden fixed bottom-3 inset-x-3 z-40 max-w-md mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] rounded-2xl p-1.5 mb-[env(safe-area-inset-bottom)]"
+      >
+        <div className="grid grid-cols-5 items-center gap-0.5 sm:gap-1">
+          {/* 1. Schedule / Task Table */}
+          <button
+            onClick={() => setActiveTaskTab('schedule')}
+            className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTaskTab === 'schedule'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <LayoutGrid className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'schedule' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
+            <span
+              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+                activeTaskTab === 'schedule' ? 'font-bold text-white' : 'font-medium'
+              }`}
+            >
+              Bảng Task
+            </span>
+          </button>
+
+          {/* 2. Milestones */}
+          <button
+            onClick={() => setActiveTaskTab('milestones')}
+            className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTaskTab === 'milestones'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <ListOrdered className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'milestones' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
+            <span
+              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+                activeTaskTab === 'milestones' ? 'font-bold text-white' : 'font-medium'
+              }`}
+            >
+              Milestones
+            </span>
+          </button>
+
+          {/* 3. Kanban */}
+          <button
+            onClick={() => setActiveTaskTab('kanban')}
+            className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTaskTab === 'kanban'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Kanban className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'kanban' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
+            <span
+              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+                activeTaskTab === 'kanban' ? 'font-bold text-white' : 'font-medium'
+              }`}
+            >
+              Kanban
+            </span>
+          </button>
+
+          {/* 4. Awards */}
+          <button
+            onClick={() => setActiveTaskTab('awards')}
+            className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTaskTab === 'awards'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Trophy
+              className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${
+                activeTaskTab === 'awards' ? 'scale-105 text-white' : 'text-amber-500 group-active:scale-90'
+              }`}
+            />
+            <span
+              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+                activeTaskTab === 'awards' ? 'font-bold text-white' : 'font-medium'
+              }`}
+            >
+              Thưởng/Phạt
+            </span>
+          </button>
+
+          {/* 5. History */}
+          <button
+            onClick={() => setActiveTaskTab('history')}
+            className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTaskTab === 'history'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <History className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'history' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
+            <span
+              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+                activeTaskTab === 'history' ? 'font-bold text-white' : 'font-medium'
+              }`}
+            >
+              Lịch Sử
+            </span>
+          </button>
+        </div>
+      </nav>
+    )}
+
+    {/* Profile & Password Modal */}
+    <UserProfileModal
+      isOpen={isProfileModalOpen}
+      onClose={() => setIsProfileModalOpen(false)}
+    />
+  </>
+);
 };
