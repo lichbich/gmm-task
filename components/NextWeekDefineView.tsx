@@ -444,17 +444,17 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       )}
 
       {/* SECTION 1.5: UNFINISHED TASKS FROM CURRENT / PREVIOUS WEEK GROUPED BY MEMBER */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <Clock className="w-5 h-5 text-amber-500" />
+              <Clock className="w-5 h-5 text-amber-500 shrink-0" />
               <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">
                 Task Chưa Hoàn Thành Tuần {selectedWeek} ({currentWeekUnfinishedTasks.length} task)
               </h3>
               {currentWeekUnfinishedTasks.length > 0 && (
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs">
-                  {unfinishedTasksByMember.length} thành viên cần lên kế hoạch tiếp
+                  {unfinishedTasksByMember.length} thành viên
                 </span>
               )}
             </div>
@@ -464,14 +464,14 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
           </div>
 
           {currentWeekUnfinishedTasks.length > 1 && (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   const anyExpanded = Object.values(expandedMembers).some(Boolean);
                   toggleAllMembersExpanded(!anyExpanded);
                 }}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-xl transition active:scale-95"
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-xl transition active:scale-95 cursor-pointer"
               >
                 {Object.values(expandedMembers).some(Boolean) ? 'Thu gọn tất cả' : 'Mở rộng tất cả'}
               </button>
@@ -489,7 +489,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                     },
                   });
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
               >
                 <ArrowRight className="w-3.5 h-3.5" /> Chuyển tất cả sang Tuần {nextWeek}
               </button>
@@ -523,79 +523,83 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                   {/* Member Header (Click anywhere to Expand / Collapse) */}
                   <div
                     onClick={() => toggleMemberExpanded(group.account)}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-4.5 cursor-pointer select-none"
+                    className="p-4 sm:p-5 cursor-pointer select-none space-y-3"
                   >
-                    <div className="flex items-center gap-3">
+                    {/* Row 1: Avatar, Name, Account, Badges, and Chevron */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {/* Avatar / Initials */}
+                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center font-extrabold text-sm shadow-md shrink-0">
+                          {group.account.slice(0, 2).toUpperCase()}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 leading-tight">
+                              {displayName}
+                            </h4>
+                            <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold">
+                              @{group.account}
+                            </span>
+                            {isMe && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                                Chính bạn
+                              </span>
+                            )}
+                            {group.user?.specializations && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                {group.user.specializations.join(', ')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Chevron Arrow Toggle Indicator */}
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-transform duration-200 shrink-0 ${
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-transform duration-200 shrink-0 ${
                         isExpanded
                           ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 rotate-180'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600'
                       }`}>
                         <ChevronDown className="w-4 h-4" />
                       </div>
-
-                      {/* Avatar / Initials */}
-                      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
-                        {group.account.slice(0, 2).toUpperCase()}
-                      </div>
-
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                            {displayName}
-                          </h4>
-                          <span className="font-mono text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
-                            (@{group.account})
-                          </span>
-                          {isMe && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
-                              Chính bạn
-                            </span>
-                          )}
-                          {group.user?.specializations && (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                              {group.user.specializations.join(', ')}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          <span className="font-semibold text-amber-600 dark:text-amber-400">
-                            {group.tasks.length} task dở
-                          </span>
-                          <span>•</span>
-                          <span>
-                            Tổng Effort: <strong className="text-indigo-600 dark:text-indigo-400 font-mono">{group.totalHours}h</strong>
-                          </span>
-                          <span>•</span>
-                          <span className="text-[11px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition">
-                            {isExpanded ? 'Thu gọn' : 'Bấm để xem chi tiết task'}
-                          </span>
-                        </div>
-                      </div>
                     </div>
 
-                    {/* Member Quick Transfer All Button */}
-                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      {hasUnadded ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            group.unaddedTasks.forEach((t) => handleTransferToNextWeek(t));
-                          }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95"
-                          title={`Chuyển toàn bộ ${group.unaddedTasks.length} task dở của ${displayName} sang Tuần ${nextWeek}`}
-                        >
-                          <ArrowRight className="w-3.5 h-3.5" />
-                          <span>Chuyển tất cả ({group.unaddedTasks.length})</span>
-                        </button>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold rounded-xl">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                          <span>Đã chuyển hết</span>
+                    {/* Row 2: Stat Pills & Action Button */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <span className="px-2.5 py-1 bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold rounded-lg border border-amber-200 dark:border-amber-800">
+                          {group.tasks.length} task dở
                         </span>
-                      )}
+                        <span className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold rounded-lg border border-indigo-200 dark:border-indigo-800">
+                          Tổng Effort: <strong className="font-mono">{group.totalHours}h</strong>
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          ({isExpanded ? 'Bấm để thu gọn' : 'Bấm để xem danh sách'})
+                        </span>
+                      </div>
+
+                      {/* Member Quick Transfer All Button */}
+                      <div className="shrink-0 pt-1 sm:pt-0" onClick={(e) => e.stopPropagation()}>
+                        {hasUnadded ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              group.unaddedTasks.forEach((t) => handleTransferToNextWeek(t));
+                            }}
+                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95 cursor-pointer"
+                            title={`Chuyển toàn bộ ${group.unaddedTasks.length} task dở của ${displayName} sang Tuần ${nextWeek}`}
+                          >
+                            <ArrowRight className="w-3.5 h-3.5" />
+                            <span>Chuyển tất cả ({group.unaddedTasks.length}) sang Tuần {nextWeek}</span>
+                          </button>
+                        ) : (
+                          <span className="w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold rounded-xl">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>Đã chuyển hết sang Tuần {nextWeek}</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -615,50 +619,79 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                           return (
                             <div
                               key={t.id}
-                              className="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-700/80 flex flex-col justify-between space-y-3 hover:border-amber-300 dark:hover:border-amber-500/60 transition shadow-2xs"
+                              className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 flex flex-col justify-between space-y-3.5 hover:border-amber-300 dark:hover:border-amber-500/60 transition shadow-sm"
                             >
-                              <div className="space-y-1.5">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                                    {t.role} • {t.status} ({t.completionPercentage}%)
-                                  </span>
-                                  <span className="text-[10px] font-mono text-slate-400">
-                                    Tuần {t.weekNumber} • Est: <strong className="text-indigo-600 dark:text-indigo-400">{t.estimatedEffort}h</strong>
+                              {/* Header row: Role, Status, Effort */}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                                      {t.role}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-lg text-[11px] font-semibold border ${
+                                      t.status === 'In Progress'
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                                    }`}>
+                                      {t.status} ({t.completionPercentage}%)
+                                    </span>
+                                  </div>
+
+                                  <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/60 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-800/60">
+                                    Est: {t.estimatedEffort}h
                                   </span>
                                 </div>
 
+                                {/* Task Title */}
                                 <h5
                                   onClick={() => setViewingDetailTask(t)}
-                                  className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-snug line-clamp-2 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition"
+                                  className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition"
                                   title="Bấm để xem chi tiết task"
                                 >
                                   {t.title}
                                 </h5>
 
+                                {/* Milestone (if any) */}
                                 {milestone && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-800">
-                                    <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> {milestone.title}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50/70 dark:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-indigo-100 dark:border-indigo-800/60">
+                                    <Flag className="w-3 h-3 text-indigo-500 shrink-0" />
+                                    <span className="font-semibold text-[11px] leading-tight break-words">{milestone.title}</span>
+                                  </div>
                                 )}
                               </div>
 
-                              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-                                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                                  Người làm: <strong className="text-indigo-600 dark:text-indigo-400">@{t.assigneeAccount}</strong>
-                                </span>
+                              {/* Assignee & Action Section */}
+                              <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                                {/* Full Assignee Info Row - NEVER clipped! */}
+                                <div className="flex items-center justify-between gap-2 text-xs">
+                                  <span className="text-slate-400 dark:text-slate-500 font-medium">Thành viên phụ trách:</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                      {t.assigneeAccount ? t.assigneeAccount.slice(0, 2).toUpperCase() : '??'}
+                                    </div>
+                                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                                      {displayName}
+                                    </span>
+                                    <span className="font-mono text-indigo-600 dark:text-indigo-400 text-[11px]">
+                                      (@{t.assigneeAccount})
+                                    </span>
+                                  </div>
+                                </div>
 
+                                {/* Action Button: Dedicated prominence */}
                                 {isAlreadyAdded ? (
-                                  <span className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 shadow-2xs shrink-0">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Đã chuyển
-                                  </span>
+                                  <div className="w-full py-2 px-3 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-1.5 shadow-2xs">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                    <span>Đã đưa vào kế hoạch Tuần {nextWeek}</span>
+                                  </div>
                                 ) : (
                                   <button
                                     onClick={() => handleTransferToNextWeek(t)}
-                                    className="flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition active:scale-95 shadow-2xs shrink-0"
+                                    className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl transition active:scale-98 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
                                     title={`Đưa task này vào kế hoạch Tuần ${nextWeek}`}
                                   >
-                                    <ArrowRight className="w-3.5 h-3.5" />
-                                    <span>Chuyển sang Tuần {nextWeek}</span>
+                                    <ArrowRight className="w-4 h-4" />
+                                    <span>Chuyển sang kế hoạch Tuần {nextWeek}</span>
                                   </button>
                                 )}
                               </div>

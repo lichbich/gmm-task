@@ -42,13 +42,13 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 modal-backdrop-transition ${
+      className={`fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white rounded-3xl p-6 sm:p-7 shadow-2xl max-w-sm w-full border border-slate-100 text-center space-y-4 relative modal-dialog-transition overflow-hidden ${
+        className={`bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-7 shadow-2xl max-w-sm w-full max-h-[92vh] overflow-y-auto border border-slate-100 text-center space-y-4 relative modal-dialog-transition ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         }`}
       >

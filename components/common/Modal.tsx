@@ -54,24 +54,24 @@ export const Modal: React.FC<ModalProps> = ({
           handleBackdropClick(e);
         }
       }}
-      className={`fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 modal-backdrop-transition ${
+      className={`fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full ${sizeClasses} p-6 sm:p-7 shadow-2xl text-slate-800 dark:text-slate-100 relative modal-dialog-transition overflow-hidden ${
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full ${sizeClasses} max-h-[92vh] flex flex-col p-4 sm:p-6 shadow-2xl text-slate-800 dark:text-slate-100 relative modal-dialog-transition overflow-hidden ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         } ${className}`}
       >
         {/* Header if title or icon provided */}
         {(title || icon || showCloseButton) && (
-          <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start justify-between gap-3 mb-3 sm:mb-4 shrink-0">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               {icon && <div className="shrink-0 mt-0.5">{icon}</div>}
               <div className="flex-1 min-w-0">
                 {title && (
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug">
+                  <h3 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug break-words">
                     {title}
                   </h3>
                 )}
@@ -87,7 +87,7 @@ export const Modal: React.FC<ModalProps> = ({
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-center transition active:scale-95 shrink-0 -mr-1 -mt-1"
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-center transition active:scale-95 shrink-0 -mr-1 -mt-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -96,10 +96,14 @@ export const Modal: React.FC<ModalProps> = ({
         )}
 
         {/* Modal Body */}
-        <div className={bodyClassName}>{children}</div>
+        <div className={`overflow-y-auto flex-1 min-h-0 overscroll-contain ${bodyClassName}`}>{children}</div>
 
         {/* Modal Footer */}
-        {footer && <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800">{footer}</div>}
+        {footer && (
+          <div className="mt-3 pt-3 sm:mt-5 sm:pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

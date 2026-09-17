@@ -64,8 +64,8 @@ export const LoginModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 modal-backdrop-animate">
-      <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl text-slate-800 space-y-6 relative overflow-hidden modal-content-animate">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 modal-backdrop-animate overflow-y-auto">
+      <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl w-full max-w-md p-5 sm:p-8 shadow-2xl text-slate-800 space-y-5 sm:space-y-6 relative overflow-y-auto max-h-[92vh] modal-content-animate">
         {/* Top Glow Background */}
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-200/40 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-violet-200/40 rounded-full blur-3xl pointer-events-none" />

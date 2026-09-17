@@ -141,13 +141,13 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
+      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl text-slate-800 dark:text-slate-100 max-h-[90vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-xl shadow-2xl text-slate-800 dark:text-slate-100 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         }`}
       >

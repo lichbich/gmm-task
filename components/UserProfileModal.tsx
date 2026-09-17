@@ -223,31 +223,31 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
+      className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
       <div
-        className={`bg-white border border-slate-200/90 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-slate-800 relative max-h-[90vh] flex flex-col modal-dialog-transition ${
+        className={`bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-slate-800 relative max-h-[92vh] flex flex-col modal-dialog-transition ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         }`}
       >
         {/* Modal Top Bar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0 bg-white">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
             <UserIcon className="w-4 h-4 text-indigo-600" />
             Hồ Sơ & Bảo Mật Nhân Viên
           </div>
           <button
             onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95"
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Main Content Container with custom-scrollbar */}
-        <div className="p-6 space-y-5 flex-1 overflow-y-auto custom-scrollbar min-h-0">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 flex-1 overflow-y-auto custom-scrollbar min-h-0 overscroll-contain">
           {/* User Profile Header (Sleek Dark Gradient Card) */}
           <div className="flex items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-slate-800 rounded-2xl p-4 shadow-md">
             <div className="flex items-center gap-3.5">
@@ -772,7 +772,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Fixed Modal Footer Controls */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 shrink-0 bg-slate-50/60 rounded-b-3xl">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 shrink-0 bg-slate-50/60 rounded-b-2xl sm:rounded-b-3xl">
           <button
             onClick={() => {
               handleClose();

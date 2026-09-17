@@ -325,18 +325,18 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
+      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl text-slate-800 dark:text-slate-100 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl text-slate-800 dark:text-slate-100 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         }`}
       >
         {/* Fixed Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 p-5 sm:px-6 sm:py-4 shrink-0 bg-white dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 p-4 sm:px-6 sm:py-4 shrink-0 bg-white dark:bg-slate-900">
           <div className="space-y-2 flex-1 pr-2 min-w-0">
             {/* Status & Category Badges */}
             <div className="flex items-center gap-2 flex-wrap">
@@ -561,52 +561,75 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             )}
           </div>
 
-          {/* Comprehensive Metadata Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-800/40 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
-            <div className="min-w-0">
-              <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Người phụ trách:</span>
-              <div className="flex items-start gap-1.5" title={assigneeUser ? `${assigneeUser.name} (@${task.assigneeAccount})` : task.assigneeAccount}>
-                <UserCheck className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <div className="font-semibold text-slate-800 dark:text-slate-100 text-xs break-words leading-tight">
-                    {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
+          {/* Comprehensive Metadata Section */}
+          <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
+            {/* Top row: Assignee and Milestone */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Assignee Card */}
+              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Người phụ trách:</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-xs shrink-0">
+                    {task.assigneeAccount ? task.assigneeAccount.slice(0, 2).toUpperCase() : '??'}
                   </div>
-                  {task.assigneeAccount && (
-                    <div className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 font-mono">
-                      @{task.assigneeAccount}
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-slate-800 dark:text-slate-100 text-xs leading-snug break-words">
+                      {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
                     </div>
-                  )}
+                    {task.assigneeAccount && (
+                      <div className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 font-mono">
+                        @{task.assigneeAccount}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              {/* Milestone Card */}
+              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Cột mốc Milestone:</span>
+                {milestone ? (
+                  <div className="flex items-start gap-1.5 text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/60 px-2.5 py-1.5 rounded-lg">
+                    <Flag className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
+                    <span className="font-semibold text-xs leading-snug break-words flex-1">{milestone.title}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-lg">
+                    <FolderOpen className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="font-medium text-xs">Ngoài Milestone</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="min-w-0">
-              <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Cột mốc Milestone:</span>
-              {milestone ? (
-                <span className="inline-flex items-center gap-1 font-medium text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/60 px-2 py-0.5 rounded-md truncate max-w-full" title={milestone.title}>
-                  <Flag className="w-3 h-3 text-indigo-500 dark:text-indigo-400 shrink-0" />
-                  <span className="truncate">{milestone.title}</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md">
-                  <FolderOpen className="w-3 h-3 text-slate-400 shrink-0" />
-                  Ngoài Milestone
-                </span>
-              )}
-            </div>
+            {/* Bottom row: Effort and Completion Progress */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Effort Thực tế / Ước tính:</span>
+                <div className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 flex items-baseline gap-1">
+                  <span>{task.actualEffort}h</span>
+                  <span className="text-slate-300 dark:text-slate-600 font-normal">/</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{task.estimatedEffort}h</span>
+                </div>
+              </div>
 
-            <div>
-              <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Effort Thực tế / Ước tính:</span>
-              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-xs">
-                {task.actualEffort}h <span className="text-slate-400 font-normal">/</span> {task.estimatedEffort}h
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Tiến độ hoàn thành:</span>
-              <span className="font-bold text-indigo-600 dark:text-indigo-400 text-xs">
-                {task.completionPercentage}%
-              </span>
+              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Tiến độ hoàn thành:</span>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm text-indigo-600 dark:text-indigo-400 font-mono">
+                    {task.completionPercentage}%
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    task.status === 'Done'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                      : task.status === 'In Progress'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
+                      : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                  }`}>
+                    {task.status}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -757,21 +780,21 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
 
               {/* Collaborative Input Field for ANY team member */}
-              <form onSubmit={handleSendComment} className="flex gap-2">
+              <form onSubmit={handleSendComment} className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
                   value={quickComment}
                   onChange={(e) => setQuickComment(e.target.value)}
-                  placeholder={`Gửi ghi chú/trao đổi luồng task với vai trò ${currentUser?.name || 'thành viên'}...`}
+                  placeholder={`Gửi ghi chú/trao đổi luồng (${currentUser?.name || 'thành viên'})...`}
                   className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
                 />
                 <button
                   type="submit"
                   disabled={!quickComment.trim()}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 shrink-0 active:scale-95"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center justify-center gap-1.5 shrink-0 active:scale-95 cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  Gửi Phản Hồi
+                  <span>Gửi Phản Hồi</span>
                 </button>
               </form>
 
@@ -785,20 +808,20 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
           {/* SECTION: Lịch Sử & Nhật Ký Cập Nhật (Activity Log) */}
           <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
-                <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span>Nhật Ký & Lịch Sử Cập Nhật Task:</span>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <span>Nhật Ký Cập Nhật:</span>
                 <span className="text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-800/80">
-                  {activityLogsList.length} lần cập nhật
+                  {activityLogsList.length} logs
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-                className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-1 transition"
+                className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-1 transition cursor-pointer"
               >
-                {isHistoryOpen ? 'Thu gọn' : 'Xem lịch sử'}
+                <span>{isHistoryOpen ? 'Thu gọn' : 'Xem lịch sử'}</span>
                 {isHistoryOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
             </div>

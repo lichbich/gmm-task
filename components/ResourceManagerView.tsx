@@ -758,138 +758,140 @@ export const ResourceManagerView: React.FC = () => {
 
       {/* ADD / EDIT RESOURCE MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 relative">
-            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-100 bg-white shrink-0">
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 relative">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 bg-white shrink-0">
               <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
                 <FolderGit2 className="w-4 h-4 text-indigo-600" />
                 {editingResId ? 'Chỉnh Sửa Resource Dự Án' : 'Thêm Resource / Tài Liệu Mới'}
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 text-xs overflow-y-auto">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Cấp Phân Loại Level: <span className="text-red-500">*</span>
-                </label>
-                <Dropdown
-                  value={resLevel}
-                  onChange={(val) => setResLevel(val as ResourceLevel)}
-                  options={LEVEL_OPTIONS.map((l) => ({ value: l.id, label: l.name }))}
-                  className="w-full"
-                  buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300 font-bold"
-                />
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1 min-h-0 overscroll-contain">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Cấp Phân Loại Level: <span className="text-red-500">*</span>
+                  </label>
+                  <Dropdown
+                    value={resLevel}
+                    onChange={(val) => setResLevel(val as ResourceLevel)}
+                    options={LEVEL_OPTIONS.map((l) => ({ value: l.id, label: l.name }))}
+                    className="w-full"
+                    buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tên Hạng Mục / Hàng (Name): <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Requirement, SRS, Usecase Diagram, FE Architecture..."
+                    value={resName}
+                    onChange={(e) => setResName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 focus:bg-white"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Nội Dung / Mô Tả (Content):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Screen Flow, Master Plan / Angular - Typescript..."
+                    value={resContent}
+                    onChange={(e) => setResContent(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Công Cụ (Tool):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Draw.io, Figma, Google Sheets, Docs..."
+                    value={resTool}
+                    onChange={(e) => setResTool(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Đường Link Trực Tiếp (Break down - Ưu tiên):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://... (Không bắt buộc)"
+                    value={resPrimaryLink}
+                    onChange={(e) => setResPrimaryLink(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono text-indigo-700 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tên Hiển Thị Link Ưu Tiên (Label):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Saho | GMM | Requirement"
+                    value={resPrimaryLinkLabel}
+                    onChange={(e) => setResPrimaryLinkLabel(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Đường Link Gốc (Origin - Trường hợp đặc biệt):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://..."
+                    value={resOriginLink}
+                    onChange={(e) => setResOriginLink(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-700 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tên Hiển Thị Link Gốc (Origin Label):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Saho | GMM | Requirement (Bản tổng hợp)"
+                    value={resOriginLinkLabel}
+                    onChange={(e) => setResOriginLinkLabel(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Tên Hạng Mục / Hàng (Name): <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="VD: Requirement, SRS, Usecase Diagram, FE Architecture..."
-                  value={resName}
-                  onChange={(e) => setResName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Nội Dung / Mô Tả (Content):
-                </label>
-                <input
-                  type="text"
-                  placeholder="VD: Screen Flow, Master Plan / Angular - Typescript..."
-                  value={resContent}
-                  onChange={(e) => setResContent(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Công Cụ (Tool):
-                </label>
-                <input
-                  type="text"
-                  placeholder="VD: Draw.io, Figma, Google Sheets, Docs..."
-                  value={resTool}
-                  onChange={(e) => setResTool(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Đường Link Trực Tiếp (Break down - Ưu tiên):
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://... (Không bắt buộc)"
-                  value={resPrimaryLink}
-                  onChange={(e) => setResPrimaryLink(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono text-indigo-700 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Tên Hiển Thị Link Ưu Tiên (Label):
-                </label>
-                <input
-                  type="text"
-                  placeholder="VD: Saho | GMM | Requirement"
-                  value={resPrimaryLinkLabel}
-                  onChange={(e) => setResPrimaryLinkLabel(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Đường Link Gốc (Origin - Trường hợp đặc biệt):
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://..."
-                  value={resOriginLink}
-                  onChange={(e) => setResOriginLink(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-700 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Tên Hiển Thị Link Gốc (Origin Label):
-                </label>
-                <input
-                  type="text"
-                  placeholder="VD: Saho | GMM | Requirement (Bản tổng hợp)"
-                  value={resOriginLinkLabel}
-                  onChange={(e) => setResOriginLinkLabel(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-2 p-3.5 sm:p-4 border-t border-slate-100 bg-slate-50/80 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl hover:bg-slate-200 transition"
+                  className="px-3.5 sm:px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl hover:bg-slate-200 transition cursor-pointer text-xs sm:text-sm"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition"
+                  className="px-4 sm:px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition cursor-pointer text-xs sm:text-sm active:scale-95"
                 >
                   {editingResId ? 'Lưu Thay Đổi' : 'Tạo Resource'}
                 </button>

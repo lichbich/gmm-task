@@ -141,17 +141,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 modal-backdrop-transition ${
+      className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
       <div
-        className={`bg-white border border-slate-200/90 rounded-3xl w-full max-w-lg shadow-2xl text-slate-800 relative max-h-[90vh] flex flex-col overflow-hidden modal-dialog-transition ${
+        className={`bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl text-slate-800 relative max-h-[92vh] flex flex-col overflow-hidden modal-dialog-transition ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         }`}
       >
         {/* Fixed Header */}
-        <div className="flex items-center justify-between p-5 sm:px-6 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
+        <div className="flex items-center justify-between p-4 sm:px-6 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-bold shadow-xs">
               {task ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
