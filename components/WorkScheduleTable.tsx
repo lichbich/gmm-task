@@ -281,8 +281,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     return groups;
   }, [filteredTasks]);
 
-  const totalEstimatedEffort = filteredTasks.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0);
-  const totalActualEffort = filteredTasks.reduce((acc, t) => acc + (t.actualEffort || 0), 0);
+  const totalEstimatedEffort =
+    Math.round(filteredTasks.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0) * 100) / 100;
+  const totalActualEffort =
+    Math.round(filteredTasks.reduce((acc, t) => acc + (t.actualEffort || 0), 0) * 100) / 100;
 
   const getStatusBadge = (status: TaskStatus) => {
     switch (status) {
@@ -1186,8 +1188,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             ) : subTab === 'ALL_TASKS' ? (
               groupedTasksByRole.map((group) => {
                 const cfg = getRoleConfig(group.role);
-                const groupTotalEst = group.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0);
-                const groupTotalActual = group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0);
+                const groupTotalEst =
+                  Math.round(group.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0) * 100) / 100;
+                const groupTotalActual =
+                  Math.round(group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0) * 100) / 100;
 
                 const tasksByAccountMap = new Map<string, Task[]>();
                 group.tasks.forEach((t) => {

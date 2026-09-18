@@ -127,8 +127,10 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   const activeTasksCount = userCurrentTasks.filter((t) => t.status !== 'Done').length;
   const completedTasksCount = userCurrentTasks.filter((t) => t.status === 'Done').length;
-  const currentWeekEffort = userCurrentTasks.reduce((acc, t) => acc + (t.actualEffort || 0), 0);
-  const totalEffortCumulative = (user.totalEffort || 0) + currentWeekEffort;
+  const currentWeekEffort =
+    Math.round(userCurrentTasks.reduce((acc, t) => acc + (t.actualEffort || 0), 0) * 100) / 100;
+  const totalEffortCumulative =
+    Math.round(((user.totalEffort || 0) + currentWeekEffort) * 100) / 100;
 
   const toggleSpec = (specCode: Specialization) => {
     if (!isAdmin) return;

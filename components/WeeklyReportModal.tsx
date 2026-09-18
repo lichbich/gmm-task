@@ -21,14 +21,14 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   const { submitTaskReport, simulatedTime, canReportTask, users } = useApp();
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
-  const [actualEffort, setActualEffort] = useState<number>(0);
+  const [actualEffort, setActualEffort] = useState<number | string>(0);
   const [completionPercentage, setCompletionPercentage] = useState<number>(0);
   const [status, setStatus] = useState<TaskStatus>('In Progress');
   const [notes, setNotes] = useState<string>('');
 
   useEffect(() => {
     if (task) {
-      setActualEffort(task.actualEffort || 0);
+      setActualEffort(task.actualEffort !== undefined ? task.actualEffort : 0);
       setCompletionPercentage(task.completionPercentage || 0);
       setStatus(task.status || 'In Progress');
       setNotes(task.notes || '');
@@ -45,7 +45,11 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isMyTaskToReport) return;
-    submitTaskReport(task.id, actualEffort, completionPercentage, status, notes);
+    const parsedEffort =
+      typeof actualEffort === 'number'
+        ? actualEffort
+        : parseFloat(String(actualEffort).replace(',', '.')) || 0;
+    submitTaskReport(task.id, parsedEffort, completionPercentage, status, notes);
     handleClose();
   };
 
@@ -190,17 +194,23 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 <label className="text-xs font-semibold text-slate-700">
                   Số Giờ Làm Việc Thực Tế trong tuần (Actual Effort):
                 </label>
-                <span className="text-xs font-bold text-indigo-600 font-mono">{actualEffort} giờ</span>
+                <span className="text-xs font-bold text-indigo-600 font-mono">
+                  {typeof actualEffort === 'number'
+                    ? actualEffort
+                    : parseFloat(String(actualEffort).replace(',', '.')) || 0}{' '}
+                  giờ
+                </span>
               </div>
               <div className="flex items-center gap-3">
                 <input
                   type="number"
-                  step="0.5"
+                  step="any"
                   min="0"
                   max="100"
                   disabled={!isMyTaskToReport}
                   value={actualEffort}
-                  onChange={(e) => setActualEffort(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setActualEffort(e.target.value)}
+                  placeholder="0.0"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 text-sm focus:bg-white focus:outline-none focus:border-indigo-500 disabled:opacity-50 font-semibold"
                 />
               </div>

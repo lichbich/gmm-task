@@ -261,10 +261,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     });
   }, [tasks, currentUser, roleFilter, searchQuery]);
 
-  const totalNextWeekEffort = nextWeekAssignedTasks.reduce(
-    (acc, curr) => acc + (curr.estimatedEffort || 0),
-    0
-  );
+  const totalNextWeekEffort =
+    Math.round(nextWeekAssignedTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0) * 100) / 100;
 
   const handleTransferToNextWeek = (t: Task) => {
     // Check if continuation task already exists in next week

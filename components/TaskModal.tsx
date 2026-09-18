@@ -48,7 +48,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [role, setRole] = useState<Specialization>(defaultRole);
-  const [estimatedEffort, setEstimatedEffort] = useState<number>(2);
+  const [estimatedEffort, setEstimatedEffort] = useState<number | string>(2);
   const [assigneeAccount, setAssigneeAccount] = useState<string>('');
   const [milestoneId, setMilestoneId] = useState<string>('');
   const [status, setStatus] = useState<TaskStatus>('To do');
@@ -91,12 +91,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     e.preventDefault();
     if (!title.trim()) return;
 
+    const parsedEffort =
+      typeof estimatedEffort === 'number'
+        ? estimatedEffort
+        : parseFloat(String(estimatedEffort).replace(',', '.')) || 0;
+
     if (task) {
       updateTask(task.id, {
         title,
         description,
         role,
-        estimatedEffort,
+        estimatedEffort: parsedEffort,
         assigneeAccount,
         milestoneId,
         status,
@@ -108,7 +113,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         title,
         description,
         role,
-        estimatedEffort,
+        estimatedEffort: parsedEffort,
         actualEffort: 0,
         status,
         priority,
@@ -293,10 +298,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 </label>
                 <input
                   type="number"
-                  step="0.5"
-                  min="0.5"
+                  step="any"
+                  min="0.1"
                   value={estimatedEffort}
-                  onChange={(e) => setEstimatedEffort(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setEstimatedEffort(e.target.value)}
+                  placeholder="2.0"
                   className="w-full bg-slate-50 border border-slate-300/90 rounded-xl px-3 py-2 text-slate-800 text-xs focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition font-mono font-semibold"
                   required
                 />
