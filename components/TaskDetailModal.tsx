@@ -882,7 +882,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
         {/* Fixed Footer */}
         <div className="flex items-center justify-between gap-3 p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900 rounded-b-3xl">
-          {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') ? (
+          {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') ? (
             <button
               type="button"
               onClick={handleDelete}

@@ -633,11 +633,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Leader/Admin can edit task structure, but ONLY the specific assignee can submit progress/report for that task!
   const canEditTask = (task: Task, user: User | null = authSession): boolean => {
     if (!user) return false;
-    if (user.role === 'Admin') return true;
-    if (user.role === 'Leader') {
-      // Leader can only edit tasks matching their specialization
-      return user.specializations?.includes(task.role) || false;
-    }
+    if (user.role === 'Admin' || user.role === 'Leader' || user.role === 'Advisor') return true;
     return task.assigneeAccount.toLowerCase() === user.account.toLowerCase();
   };
 

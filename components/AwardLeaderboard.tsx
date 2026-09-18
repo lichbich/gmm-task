@@ -70,8 +70,8 @@ export const AwardLeaderboard: React.FC = () => {
               />
             </div>
 
-            {/* Leader/Admin Rollover Button */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+            {/* Leader/Advisor/Admin Rollover Button */}
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
               <button
                 onClick={handleRollover}
                 className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"

@@ -125,11 +125,11 @@ export const MilestonesView: React.FC = () => {
   };
 
   // Checkbox toggle permission:
-  // Admin & Leader can check any task
+  // Admin, Leader & Advisor can check any task
   // Member can ONLY check tasks assigned to themselves
   const canToggleTaskCheck = (t: Task): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'Admin' || currentUser.role === 'Leader') return true;
+    if (currentUser.role === 'Admin' || currentUser.role === 'Leader' || currentUser.role === 'Advisor') return true;
     if (!t.assigneeAccount) return false;
     return t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase();
   };
@@ -160,7 +160,7 @@ export const MilestonesView: React.FC = () => {
   const canManageMilestone = (ms: Milestone): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
-    if (currentUser.role === 'Leader') {
+    if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
       const userRoles = currentUser.specializations || [];
       if (ms.role && ms.role !== 'ALL') {
         return userRoles.includes(ms.role);
@@ -176,7 +176,7 @@ export const MilestonesView: React.FC = () => {
     e.preventDefault();
     if (!msTitle.trim()) return;
     const finalRole: Specialization | 'ALL' | undefined =
-      currentUser?.role === 'Leader'
+      currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
         ? (currentUser.specializations?.[0] as Specialization || 'BA')
         : msRole === 'ALL'
         ? 'ALL'
@@ -266,7 +266,7 @@ export const MilestonesView: React.FC = () => {
     setEditingTask(null);
     setTargetMilestoneId(milestoneId);
     const initRole =
-      currentUser?.role === 'Leader'
+      currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
         ? currentUser.specializations?.[0]
         : adminSelectedRole !== 'ALL'
         ? (adminSelectedRole as Specialization)
@@ -281,7 +281,7 @@ export const MilestonesView: React.FC = () => {
     setEditingTask(null);
     setTargetMilestoneId('');
     const initRole =
-      currentUser?.role === 'Leader'
+      currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
         ? currentUser.specializations?.[0]
         : adminSelectedRole !== 'ALL'
         ? (adminSelectedRole as Specialization)
@@ -302,15 +302,15 @@ export const MilestonesView: React.FC = () => {
                 <span className="hidden sm:inline">Quản Lý Milestones & Break Tasks</span>
               </h2>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
-                {currentUser?.role === 'Leader' || currentUser?.role === 'Admin' ? 'Leader & Admin' : 'Thành viên'}
+                {currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin' ? 'Leader, Advisor & Admin' : 'Thành viên'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Quản lý các cột mốc Milestone, break task cho từng mốc hoặc quản lý các đầu việc tự do phát sinh ngoài.
+              Quản lý các cột mốc Milestone, bẻ task từ milestone cho thành viên hoặc quản lý các đầu việc phát sinh.
             </p>
           </div>
 
-          {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+          {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
             <div className="flex items-center gap-2">
               {subTab === 'MILESTONES' ? (
                 <button
@@ -477,7 +477,7 @@ export const MilestonesView: React.FC = () => {
                 Chưa có cột mốc Milestone nào thuộc chuyên môn này.
               </span>
               <span className="text-slate-400">
-                {currentUser?.role === 'Leader' || currentUser?.role === 'Admin'
+                {currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin'
                   ? 'Hãy bấm "Tạo Milestone Mới" để thiết lập cột mốc và break task cho role này.'
                   : 'Cột mốc và đầu việc của chuyên môn này sẽ xuất hiện khi Leader phân bổ.'}
               </span>
@@ -630,7 +630,7 @@ export const MilestonesView: React.FC = () => {
                           <React.Fragment key={t.id}>
                             {/* DESKTOP ROW VIEW */}
                             <div
-                              draggable={currentUser?.role === 'Leader' || currentUser?.role === 'Admin'}
+                              draggable={currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin'}
                               onDragStart={(e) => {
                                 e.dataTransfer.setData('text/plain', t.id);
                                 e.dataTransfer.effectAllowed = 'move';
@@ -674,8 +674,8 @@ export const MilestonesView: React.FC = () => {
                             >
                               {/* Left: Drag Handle, Checkbox, Index & Info */}
                               <div className="flex items-center gap-3 flex-1 min-w-0">
-                                {/* Reorder Drag Handle for Leader/Admin */}
-                                {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+                                {/* Reorder Drag Handle for Leader/Advisor/Admin */}
+                                {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
                                   <div
                                     className="text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing p-1 -ml-1 transition"
                                     title="Kéo thả để sắp xếp thứ tự ưu tiên"
@@ -1160,7 +1160,7 @@ export const MilestonesView: React.FC = () => {
                       {/* Right: Quick Assign Milestone & Controls */}
                       <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                         {/* Quick Assign Dropdown */}
-                        {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+                        {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
                           <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
                             <span className="text-[10px] text-slate-500 font-medium pl-1 hidden lg:inline">
                               Gán vào:
@@ -1340,7 +1340,7 @@ export const MilestonesView: React.FC = () => {
                       )}
 
                       {/* Quick Assign Dropdown on Mobile */}
-                      {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+                      {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
                         <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
                           <span className="text-[10px] text-slate-500 font-bold">Gán vào:</span>
                           <Dropdown

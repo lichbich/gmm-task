@@ -147,7 +147,7 @@ export const ResourceManagerView: React.FC = () => {
   const [resOriginLink, setResOriginLink] = useState('');
   const [resOriginLinkLabel, setResOriginLinkLabel] = useState('');
 
-  const canManage = currentUser?.role === 'Admin' || currentUser?.role === 'Leader';
+  const canManage = currentUser?.role === 'Admin' || currentUser?.role === 'Leader' || currentUser?.role === 'Advisor';
 
   const handleOpenAddModal = () => {
     setEditingResId(null);

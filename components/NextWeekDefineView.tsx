@@ -81,7 +81,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   };
 
   // Role filtering permissions
-  const isLeaderOrAdmin = currentUser?.role === 'Leader' || currentUser?.role === 'Admin';
+  const isLeaderOrAdmin = currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin';
   const myRole = currentUser?.role === 'Admin' ? 'ALL' : currentUser?.specializations?.[0] || 'ALL';
 
   // Helper to check if a task strictly belongs to current user's team / scope
@@ -89,9 +89,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
 
-    if (currentUser.role === 'Leader') {
+    if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
       const leaderSpecs = currentUser.specializations || [];
-      if (leaderSpecs.length === 0) return false;
+      if (leaderSpecs.length === 0) return true;
 
       // 1. Direct role match on task
       if (leaderSpecs.includes(t.role)) return true;
@@ -120,8 +120,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         // Members see their own pending requests
         return t.assignmentRequestedBy === currentUser.account;
       }
-      if (currentUser?.role === 'Leader') {
-        // Leader sees requests in their role / team only
+      if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
+        // Leader / Advisor sees requests in their role / team only
         return isTaskInMyTeamScope(t);
       }
       return true; // Admin sees all
@@ -138,7 +138,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (currentUser?.role === 'Member') {
         return t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
       }
-      if (currentUser?.role === 'Leader') {
+      if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
         return isTaskInMyTeamScope(t);
       }
       return true; // Admin sees all
@@ -200,8 +200,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (t.weekNumber !== nextWeek || t.year !== selectedYear) return false;
       if (!t.assigneeAccount || t.assigneeAccount.trim() === '') return false;
 
-      // Role check for Leader/Member if not admin
-      if (currentUser?.role === 'Leader') {
+      // Role check for Leader/Advisor/Member if not admin
+      if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
         if (!isTaskInMyTeamScope(t)) return false;
       } else if (currentUser?.role === 'Member') {
         if (t.assigneeAccount?.toLowerCase() !== currentUser.account.toLowerCase()) return false;
@@ -241,11 +241,11 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (t.assigneeAccount && t.assigneeAccount.trim() !== '') return false;
       if (t.assignmentRequestStatus === 'PENDING') return false;
 
-      // Filter by role for members/leaders
+      // Filter by role for members/leaders/advisors
       if (currentUser?.role === 'Member') {
         const mySpecs = currentUser.specializations || [];
         if (!mySpecs.includes(t.role)) return false;
-      } else if (currentUser?.role === 'Leader') {
+      } else if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
         const leaderRoles = currentUser.specializations || [];
         if (!leaderRoles.includes(t.role)) return false;
       }
@@ -308,9 +308,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
             <p className="text-xs text-slate-500 mt-1">
               {currentUser?.role === 'Admin'
                 ? 'Admin: Define công việc tuần tới cho tất cả các team và phân công task.'
-                : currentUser?.role === 'Leader'
-                ? `Leader (${currentUser.specializations?.join(', ') || 'Team'}): Quản lý & lên kế hoạch tuần tới cho các thành viên trong team của bạn.`
-                : `Member (${currentUser?.name}): Tự tạo task mới cho bản thân tuần tới hoặc xin nhận task từ Milestone để Leader duyệt.`}
+                : currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
+                ? `${currentUser.role} (${currentUser.specializations?.join(', ') || 'Team'}): Quản lý & lên kế hoạch tuần tới cho các thành viên trong team của bạn.`
+                : `Member (${currentUser?.name}): Tự tạo task mới cho bản thân tuần tới hoặc xin nhận task từ Milestone để Leader/Advisor duyệt.`}
             </p>
           </div>
 

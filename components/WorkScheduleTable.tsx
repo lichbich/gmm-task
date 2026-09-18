@@ -594,8 +594,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               </button>
             )}
 
-            {/* Leader/Admin Edit & Delete Buttons */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+            {/* Leader/Advisor/Admin Edit & Delete Buttons */}
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
               <>
                 <button
                   onClick={() => onOpenTaskModal?.(t)}
@@ -822,7 +822,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
           <div className="flex items-center gap-1.5">
             {/* Edit Button */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
               <button
                 onClick={() => onOpenTaskModal?.(t)}
                 className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition shadow-2xs active:scale-95 cursor-pointer"
@@ -833,7 +833,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             )}
 
             {/* Delete Button */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
               <button
                 onClick={() => {
                   confirmDialog({

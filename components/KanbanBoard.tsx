@@ -102,7 +102,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
   };
 
   const canMoveTask = (t: Task) => {
-    if (currentUser?.role === 'Leader' || currentUser?.role === 'Admin') return true;
+    if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') return true;
     return (
       !!t.assigneeAccount &&
       t.assigneeAccount.toLowerCase() === currentUser?.account.toLowerCase()
@@ -115,6 +115,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
 
     const hasPermission =
       currentUser?.role === 'Leader' ||
+      currentUser?.role === 'Advisor' ||
       currentUser?.role === 'Admin' ||
       (currentTask.assigneeAccount &&
         currentTask.assigneeAccount.toLowerCase() === currentUser?.account.toLowerCase());
@@ -122,7 +123,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
     if (!hasPermission) {
       confirmDialog({
         title: 'Không có quyền thao tác',
-        message: 'Chỉ Leader/Admin hoặc người được giao task mới có quyền chuyển trạng thái task này.',
+        message: 'Chỉ Leader/Advisor/Admin hoặc người được giao task mới có quyền chuyển trạng thái task này.',
         confirmText: 'Đã hiểu',
         type: 'warning',
         cancelText: 'Đóng',
@@ -350,7 +351,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
               </button>
             )}
 
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
               <button
                 onClick={() => onOpenTaskModal?.(t)}
                 className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition cursor-pointer"
@@ -406,7 +407,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
           </p>
         </div>
 
-        {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+        {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
           <button
             onClick={() => onOpenTaskModal?.()}
             className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0 cursor-pointer"

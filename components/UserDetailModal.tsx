@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { User, UserRole, Specialization } from '../types/task';
+import { User, UserRole, Specialization, validateRoleQuota } from '../types/task';
 import {
   X,
   User as UserIcon,
@@ -44,6 +44,7 @@ interface UserDetailModalProps {
 export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, onClose }) => {
   const {
     currentUser,
+    users,
     roles,
     tasks,
     selectedWeek,
@@ -178,6 +179,13 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     e.preventDefault();
     if (!userName.trim()) {
       setErrorMsg('Vui lòng nhập Họ & Tên nhân viên.');
+      return;
+    }
+
+    // Validate Role Level Quota per specialization when changing role or specs
+    const quotaCheck = validateRoleQuota(userRole, selectedSpecs, users, user.id);
+    if (!quotaCheck.valid && quotaCheck.error) {
+      setErrorMsg(quotaCheck.error);
       return;
     }
 
@@ -437,10 +445,10 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                       value={userRole}
                       onChange={(newRole) => setUserRole(newRole as UserRole)}
                       options={[
-                        { value: 'Member', label: 'Member (Thành viên báo cáo)' },
-                        { value: 'Leader', label: 'Leader (Break task & Phân công)' },
-                        { value: 'Advisor', label: 'Advisor (Cố vấn dự án)' },
-                        { value: 'Admin', label: 'Admin (Quản trị hệ thống)' },
+                        { value: 'Leader', label: '👑 Leader (Trưởng nhóm)' },
+                        { value: 'Advisor', label: '🎖️ Advisor (Cố vấn)' },
+                        { value: 'Member', label: '👥 Member (Thành viên)' },
+                        { value: 'Admin', label: '🛡️ Admin (Quản trị)' },
                       ]}
                       className="w-full"
                       buttonClassName="py-2 px-3 text-xs bg-white border-purple-300 font-bold text-slate-800 shadow-2xs"

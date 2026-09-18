@@ -294,7 +294,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <ListOrdered className="w-4 h-4" />
-              <span>Milestones & Break Tasks {currentUser?.role === 'Leader' && '(Leader)'}</span>
+              <span>Milestones & Break Tasks {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') && `(${currentUser.role})`}</span>
             </button>
 
             <button

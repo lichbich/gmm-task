@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { UserRole, Specialization, User, RoleItem } from '../types/task';
+import { UserRole, Specialization, User, RoleItem, validateRoleQuota } from '../types/task';
 import {
   Users,
   Plus,
@@ -778,6 +778,20 @@ export const UserManagementView: React.FC = () => {
     e.preventDefault();
     if (!userName.trim() || !userAccount.trim()) return;
 
+    // Validate Role Level Quotas per specialization
+    const quotaCheck = validateRoleQuota(userRole, selectedSpecs, users, editingUserId || undefined);
+    if (!quotaCheck.valid && quotaCheck.error) {
+      confirmDialog({
+        title: 'Cảnh báo định mức vai trò (Role Quota)',
+        message: quotaCheck.error,
+        confirmText: 'Đã hiểu & Điều chỉnh',
+        type: 'warning',
+        cancelText: 'Đóng',
+        onConfirm: () => {},
+      });
+      return;
+    }
+
     const payload = {
       name: userName.trim(),
       account: userAccount.trim(),
@@ -1395,13 +1409,13 @@ export const UserManagementView: React.FC = () => {
                     value={userRole}
                     onChange={(newRole) => setUserRole(newRole as UserRole)}
                     options={[
-                      { value: 'Member', label: 'Member (Thành viên báo cáo)' },
-                      { value: 'Leader', label: 'Leader (Break task & Phân công)' },
-                      { value: 'Advisor', label: 'Advisor (Cố vấn dự án)' },
-                      { value: 'Admin', label: 'Admin (Quản trị hệ thống)' },
+                      { value: 'Leader', label: '👑 Leader (Trưởng nhóm)' },
+                      { value: 'Advisor', label: '🎖️ Advisor (Cố vấn)' },
+                      { value: 'Member', label: '👥 Member (Thành viên)' },
+                      { value: 'Admin', label: '🛡️ Admin (Quản trị)' },
                     ]}
                     className="w-full"
-                    buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300"
+                    buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300 font-bold"
                   />
                 </div>
 
