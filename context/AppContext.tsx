@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
@@ -117,6 +117,27 @@ interface AppContextType {
   users: User[];
   addUser: (user: Omit<User, 'id'>) => Promise<{ user: User; tempPassword: string }>;
   updateUser: (id: string, user: Partial<User>) => void;
+  batchImportUsers: (
+    items: {
+      member: {
+        name: string;
+        cccd: string;
+        bankAccount: string;
+        email: string;
+        phone: string;
+        account: string;
+        role: UserRole;
+        specializations: Specialization[];
+        technologies: string;
+        birthDate: string;
+      };
+      existingUserId?: string;
+    }[]
+  ) => Promise<{
+    createdCount: number;
+    updatedCount: number;
+    newCredentials: { id: string; name: string; account: string; tempPassword: string; isNewlyGenerated: boolean }[];
+  }>;
   deleteUser: (id: string) => void;
   resetUserPassword: (userId: string) => Promise<{ success: boolean; tempPassword?: string; error?: string }>;
   resetAllUninitializedPasswords: () => Promise<{
@@ -781,6 +802,114 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncUsersToFirebase(updated);
   };
 
+  const batchImportUsers = async (
+    items: {
+      member: {
+        name: string;
+        cccd: string;
+        bankAccount: string;
+        email: string;
+        phone: string;
+        account: string;
+        role: UserRole;
+        specializations: Specialization[];
+        technologies: string;
+        birthDate: string;
+      };
+      existingUserId?: string;
+    }[]
+  ): Promise<{
+    createdCount: number;
+    updatedCount: number;
+    newCredentials: { id: string; name: string; account: string; tempPassword: string; isNewlyGenerated: boolean }[];
+  }> => {
+    try {
+      let currentUsersList = [...users];
+      let createdCount = 0;
+      let updatedCount = 0;
+      const newCredentials: { id: string; name: string; account: string; tempPassword: string; isNewlyGenerated: boolean }[] = [];
+
+      for (const item of items) {
+        const m = item.member;
+        let existingUser: User | undefined;
+
+        if (item.existingUserId) {
+          existingUser = currentUsersList.find((u) => u.id === item.existingUserId);
+        } else {
+          const cleanAcc = m.account.toLowerCase();
+          existingUser = currentUsersList.find(
+            (u) =>
+              (cleanAcc && u.account.toLowerCase() === cleanAcc) ||
+              (m.email && u.email && u.email.toLowerCase() === m.email.toLowerCase()) ||
+              (m.phone && u.phone && u.phone === m.phone) ||
+              (m.cccd && u.cccd && u.cccd === m.cccd)
+          );
+        }
+
+        if (existingUser) {
+          // Update existing user
+          const updatedUser: User = {
+            ...existingUser,
+            name: m.name || existingUser.name,
+            account: m.account || existingUser.account,
+            role: m.role || existingUser.role,
+            specializations: m.specializations.length > 0 ? m.specializations : existingUser.specializations,
+            cccd: m.cccd || existingUser.cccd,
+            bankAccount: m.bankAccount || existingUser.bankAccount,
+            email: m.email || existingUser.email,
+            phone: m.phone || existingUser.phone,
+            technologies: m.technologies || existingUser.technologies,
+            birthDate: m.birthDate ? Number(m.birthDate) || m.birthDate : existingUser.birthDate,
+            status: 'active',
+            disabled: false,
+          };
+          currentUsersList = currentUsersList.map((u) => (u.id === existingUser!.id ? updatedUser : u));
+          updatedCount++;
+        } else {
+          // Create new user
+          const tempPassword = generateTemporaryPassword();
+          const hashedPassword = await hashPassword(tempPassword);
+          const newUserId = `usr-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          const newUser: User = {
+            id: newUserId,
+            name: m.name || 'Thành viên mới',
+            account: m.account || `user${Math.floor(1000 + Math.random() * 9000)}`,
+            role: m.role || 'Member',
+            specializations: m.specializations.length > 0 ? m.specializations : ['BA'],
+            cccd: m.cccd || '',
+            bankAccount: m.bankAccount || '',
+            email: m.email || '',
+            phone: m.phone || '',
+            technologies: m.technologies || '',
+            birthDate: m.birthDate ? Number(m.birthDate) || m.birthDate : undefined,
+            password: hashedPassword,
+            tempPassword: tempPassword,
+            firstLoginCompleted: false,
+            disabled: false,
+            status: 'active',
+          };
+          currentUsersList.push(newUser);
+          createdCount++;
+          newCredentials.push({
+            id: newUser.id,
+            name: newUser.name,
+            account: newUser.account,
+            tempPassword: tempPassword,
+            isNewlyGenerated: true,
+          });
+        }
+      }
+
+      setUsers(currentUsersList);
+      await syncUsersToFirebase(currentUsersList);
+
+      return { createdCount, updatedCount, newCredentials };
+    } catch (e) {
+      console.error('Failed to batch import users', e);
+      return { createdCount: 0, updatedCount: 0, newCredentials: [] };
+    }
+  };
+
   // Delete User & Unassign User Tasks (Soft-delete: set disabled status in DB, hide from UI)
   const deleteUser = (id: string) => {
     const targetUser = users.find((u) => u.id === id);
@@ -1399,6 +1528,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         addUser,
         updateUser,
+        batchImportUsers,
         deleteUser,
         resetUserPassword,
         resetAllUninitializedPasswords,

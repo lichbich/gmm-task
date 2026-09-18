@@ -24,9 +24,231 @@ import {
   Eye,
   Copy,
   Check,
+  FileSpreadsheet,
+  Sparkles,
+  CheckCircle2,
+  Zap,
+  Info,
+  GripVertical,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 import { UserDetailModal } from './UserDetailModal';
+
+export type SheetFieldKey =
+  | 'no'
+  | 'name'
+  | 'cccd'
+  | 'bankAccount'
+  | 'email'
+  | 'phone'
+  | 'account'
+  | 'role'
+  | 'level'
+  | 'technologies'
+  | 'birthDate'
+  | 'effort'
+  | 'effortTotal'
+  | 'skip';
+
+export interface SheetColumnItem {
+  id: string;
+  key: SheetFieldKey;
+  label: string;
+}
+
+export const DEFAULT_SHEET_COLUMNS: SheetColumnItem[] = [
+  { id: 'col-no', key: 'no', label: 'No' },
+  { id: 'col-name', key: 'name', label: 'Full Name' },
+  { id: 'col-cccd', key: 'cccd', label: 'CCCD' },
+  { id: 'col-bank', key: 'bankAccount', label: 'Tk Bank' },
+  { id: 'col-email', key: 'email', label: 'Gmail' },
+  { id: 'col-phone', key: 'phone', label: 'Phone' },
+  { id: 'col-account', key: 'account', label: 'Staff Code' },
+  { id: 'col-role', key: 'role', label: 'Role' },
+  { id: 'col-level', key: 'level', label: 'Level' },
+  { id: 'col-tech', key: 'technologies', label: 'Technology' },
+  { id: 'col-birth', key: 'birthDate', label: 'BirthDate' },
+  { id: 'col-effort', key: 'effort', label: 'Effort' },
+  { id: 'col-effort-total', key: 'effortTotal', label: 'Effort Total' },
+];
+
+export const AVAILABLE_SHEET_FIELDS: { key: SheetFieldKey; label: string; defaultName: string }[] = [
+  { key: 'no', label: 'No (Số thứ tự)', defaultName: 'No' },
+  { key: 'name', label: 'Full Name (Họ và tên)', defaultName: 'Full Name' },
+  { key: 'account', label: 'Staff Code (Username)', defaultName: 'Staff Code' },
+  { key: 'role', label: 'Role (Vị trí chuyên môn)', defaultName: 'Role' },
+  { key: 'level', label: 'Level (Cấp phân quyền)', defaultName: 'Level' },
+  { key: 'cccd', label: 'CCCD (Số căn cước)', defaultName: 'CCCD' },
+  { key: 'bankAccount', label: 'Tk Bank (Tài khoản NH)', defaultName: 'Tk Bank' },
+  { key: 'email', label: 'Gmail / Email', defaultName: 'Gmail' },
+  { key: 'phone', label: 'Phone (Số điện thoại)', defaultName: 'Phone' },
+  { key: 'technologies', label: 'Technology (Công nghệ)', defaultName: 'Technology' },
+  { key: 'birthDate', label: 'BirthDate (Năm sinh)', defaultName: 'BirthDate' },
+  { key: 'effort', label: 'Effort (Giờ tuần)', defaultName: 'Effort' },
+  { key: 'effortTotal', label: 'Effort Total (Tổng giờ)', defaultName: 'Effort Total' },
+  { key: 'skip', label: 'Cột bỏ qua / Cột trống (Skip)', defaultName: 'Bỏ Qua' },
+];
+
+export const LOCAL_STORAGE_SHEET_COLS = 'saho_sheet_column_order';
+
+export interface ParsedSheetMember {
+  name: string;
+  cccd: string;
+  bankAccount: string;
+  email: string;
+  phone: string;
+  account: string;
+  role: UserRole;
+  specializations: Specialization[];
+  technologies: string;
+  birthDate: string;
+}
+
+export const parseSheetRowWithColumns = (
+  rawText: string,
+  columns: SheetColumnItem[],
+  availableRoles: RoleItem[]
+): ParsedSheetMember | null => {
+  if (!rawText || !rawText.trim()) return null;
+
+  // Split line by tab '\t' or '|'
+  let cells = rawText.split('\t').map((c) => c.trim());
+  if (cells.length === 1 && rawText.includes('|')) {
+    cells = rawText.split('|').map((c) => c.trim());
+  }
+
+  const result: ParsedSheetMember = {
+    name: '',
+    cccd: '',
+    bankAccount: '',
+    email: '',
+    phone: '',
+    account: '',
+    role: 'Member',
+    specializations: [],
+    technologies: '',
+    birthDate: '',
+  };
+
+  let roleRaw = '';
+  let levelRaw = '';
+
+  columns.forEach((col, idx) => {
+    const val = cells[idx] ?? '';
+    switch (col.key) {
+      case 'name':
+        result.name = val;
+        break;
+      case 'account':
+        result.account = val.replace(/^@+/, '').trim();
+        break;
+      case 'cccd':
+        result.cccd = val;
+        break;
+      case 'bankAccount':
+        result.bankAccount = val;
+        break;
+      case 'email':
+        result.email = val;
+        break;
+      case 'phone':
+        result.phone = val;
+        break;
+      case 'technologies':
+        result.technologies = val;
+        break;
+      case 'birthDate':
+        result.birthDate = val;
+        break;
+      case 'role':
+        roleRaw = val;
+        break;
+      case 'level':
+        levelRaw = val;
+        break;
+      case 'no':
+      case 'effort':
+      case 'effortTotal':
+      case 'skip':
+      default:
+        break;
+    }
+  });
+
+  // If no account is extracted, try to generate or find from email
+  if (!result.account && result.email) {
+    result.account = result.email.split('@')[0];
+  }
+
+  if (!result.name && !result.account && !result.email && !result.phone && !result.cccd) {
+    return null;
+  }
+
+  // Parse Level (UserRole)
+  if (levelRaw) {
+    const levelUpper = levelRaw.toUpperCase();
+    if (levelUpper.includes('ADMIN')) {
+      result.role = 'Admin';
+    } else if (levelUpper.includes('LEADER')) {
+      result.role = 'Leader';
+    } else if (levelUpper.includes('ADVISOR') || levelUpper.includes('CỐ VẤN') || levelUpper.includes('CO VAN')) {
+      result.role = 'Advisor';
+    } else {
+      result.role = 'Member';
+    }
+  }
+
+  // Parse Specializations (Role)
+  if (roleRaw) {
+    const specs: Specialization[] = [];
+    const normalizedRoleRaw = roleRaw.toUpperCase();
+
+    availableRoles.forEach((r) => {
+      const codeUpper = r.code.toUpperCase();
+      const nameUpper = r.name.toUpperCase();
+      if (
+        normalizedRoleRaw === codeUpper ||
+        normalizedRoleRaw.includes(codeUpper) ||
+        (nameUpper && normalizedRoleRaw.includes(nameUpper))
+      ) {
+        if (!specs.includes(r.code)) {
+          specs.push(r.code);
+        }
+      }
+    });
+
+    if (specs.length === 0) {
+      if (normalizedRoleRaw.includes('BA')) specs.push('BA');
+      if (normalizedRoleRaw.includes('FE') || normalizedRoleRaw.includes('FRONT')) specs.push('FE');
+      if (normalizedRoleRaw.includes('BE') || normalizedRoleRaw.includes('BACK')) specs.push('BE');
+      if (normalizedRoleRaw.includes('QA') || normalizedRoleRaw.includes('TEST')) specs.push('QA');
+      if (normalizedRoleRaw.includes('PO') || normalizedRoleRaw.includes('PRODUCT')) specs.push('PO');
+      if (normalizedRoleRaw.includes('DESIGN')) specs.push('Design');
+    }
+
+    result.specializations = specs.length > 0 ? specs : [availableRoles[0]?.code || 'BA'];
+  } else {
+    result.specializations = [availableRoles[0]?.code || 'BA'];
+  }
+
+  return result;
+};
+
+export const parseSheetRow = (rawText: string, availableRoles: RoleItem[]): ParsedSheetMember | null => {
+  let savedCols = DEFAULT_SHEET_COLUMNS;
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(LOCAL_STORAGE_SHEET_COLS);
+      if (raw) savedCols = JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+  }
+  return parseSheetRowWithColumns(rawText, savedCols, availableRoles);
+};
 
 const COLOR_OPTIONS: { id: string; name: string; bg: string; text: string; border: string; preview: string }[] = [
   { id: 'purple', name: 'Tím', bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-300', preview: 'bg-purple-500' },
@@ -49,6 +271,7 @@ export const UserManagementView: React.FC = () => {
     users,
     addUser,
     updateUser,
+    batchImportUsers,
     deleteUser,
     resetUserPassword,
     resetAllUninitializedPasswords,
@@ -213,6 +436,128 @@ export const UserManagementView: React.FC = () => {
   const [userTechnologies, setUserTechnologies] = useState('');
   const [userBirthDate, setUserBirthDate] = useState('');
 
+  // QUICK SHEET PASTE STATE
+  const [sheetColumns, setSheetColumns] = useState<SheetColumnItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(LOCAL_STORAGE_SHEET_COLS);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_SHEET_COLUMNS;
+  });
+  const [draggedColIdx, setDraggedColIdx] = useState<number | null>(null);
+  const [dragOverColIdx, setDragOverColIdx] = useState<number | null>(null);
+  
+  // ADD COLUMN MODAL STATE
+  const [isAddColumnOpen, setIsAddColumnOpen] = useState(false);
+  const [newColName, setNewColName] = useState('');
+  const [newColKey, setNewColKey] = useState<SheetFieldKey>('skip');
+
+  // EDIT COLUMN MODAL STATE
+  const [editingColIdx, setEditingColIdx] = useState<number | null>(null);
+  const [editColName, setEditColName] = useState('');
+  const [editColKey, setEditColKey] = useState<SheetFieldKey>('skip');
+
+  const [quickPasteInput, setQuickPasteInput] = useState('');
+  const [pasteFeedback, setPasteFeedback] = useState<{
+    type: 'create' | 'update' | 'error';
+    message: string;
+    userAccount?: string;
+    userName?: string;
+  } | null>(null);
+  const [multiParsedList, setMultiParsedList] = useState<{
+    member: ParsedSheetMember;
+    existingUser?: User;
+  }[]>([]);
+  const [selectedMultiIdx, setSelectedMultiIdx] = useState<number>(0);
+  const [showColumnGuide, setShowColumnGuide] = useState(true);
+
+  // BATCH IMPORT MODAL STATE
+  const [isBatchImportModalOpen, setIsBatchImportModalOpen] = useState(false);
+  const [batchSelectedIndices, setBatchSelectedIndices] = useState<Set<number>>(new Set());
+  const [isImportingBatch, setIsImportingBatch] = useState(false);
+  const [batchFilterTab, setBatchFilterTab] = useState<'ALL' | 'NEW' | 'UPDATE'>('ALL');
+
+  // Column management methods
+  const saveColumns = (newCols: SheetColumnItem[]) => {
+    setSheetColumns(newCols);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_SHEET_COLS, JSON.stringify(newCols));
+      } catch {}
+    }
+  };
+
+  const handleReorderColumns = (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= sheetColumns.length || toIdx >= sheetColumns.length) return;
+    const next = [...sheetColumns];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    saveColumns(next);
+  };
+
+  const handleOpenAddColumn = () => {
+    setNewColName('');
+    setNewColKey('skip');
+    setIsAddColumnOpen(true);
+  };
+
+  const handleConfirmAddColumn = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const defaultLabel = AVAILABLE_SHEET_FIELDS.find((f) => f.key === newColKey)?.defaultName || 'Cột mới';
+    const label = newColName.trim() || defaultLabel;
+    const newCol: SheetColumnItem = {
+      id: `col-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      key: newColKey,
+      label,
+    };
+    const next = [...sheetColumns, newCol];
+    saveColumns(next);
+    setIsAddColumnOpen(false);
+    setNewColName('');
+    setNewColKey('skip');
+  };
+
+  const handleOpenEditColumn = (idx: number) => {
+    const col = sheetColumns[idx];
+    if (!col) return;
+    setEditingColIdx(idx);
+    setEditColName(col.label);
+    setEditColKey(col.key);
+  };
+
+  const handleConfirmEditColumn = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (editingColIdx === null) return;
+    const defaultLabel = AVAILABLE_SHEET_FIELDS.find((f) => f.key === editColKey)?.defaultName || 'Cột';
+    const label = editColName.trim() || defaultLabel;
+    const next = [...sheetColumns];
+    next[editingColIdx] = {
+      ...next[editingColIdx],
+      label,
+      key: editColKey,
+    };
+    saveColumns(next);
+    setEditingColIdx(null);
+  };
+
+  const handleRemoveColumn = (idx: number) => {
+    if (sheetColumns.length <= 1) return;
+    const next = sheetColumns.filter((_, i) => i !== idx);
+    saveColumns(next);
+    if (editingColIdx === idx) {
+      setEditingColIdx(null);
+    }
+  };
+
+  const handleResetColumns = () => {
+    saveColumns(DEFAULT_SHEET_COLUMNS);
+  };
+
   // ROLE FORM STATE
   const [isRoleFormOpen, setIsRoleFormOpen] = useState(false);
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
@@ -221,6 +566,163 @@ export const UserManagementView: React.FC = () => {
   const [roleDesc, setRoleDesc] = useState('');
   const [roleColor, setRoleColor] = useState('purple');
   const [roleError, setRoleError] = useState('');
+
+  // QUICK PASTE & SHEET PARSING LOGIC
+  const applyParsedMember = (parsed: ParsedSheetMember) => {
+    const cleanAccount = parsed.account.toLowerCase();
+    const existingUser = users.find(
+      (u) =>
+        (cleanAccount && u.account.toLowerCase() === cleanAccount) ||
+        (parsed.email && u.email && u.email.toLowerCase() === parsed.email.toLowerCase()) ||
+        (parsed.phone && u.phone && u.phone === parsed.phone) ||
+        (parsed.cccd && u.cccd && u.cccd === parsed.cccd)
+    );
+
+    setUserName(parsed.name || (existingUser?.name ?? ''));
+    setUserAccount(parsed.account || (existingUser?.account ?? ''));
+    setUserRole(parsed.role);
+    setSelectedSpecs(parsed.specializations);
+    setUserCccd(parsed.cccd || (existingUser?.cccd ?? ''));
+    setUserBankAccount(parsed.bankAccount || (existingUser?.bankAccount ?? ''));
+    setUserEmail(parsed.email || (existingUser?.email ?? ''));
+    setUserPhone(parsed.phone || (existingUser?.phone ?? ''));
+    setUserTechnologies(parsed.technologies || (existingUser?.technologies ?? ''));
+    setUserBirthDate(parsed.birthDate || (existingUser?.birthDate ? String(existingUser.birthDate) : ''));
+
+    if (existingUser) {
+      setEditingUserId(existingUser.id);
+      setPasteFeedback({
+        type: 'update',
+        message: `Đã tìm thấy nhân viên @${existingUser.account} (${existingUser.name}) trong hệ thống! Đã tự động điền thông tin mới từ Sheet và chuyển sang chế độ CẬP NHẬT.`,
+        userAccount: existingUser.account,
+        userName: existingUser.name,
+      });
+    } else {
+      setEditingUserId(null);
+      setPasteFeedback({
+        type: 'create',
+        message: `Đã tự động trích xuất thông tin nhân viên mới @${parsed.account || 'mới'} (${parsed.name}). Sẵn sàng TẠO MỚI!`,
+        userAccount: parsed.account,
+        userName: parsed.name,
+      });
+    }
+  };
+
+  const handleProcessSheetData = (rawPastedText: string) => {
+    if (!rawPastedText || !rawPastedText.trim()) return;
+
+    const lines = rawPastedText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length === 0) return;
+
+    // Filter out header line if present
+    const dataLines = lines.filter((line) => {
+      const lower = line.toLowerCase();
+      return !(
+        (lower.includes('full name') || lower.includes('họ & tên') || lower.includes('họ và tên') || lower.includes('tên hiển thị')) &&
+        (lower.includes('staff code') || lower.includes('cccd') || lower.includes('gmail') || lower.includes('tk bank'))
+      );
+    });
+
+    const parsedMembers: { member: ParsedSheetMember; existingUser?: User }[] = [];
+
+    dataLines.forEach((line) => {
+      const parsed = parseSheetRowWithColumns(line, sheetColumns, roles);
+      if (parsed) {
+        const cleanAcc = parsed.account.toLowerCase();
+        const existing = users.find(
+          (u) =>
+            (cleanAcc && u.account.toLowerCase() === cleanAcc) ||
+            (parsed.email && u.email && u.email.toLowerCase() === parsed.email.toLowerCase()) ||
+            (parsed.phone && u.phone && u.phone === parsed.phone) ||
+            (parsed.cccd && u.cccd && u.cccd === parsed.cccd)
+        );
+        parsedMembers.push({ member: parsed, existingUser: existing });
+      }
+    });
+
+    if (parsedMembers.length === 0) {
+      setPasteFeedback({
+        type: 'error',
+        message: 'Không thể nhận diện định dạng dữ liệu từ Sheet. Vui lòng kiểm tra lại dòng dữ liệu đã sao chép.',
+      });
+      return;
+    }
+
+    setMultiParsedList(parsedMembers);
+    setSelectedMultiIdx(0);
+
+    if (parsedMembers.length > 1) {
+      setBatchSelectedIndices(new Set(parsedMembers.map((_, i) => i)));
+      setIsBatchImportModalOpen(true);
+      applyParsedMember(parsedMembers[0].member);
+      setQuickPasteInput('');
+      const newCount = parsedMembers.filter((x) => !x.existingUser).length;
+      const updateCount = parsedMembers.filter((x) => !!x.existingUser).length;
+      setPasteFeedback({
+        type: 'create',
+        message: `Đã nhận diện ${parsedMembers.length} nhân sự (${newCount} tạo mới, ${updateCount} cập nhật). Bảng nhập hàng loạt đã được mở!`,
+      });
+    } else {
+      applyParsedMember(parsedMembers[0].member);
+      setQuickPasteInput('');
+    }
+  };
+
+  const handleExecuteBatchImport = async () => {
+    if (batchSelectedIndices.size === 0) return;
+    setIsImportingBatch(true);
+    try {
+      const selectedItems = multiParsedList
+        .filter((_, idx) => batchSelectedIndices.has(idx))
+        .map((item) => ({
+          member: item.member,
+          existingUserId: item.existingUser?.id,
+        }));
+
+      const res = await batchImportUsers(selectedItems);
+
+      setIsBatchImportModalOpen(false);
+      setMultiParsedList([]);
+      setIsUserFormOpen(false);
+
+      if (res.newCredentials.length > 0) {
+        setBatchCredModal({
+          newlyGeneratedCount: res.createdCount,
+          results: res.newCredentials,
+        });
+        setPasteFeedback({
+          type: 'create',
+          message: `🎉 Nhập thành công ${selectedItems.length} nhân sự (${res.createdCount} tạo mới, ${res.updatedCount} cập nhật)! Đã mở danh sách mật khẩu tạm thời.`,
+        });
+      } else {
+        setPasteFeedback({
+          type: 'update',
+          message: `🎉 Đã cập nhật thông tin thành công cho ${res.updatedCount} nhân sự từ Sheet!`,
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Có lỗi xảy ra khi nhập hàng loạt dữ liệu.');
+    } finally {
+      setIsImportingBatch(false);
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        handleProcessSheetData(text);
+      }
+    } catch {
+      const el = document.getElementById('sheet-quick-paste-input');
+      if (el) el.focus();
+    }
+  };
 
   // USER ACTIONS
   const handleOpenAddUser = () => {
@@ -235,6 +737,11 @@ export const UserManagementView: React.FC = () => {
     setUserPhone('');
     setUserTechnologies('');
     setUserBirthDate('');
+    setQuickPasteInput('');
+    setPasteFeedback(null);
+    setMultiParsedList([]);
+    setSelectedMultiIdx(0);
+    setShowColumnGuide(false);
     setIsUserFormOpen(true);
   };
 
@@ -250,6 +757,11 @@ export const UserManagementView: React.FC = () => {
     setUserPhone(user.phone || '');
     setUserTechnologies(user.technologies || '');
     setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
+    setQuickPasteInput('');
+    setPasteFeedback(null);
+    setMultiParsedList([]);
+    setSelectedMultiIdx(0);
+    setShowColumnGuide(false);
     setIsUserFormOpen(true);
   };
 
@@ -556,10 +1068,295 @@ export const UserManagementView: React.FC = () => {
               onSubmit={handleSubmitUser}
               className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4"
             >
-              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <Shield className="w-4 h-4 text-purple-500" />
-                {editingUserId ? 'Chỉnh Sửa Tài Khoản & Đa Chuyên Môn' : 'Tạo Tài Khoản & Phân Quyền Mới'}
-              </h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-purple-500" />
+                  {editingUserId ? 'Chỉnh Sửa Tài Khoản & Thông Tin Thành Viên' : 'Tạo Tài Khoản & Phân Quyền Mới'}
+                </h3>
+                {editingUserId && (
+                  <span className="text-[11px] font-mono bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-0.5 rounded-lg font-bold">
+                    Đang sửa: @{userAccount}
+                  </span>
+                )}
+              </div>
+
+              {/* QUICK SHEET PASTE BOX */}
+              <div className="bg-gradient-to-r from-purple-50/80 via-indigo-50/50 to-purple-50/80 border border-purple-200/90 rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-extrabold text-purple-900 block">
+                        Nhập Nhanh Thông Tin Thành Viên Từ Google Sheet / Excel
+                      </span>
+                      <span className="text-[11px] text-purple-700">
+                        Copy dòng nhân viên từ Sheet và dán vào đây để tự động điền & đối chiếu thông tin
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnGuide(!showColumnGuide)}
+                    className="flex items-center gap-1 text-[11px] text-purple-700 hover:text-purple-900 font-bold bg-white/90 hover:bg-white border border-purple-200 px-2.5 py-1 rounded-lg transition shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                  >
+                    <Info className="w-3.5 h-3.5 text-purple-600" />
+                    <span>{showColumnGuide ? 'Ẩn Cột Chuẩn' : 'Xem Thứ Tự Cột Chuẩn'}</span>
+                  </button>
+                </div>
+
+                {/* Column Structure Helper & Reorder / Add Tool */}
+                {showColumnGuide && (
+                  <div className="p-3.5 bg-white/95 rounded-xl border border-purple-200 text-[11px] space-y-3 transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-2 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-800">
+                          Thứ tự các cột tương thích trên Google Sheet / Excel:
+                        </span>
+                        <span className="text-[10px] font-mono font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">
+                          {sheetColumns.length} cột
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetColumns}
+                        className="text-[10px] font-semibold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 w-fit cursor-pointer"
+                        title="Khôi phục lại 13 cột theo mẫu Google Sheet mặc định"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Đặt lại mặc định</span>
+                      </button>
+                    </div>
+
+                    {/* Draggable Column Pills */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {sheetColumns.map((col, idx) => {
+                        const isKeyCol = col.key === 'account' || col.key === 'name';
+                        const isDragging = draggedColIdx === idx;
+                        const isOver = dragOverColIdx === idx;
+
+                        return (
+                          <div
+                            key={col.id || `${col.key}-${idx}`}
+                            draggable
+                            onDragStart={(e) => {
+                              setDraggedColIdx(idx);
+                              e.dataTransfer.setData('text/plain', String(idx));
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              if (dragOverColIdx !== idx) setDragOverColIdx(idx);
+                            }}
+                            onDragLeave={() => {
+                              if (dragOverColIdx === idx) setDragOverColIdx(null);
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              if (draggedColIdx !== null && draggedColIdx !== idx) {
+                                handleReorderColumns(draggedColIdx, idx);
+                              }
+                              setDraggedColIdx(null);
+                              setDragOverColIdx(null);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedColIdx(null);
+                              setDragOverColIdx(null);
+                            }}
+                            onClick={() => handleOpenEditColumn(idx)}
+                            className={`group relative flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-lg border text-[11px] font-medium select-none cursor-pointer transition-all duration-150 ${
+                              isDragging
+                                ? 'opacity-30 scale-95 border-purple-400 bg-purple-100'
+                                : isOver
+                                ? 'border-purple-600 bg-purple-100 ring-2 ring-purple-400 shadow-md scale-105'
+                                : isKeyCol
+                                ? 'bg-purple-50 text-purple-900 border-purple-300 font-bold hover:border-purple-400 hover:bg-purple-100/70 shadow-2xs'
+                                : col.key === 'skip'
+                                ? 'bg-slate-50 text-slate-400 border-dashed border-slate-300 hover:bg-slate-100'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-purple-300 hover:bg-purple-50/50'
+                            }`}
+                            title="Kéo thả để đổi thứ tự, hoặc bấm vào để sửa tên / kiểu cột"
+                          >
+                            <GripVertical className="w-3 h-3 text-slate-400 group-hover:text-purple-600 shrink-0 cursor-grab active:cursor-grabbing" />
+                            <span className="font-mono text-[10px] text-purple-700 font-bold shrink-0">
+                              {idx + 1}.
+                            </span>
+                            <span className="truncate max-w-[130px] font-medium">{col.label}</span>
+
+                            {col.key === 'skip' && (
+                              <span className="text-[9px] text-slate-400 bg-slate-200/60 px-1 py-0.2 rounded font-normal shrink-0">
+                                Bỏ qua
+                              </span>
+                            )}
+
+                            {sheetColumns.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveColumn(idx);
+                                }}
+                                title="Xóa cột này khỏi mapping"
+                                className="w-3.5 h-3.5 flex items-center justify-center text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-full transition cursor-pointer shrink-0 ml-0.5"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Add Column Button */}
+                      <button
+                        type="button"
+                        onClick={handleOpenAddColumn}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg border-2 border-dashed border-purple-300 hover:border-purple-600 bg-purple-50/80 hover:bg-purple-100 text-purple-700 text-[11px] font-bold transition active:scale-95 cursor-pointer shadow-2xs"
+                        title="Thêm cột mới vào cuối danh sách"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Thêm Cột</span>
+                      </button>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 italic leading-snug">
+                      💡 Mẹo: <b>Kéo thả</b> các thẻ để đổi thứ tự cột, hoặc bấm vào từng thẻ để <b>đổi tên cột</b> / <b>chỉnh trường dữ liệu</b>. Bấm <b>&quot;+ Thêm Cột&quot;</b> để bổ sung cột mới. Cấu hình sẽ tự động lưu lại.
+                    </p>
+                  </div>
+                )}
+
+
+
+                {/* Paste Action Input & Button */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      id="sheet-quick-paste-input"
+                      type="text"
+                      value={quickPasteInput}
+                      onChange={(e) => {
+                        setQuickPasteInput(e.target.value);
+                        handleProcessSheetData(e.target.value);
+                      }}
+                      onPaste={(e) => {
+                        const pasted = e.clipboardData.getData('text');
+                        if (pasted) {
+                          e.preventDefault();
+                          handleProcessSheetData(pasted);
+                        }
+                      }}
+                      placeholder="👉 Dán (Ctrl + V) dòng dữ liệu copy từ Google Sheet hoặc Excel vào đây..."
+                      className="w-full bg-white border border-purple-300/90 rounded-xl px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 font-medium focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePasteFromClipboard}
+                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-xs shrink-0 cursor-pointer"
+                    title="Đọc dữ liệu vừa copy trong Clipboard"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Dán Từ Clipboard</span>
+                  </button>
+                </div>
+
+                {/* Multi-member row switcher & Batch Action Banner if user pasted multiple rows */}
+                {multiParsedList.length > 1 && (
+                  <div className="p-3 bg-gradient-to-r from-purple-100/90 via-indigo-100/80 to-purple-100/90 border border-purple-300 rounded-2xl space-y-2.5 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                            <span>Đã nhận diện {multiParsedList.length} nhân sự từ Sheet</span>
+                            <span className="text-[10px] font-mono font-bold bg-white text-purple-700 px-1.5 py-0.2 rounded border border-purple-200">
+                              {multiParsedList.filter((x) => !x.existingUser).length} mới •{' '}
+                              {multiParsedList.filter((x) => !!x.existingUser).length} cập nhật
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-purple-800">
+                            Bạn có thể bấm nhập hàng loạt tất cả cùng lúc hoặc bấm vào từng người để kiểm tra
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBatchSelectedIndices(new Set(multiParsedList.map((_, i) => i)));
+                          setIsBatchImportModalOpen(true);
+                        }}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-purple-600/20 active:scale-95 cursor-pointer shrink-0"
+                      >
+                        <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                        <span>Mở Bảng Nhập Hàng Loạt ({multiParsedList.length})</span>
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-1 border-t border-purple-200/80">
+                      {multiParsedList.map((item, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedMultiIdx(idx);
+                            applyParsedMember(item.member);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                            selectedMultiIdx === idx
+                              ? 'bg-purple-600 text-white shadow-xs ring-2 ring-purple-300'
+                              : 'bg-white text-slate-700 border border-purple-200 hover:bg-purple-50'
+                          }`}
+                        >
+                          <span>{item.member.name || `@${item.member.account}`}</span>
+                          {item.existingUser ? (
+                            <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-mono font-medium">
+                              Sửa
+                            </span>
+                          ) : (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1 py-0.2 rounded font-mono font-medium">
+                              Mới
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Feedback Banner (Check existing vs New) */}
+                {pasteFeedback && (
+                  <div
+                    className={`p-3 rounded-xl text-xs font-semibold flex items-start gap-2 animate-in fade-in ${
+                      pasteFeedback.type === 'update'
+                        ? 'bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs'
+                        : pasteFeedback.type === 'create'
+                        ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-2xs'
+                        : 'bg-red-50 text-red-700 border border-red-200'
+                    }`}
+                  >
+                    {pasteFeedback.type === 'update' ? (
+                      <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    ) : pasteFeedback.type === 'create' ? (
+                      <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 leading-snug">
+                      <span>{pasteFeedback.message}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPasteFeedback(null)}
+                      className="text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -1678,6 +2475,484 @@ export const UserManagementView: React.FC = () => {
                   className="px-3.5 sm:px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition cursor-pointer"
                 >
                   Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL: THÊM CỘT MỚI VÀO SHEET MAPPING */}
+      {isAddColumnOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-purple-200 max-w-md w-full p-5 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shadow-xs">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800">Thêm Cột Mới Khớp Với Sheet</h4>
+                  <p className="text-[11px] text-slate-500">Đặt tên cột trên Sheet và chọn kiểu dữ liệu tương ứng</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddColumnOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleConfirmAddColumn();
+                }
+              }}
+              className="space-y-3.5"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  1. Tên cột hiển thị (Khớp với tiêu đề trên Sheet): <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newColName}
+                  onChange={(e) => setNewColName(e.target.value)}
+                  placeholder="VD: Họ & Tên, Mã NV, CCCD, Link CV, v.v..."
+                  className="w-full bg-slate-50 border border-slate-300 focus:border-purple-600 focus:bg-white rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-200 transition font-medium"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  2. Gán vào trường thông tin thành viên (Kiểu dữ liệu):
+                </label>
+                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
+                  {AVAILABLE_SHEET_FIELDS.map((field) => {
+                    const isSelected = newColKey === field.key;
+                    return (
+                      <button
+                        key={field.key}
+                        type="button"
+                        onClick={() => {
+                          setNewColKey(field.key);
+                          if (!newColName || AVAILABLE_SHEET_FIELDS.some((f) => f.defaultName === newColName)) {
+                            setNewColName(field.defaultName);
+                          }
+                        }}
+                        className={`text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-between cursor-pointer ${
+                          isSelected
+                            ? 'bg-purple-600 text-white font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-purple-50 hover:text-purple-700'
+                        }`}
+                      >
+                        <span className="truncate text-[11px]">{field.label}</span>
+                        {isSelected && <Check className="w-3 h-3 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddColumnOpen(false)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmAddColumn()}
+                  className="px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Thêm Vào Danh Sách</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CHỈNH SỬA CỘT HIỆN CÓ TRÊN SHEET MAPPING */}
+      {editingColIdx !== null && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-purple-200 max-w-md w-full p-5 space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shadow-xs">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800">
+                    Chỉnh Sửa Cột Số {editingColIdx + 1}
+                  </h4>
+                  <p className="text-[11px] text-slate-500">Cập nhật tên hiển thị hoặc thay đổi trường dữ liệu gán</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingColIdx(null)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleConfirmEditColumn();
+                }
+              }}
+              className="space-y-3.5"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  1. Tên cột hiển thị (Khớp với tiêu đề trên Sheet): <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editColName}
+                  onChange={(e) => setEditColName(e.target.value)}
+                  placeholder="VD: Họ & Tên, Mã NV, CCCD..."
+                  className="w-full bg-slate-50 border border-slate-300 focus:border-purple-600 focus:bg-white rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-200 transition font-medium"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  2. Gán vào trường thông tin thành viên (Kiểu dữ liệu):
+                </label>
+                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
+                  {AVAILABLE_SHEET_FIELDS.map((field) => {
+                    const isSelected = editColKey === field.key;
+                    return (
+                      <button
+                        key={field.key}
+                        type="button"
+                        onClick={() => setEditColKey(field.key)}
+                        className={`text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-between cursor-pointer ${
+                          isSelected
+                            ? 'bg-purple-600 text-white font-bold shadow-xs'
+                            : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-purple-50 hover:text-purple-700'
+                        }`}
+                      >
+                        <span className="truncate text-[11px]">{field.label}</span>
+                        {isSelected && <Check className="w-3 h-3 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2.5 border-t border-slate-100">
+                {sheetColumns.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveColumn(editingColIdx)}
+                    className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa Cột</span>
+                  </button>
+                ) : <div />}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingColIdx(null)}
+                    className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmEditColumn()}
+                    className="px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Lưu Thay Đổi</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL: BẢNG XEM TRƯỚC & NHẬP HÀNG LOẠT THÀNH VIÊN TỪ SHEET */}
+      {isBatchImportModalOpen && multiParsedList.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-purple-200 max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 via-indigo-50/40 to-purple-50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20 shrink-0">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-purple-950 flex items-center gap-2">
+                    <span>Xem Trước & Nhập Hàng Loạt Từ Sheet</span>
+                    <span className="text-xs font-mono font-bold bg-purple-200/80 text-purple-900 px-2 py-0.5 rounded-full">
+                      {multiParsedList.length} nhân sự
+                    </span>
+                  </h3>
+                  <p className="text-xs text-purple-700">
+                    Hệ thống đã tự động trích xuất các cột và phân loại tài khoản tạo mới / cập nhật
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBatchImportModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-white/80 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter & Selection Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3 bg-slate-50 border-b border-slate-200 shrink-0 text-xs">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (batchSelectedIndices.size === multiParsedList.length) {
+                      setBatchSelectedIndices(new Set());
+                    } else {
+                      setBatchSelectedIndices(new Set(multiParsedList.map((_, i) => i)));
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:border-purple-500 rounded-xl font-bold text-slate-700 transition cursor-pointer shadow-2xs"
+                >
+                  {batchSelectedIndices.size === multiParsedList.length ? (
+                    <CheckSquare className="w-4 h-4 text-purple-600" />
+                  ) : batchSelectedIndices.size > 0 ? (
+                    <div className="w-4 h-4 rounded bg-purple-600 text-white flex items-center justify-center text-[10px] font-bold">
+                      -
+                    </div>
+                  ) : (
+                    <Square className="w-4 h-4 text-slate-400" />
+                  )}
+                  <span>
+                    {batchSelectedIndices.size === multiParsedList.length
+                      ? 'Bỏ chọn tất cả'
+                      : `Chọn tất cả (${multiParsedList.length})`}
+                  </span>
+                </button>
+
+                {/* Filter Tabs */}
+                <div className="flex items-center bg-slate-200/70 p-0.5 rounded-xl gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setBatchFilterTab('ALL')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      batchFilterTab === 'ALL' ? 'bg-white text-purple-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Tất cả ({multiParsedList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchFilterTab('NEW')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${
+                      batchFilterTab === 'NEW' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Tạo mới ({multiParsedList.filter((x) => !x.existingUser).length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchFilterTab('UPDATE')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${
+                      batchFilterTab === 'UPDATE' ? 'bg-white text-amber-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span>Cập nhật ({multiParsedList.filter((x) => !!x.existingUser).length})</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-slate-600 font-semibold flex items-center gap-2">
+                <span>Đã chọn:</span>
+                <span className="font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-lg font-mono">
+                  {batchSelectedIndices.size} / {multiParsedList.length}
+                </span>
+              </div>
+            </div>
+
+            {/* Preview Table */}
+            <div className="flex-1 overflow-y-auto p-4 max-h-[55vh]">
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                <table className="w-full text-left text-xs text-slate-700 border-collapse">
+                  <thead className="bg-slate-100/90 text-slate-700 uppercase text-[10px] font-extrabold sticky top-0 z-10 border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2.5 w-10 text-center">Chọn</th>
+                      <th className="px-2 py-2.5 w-10 text-center">STT</th>
+                      <th className="px-3 py-2.5">Trạng Thái</th>
+                      <th className="px-3 py-2.5">Họ và Tên</th>
+                      <th className="px-3 py-2.5">Staff Code</th>
+                      <th className="px-3 py-2.5">Role / Quyền</th>
+                      <th className="px-3 py-2.5">CCCD</th>
+                      <th className="px-3 py-2.5">TK Ngân Hàng</th>
+                      <th className="px-3 py-2.5">Gmail / SĐT</th>
+                      <th className="px-3 py-2.5">Công Nghệ</th>
+                      <th className="px-3 py-2.5">Năm Sinh</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {multiParsedList.map((item, idx) => {
+                      const isNew = !item.existingUser;
+                      if (batchFilterTab === 'NEW' && !isNew) return null;
+                      if (batchFilterTab === 'UPDATE' && isNew) return null;
+                      const isChecked = batchSelectedIndices.has(idx);
+
+                      return (
+                        <tr
+                          key={idx}
+                          onClick={() => {
+                            const next = new Set(batchSelectedIndices);
+                            if (next.has(idx)) next.delete(idx);
+                            else next.add(idx);
+                            setBatchSelectedIndices(next);
+                          }}
+                          className={`hover:bg-purple-50/60 transition cursor-pointer ${
+                            isChecked ? 'bg-purple-50/30' : 'opacity-60 bg-slate-50/40'
+                          }`}
+                        >
+                          <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const next = new Set(batchSelectedIndices);
+                                if (e.target.checked) next.add(idx);
+                                else next.delete(idx);
+                                setBatchSelectedIndices(next);
+                              }}
+                              className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-2 py-2 text-center font-mono text-[11px] text-slate-500">
+                            {idx + 1}
+                          </td>
+                          <td className="px-3 py-2">
+                            {isNew ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>Tạo Mới</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                <span>Sửa (@{item.existingUser?.account})</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 font-bold text-slate-900 whitespace-nowrap">
+                            {item.member.name || <span className="text-slate-400 italic">Chưa có tên</span>}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px] font-bold text-purple-700 whitespace-nowrap">
+                            @{item.member.account || 'tự sinh'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
+                                {item.member.specializations[0] || 'BA'}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">
+                                {item.member.role}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                            {item.member.cccd || '-'}
+                          </td>
+                          <td className="px-3 py-2 text-[11px] text-slate-600 max-w-[150px] truncate" title={item.member.bankAccount}>
+                            {item.member.bankAccount || '-'}
+                          </td>
+                          <td className="px-3 py-2 text-[11px]">
+                            <div className="text-slate-800 truncate max-w-[140px]" title={item.member.email}>
+                              {item.member.email || '-'}
+                            </div>
+                            <div className="text-slate-500 font-mono text-[10px]">
+                              {item.member.phone || ''}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-[11px] text-slate-600 max-w-[130px] truncate" title={item.member.technologies}>
+                            {item.member.technologies || '-'}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px] text-slate-600 text-center">
+                            {item.member.birthDate || '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-4 border-t border-slate-200 bg-slate-50/80 shrink-0">
+              <div className="text-xs text-slate-600">
+                <span>Chuẩn bị xử lý: </span>
+                <strong className="text-purple-700 font-bold">{batchSelectedIndices.size}</strong> nhân sự (
+                <span className="text-emerald-700 font-bold">
+                  {multiParsedList.filter((x, idx) => batchSelectedIndices.has(idx) && !x.existingUser).length} tạo mới
+                </span>
+                ,{' '}
+                <span className="text-amber-700 font-bold">
+                  {multiParsedList.filter((x, idx) => batchSelectedIndices.has(idx) && !!x.existingUser).length} cập nhật
+                </span>
+                )
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsBatchImportModalOpen(false)}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition cursor-pointer"
+                >
+                  Hủy / Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsBatchImportModalOpen(false);
+                    applyParsedMember(multiParsedList[0].member);
+                  }}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl border border-purple-200 transition cursor-pointer"
+                >
+                  Điền Từng Người
+                </button>
+                <button
+                  type="button"
+                  disabled={batchSelectedIndices.size === 0 || isImportingBatch}
+                  onClick={handleExecuteBatchImport}
+                  className="flex-1 sm:flex-initial px-5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  {isImportingBatch ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang Nhập Dữ Liệu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                      <span>Xác Nhận Nhập Hàng Loạt ({batchSelectedIndices.size})</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

@@ -28,9 +28,12 @@ import {
   Info,
   Copy,
   Check,
+  Edit2,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown } from './common/Dropdown';
+import { parseSheetRow } from './UserManagementView';
 
 interface UserDetailModalProps {
   user: User | null;
@@ -53,9 +56,17 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
-  // Form Fields (Admin only updates role and specializations)
+  // Form Fields (Admin updates role, specializations, and personal info)
   const [userRole, setUserRole] = useState<UserRole>('Member');
   const [selectedSpecs, setSelectedSpecs] = useState<Specialization[]>(['BA']);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [userName, setUserName] = useState('');
+  const [userPhone, setUserPhone] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userCccd, setUserCccd] = useState('');
+  const [userBirthDate, setUserBirthDate] = useState('');
+  const [userBankAccount, setUserBankAccount] = useState('');
+  const [userTechnologies, setUserTechnologies] = useState('');
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -88,6 +99,14 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     if (user) {
       setUserRole(user.role || 'Member');
       setSelectedSpecs(user.specializations && user.specializations.length > 0 ? user.specializations : ['BA']);
+      setUserName(user.name || '');
+      setUserPhone(user.phone || '');
+      setUserEmail(user.email || '');
+      setUserCccd(user.cccd || '');
+      setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
+      setUserBankAccount(user.bankAccount || '');
+      setUserTechnologies(user.technologies || '');
+      setIsEditingProfile(false);
       setErrorMsg('');
       setSuccessMsg('');
     }
@@ -157,19 +176,32 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!userName.trim()) {
+      setErrorMsg('Vui lòng nhập Họ & Tên nhân viên.');
+      return;
+    }
+
     setErrorMsg('');
     setSuccessMsg('');
     setIsSaving(true);
 
     setTimeout(() => {
       updateUser(user.id, {
+        name: userName.trim(),
         role: userRole,
         specializations: selectedSpecs,
+        phone: userPhone.trim(),
+        email: userEmail.trim(),
+        cccd: userCccd.trim(),
+        birthDate: userBirthDate.trim(),
+        bankAccount: userBankAccount.trim(),
+        technologies: userTechnologies.trim(),
       });
 
       setIsSaving(false);
       setIsSaved(true);
-      setSuccessMsg('Cập nhật phân quyền & chuyên môn nhân viên thành công!');
+      setIsEditingProfile(false);
+      setSuccessMsg('Cập nhật thông tin & phân quyền nhân viên thành công!');
       setTimeout(() => {
         setIsSaved(false);
         setSuccessMsg('');
@@ -262,7 +294,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
               <div className="space-y-1">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                  {user.name}
+                  {userName || user.name}
                 </h3>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-mono text-indigo-200 bg-white/10 px-2 py-0.5 rounded-md border border-white/15 font-bold">
@@ -323,7 +355,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
               </div>
               <button
                 type="button"
-                onClick={() => handleCopyAllInfo(user.account, user.name, user.tempPassword!)}
+                onClick={() => handleCopyAllInfo(user.account, userName || user.name, user.tempPassword!)}
                 className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shrink-0 shadow-xs"
               >
                 {copiedField === 'all' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -386,7 +418,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
             </div>
           </div>
 
-          {/* Admin Edit Controls: Level & Specializations */}
+          {/* Admin Edit Controls: Level & Specializations + Personal Profile Info */}
           <form onSubmit={handleSaveUser} className="space-y-4">
             <div className="border border-purple-200/80 rounded-2xl p-4 bg-purple-50/30 space-y-4 shadow-2xs">
               <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-100 pb-2">
@@ -466,71 +498,285 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
               </div>
             </div>
 
-            {/* Read-Only Personal Details Section */}
-            <div className="border border-slate-200 rounded-2xl p-4 bg-white space-y-3.5 shadow-2xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-indigo-600" />
-                  Hồ Sơ Lý Lịch Nhân Sự
-                </h4>
-                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
-                  <Info className="w-3 h-3 text-indigo-500" />
-                  Chỉ nhân viên tự cập nhật trong Hồ sơ cá nhân
-                </span>
+            {/* Personal Details Section (View Mode with Edit Trigger or Active Edit Mode) */}
+            <div className={`border rounded-2xl p-4 bg-white space-y-3.5 shadow-2xs transition-all duration-200 ${
+              isEditingProfile ? 'border-purple-300 ring-2 ring-purple-100/80 bg-purple-50/10' : 'border-slate-200'
+            }`}>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-purple-600" />
+                    Hồ Sơ Lý Lịch Nhân Sự
+                  </h4>
+                  {isEditingProfile && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md font-bold animate-pulse">
+                      <Edit2 className="w-3 h-3 text-purple-600" />
+                      Đang mở chỉnh sửa
+                    </span>
+                  )}
+                </div>
+
+                {isAdmin && (
+                  <div>
+                    {!isEditingProfile ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingProfile(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl border border-purple-200/90 transition active:scale-95 shadow-2xs cursor-pointer"
+                        title="Bấm vào để mở các ô nhập liệu chỉnh sửa hồ sơ"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Chỉnh Sửa Hồ Sơ</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserName(user.name || '');
+                          setUserPhone(user.phone || '');
+                          setUserEmail(user.email || '');
+                          setUserCccd(user.cccd || '');
+                          setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
+                          setUserBankAccount(user.bankAccount || '');
+                          setUserTechnologies(user.technologies || '');
+                          setIsEditingProfile(false);
+                          setErrorMsg('');
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs font-semibold rounded-lg border border-slate-200 transition active:scale-95"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Hủy Chỉnh Sửa</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Họ & Tên</span>
-                  <span className="font-bold text-slate-800 text-xs">{user.name || '—'}</span>
-                </div>
+              {!isEditingProfile ? (
+                /* VIEW MODE: Read-only display cards to prevent accidental changes */
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Họ & Tên</span>
+                    <span className="font-bold text-slate-800 text-xs">{userName || user.name || '—'}</span>
+                  </div>
 
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
-                    <Phone className="w-3 h-3 text-slate-400" /> Số Điện Thoại
-                  </span>
-                  <span className="font-mono font-bold text-slate-800">{user.phone || '—'}</span>
-                </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-slate-400" /> Số Điện Thoại
+                    </span>
+                    <span className="font-mono font-bold text-slate-800">{userPhone || user.phone || '—'}</span>
+                  </div>
 
-                <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
-                    <Mail className="w-3 h-3 text-slate-400" /> Gmail / Email
-                  </span>
-                  <span className="font-semibold text-slate-800 truncate block">{user.email || '—'}</span>
-                </div>
+                  <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                      <Mail className="w-3 h-3 text-slate-400" /> Gmail / Email
+                    </span>
+                    <span className="font-semibold text-slate-800 truncate block">{userEmail || user.email || '—'}</span>
+                  </div>
 
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
-                    <FileText className="w-3 h-3 text-slate-400" /> Số Căn Cước (CCCD)
-                  </span>
-                  <span className="font-mono font-bold text-slate-800">{user.cccd || '—'}</span>
-                </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                      <FileText className="w-3 h-3 text-slate-400" /> Số Căn Cước (CCCD)
+                    </span>
+                    <span className="font-mono font-bold text-slate-800">{userCccd || user.cccd || '—'}</span>
+                  </div>
 
-                <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-slate-400" /> Năm Sinh
-                  </span>
-                  <span className="font-mono font-bold text-slate-800">{user.birthDate || '—'}</span>
-                </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-400" /> Năm Sinh
+                    </span>
+                    <span className="font-mono font-bold text-slate-800">{userBirthDate || user.birthDate || '—'}</span>
+                  </div>
 
-                <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
-                    <CreditCard className="w-3 h-3 text-slate-400" /> Tài Khoản Ngân Hàng (Tk Bank)
-                  </span>
-                  <span className="font-mono font-bold text-slate-800 text-[11px] block">
-                    {user.bankAccount || '—'}
-                  </span>
-                </div>
+                  <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                      <CreditCard className="w-3 h-3 text-slate-400" /> Tài Khoản Ngân Hàng (Tk Bank)
+                    </span>
+                    <span className="font-mono font-bold text-slate-800 text-[11px] block">
+                      {userBankAccount || user.bankAccount || '—'}
+                    </span>
+                  </div>
 
-                <div className="sm:col-span-2 bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100 space-y-0.5">
-                  <span className="text-[10px] text-indigo-500 uppercase font-bold tracking-wider block flex items-center gap-1">
-                    <Cpu className="w-3 h-3 text-indigo-500" /> Kỹ Năng / Công Nghệ (Technology)
-                  </span>
-                  <span className="font-semibold text-indigo-700 text-xs block">
-                    {user.technologies || '—'}
-                  </span>
+                  <div className="sm:col-span-2 bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100 space-y-0.5">
+                    <span className="text-[10px] text-indigo-500 uppercase font-bold tracking-wider block flex items-center gap-1">
+                      <Cpu className="w-3 h-3 text-indigo-500" /> Kỹ Năng / Công Nghệ (Technology)
+                    </span>
+                    <span className="font-semibold text-indigo-700 text-xs block">
+                      {userTechnologies || user.technologies || '—'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                /* EDIT MODE: Active, bright input fields for editing */
+                <div className="space-y-3.5 animate-in fade-in duration-150">
+                  {/* Quick Sheet Paste Bar in Edit Mode */}
+                  <div className="bg-purple-50/80 border border-purple-200/90 rounded-xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-purple-900 font-bold shrink-0">
+                      <FileSpreadsheet className="w-4 h-4 text-purple-600" />
+                      <span>Dán từ Sheet:</span>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Dán (Ctrl + V) dòng thông tin copy từ Google Sheet để tự động điền..."
+                      onPaste={(e) => {
+                        const text = e.clipboardData.getData('text');
+                        if (text) {
+                          e.preventDefault();
+                          const parsed = parseSheetRow(text, roles);
+                          if (parsed) {
+                            if (parsed.name) setUserName(parsed.name);
+                            if (parsed.phone) setUserPhone(parsed.phone);
+                            if (parsed.email) setUserEmail(parsed.email);
+                            if (parsed.cccd) setUserCccd(parsed.cccd);
+                            if (parsed.birthDate) setUserBirthDate(parsed.birthDate);
+                            if (parsed.bankAccount) setUserBankAccount(parsed.bankAccount);
+                            if (parsed.technologies) setUserTechnologies(parsed.technologies);
+                            if (parsed.specializations.length > 0) setSelectedSpecs(parsed.specializations);
+                            if (parsed.role) setUserRole(parsed.role);
+                            setSuccessMsg(`Đã trích xuất thông tin từ Sheet cho ${parsed.name || user.name}!`);
+                            setTimeout(() => setSuccessMsg(''), 3000);
+                          } else {
+                            setErrorMsg('Không thể nhận diện định dạng dòng từ Sheet.');
+                            setTimeout(() => setErrorMsg(''), 3000);
+                          }
+                        }
+                      }}
+                      className="flex-1 bg-white border border-purple-300 rounded-lg px-2.5 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const text = await navigator.clipboard.readText();
+                          if (text) {
+                            const parsed = parseSheetRow(text, roles);
+                            if (parsed) {
+                              if (parsed.name) setUserName(parsed.name);
+                              if (parsed.phone) setUserPhone(parsed.phone);
+                              if (parsed.email) setUserEmail(parsed.email);
+                              if (parsed.cccd) setUserCccd(parsed.cccd);
+                              if (parsed.birthDate) setUserBirthDate(parsed.birthDate);
+                              if (parsed.bankAccount) setUserBankAccount(parsed.bankAccount);
+                              if (parsed.technologies) setUserTechnologies(parsed.technologies);
+                              if (parsed.specializations.length > 0) setSelectedSpecs(parsed.specializations);
+                              if (parsed.role) setUserRole(parsed.role);
+                              setSuccessMsg(`Đã trích xuất thông tin từ Sheet cho ${parsed.name || user.name}!`);
+                              setTimeout(() => setSuccessMsg(''), 3000);
+                            }
+                          }
+                        } catch {
+                          // ignore
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold transition shrink-0 active:scale-95 flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Dán Clipboard</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {/* Họ & Tên */}
+                    <div>
+                      <label className="text-[10px] text-slate-600 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
+                        <UserIcon className="w-3 h-3 text-purple-600" /> Họ & Tên <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={userName}
+                        onChange={(e) => setUserName(e.target.value)}
+                      placeholder="Nhập họ và tên..."
+                      required
+                      className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
+
+                  {/* Số Điện Thoại */}
+                  <div>
+                    <label className="text-[10px] text-slate-600 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-purple-600" /> Số Điện Thoại
+                    </label>
+                    <input
+                      type="text"
+                      value={userPhone}
+                      onChange={(e) => setUserPhone(e.target.value)}
+                      placeholder="0901234567..."
+                      className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono font-semibold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
+
+                  {/* Gmail / Email */}
+                  <div className="sm:col-span-2">
+                    <label className="text-[10px] text-slate-600 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
+                      <Mail className="w-3 h-3 text-purple-600" /> Gmail / Email
+                    </label>
+                    <input
+                      type="email"
+                      value={userEmail}
+                      onChange={(e) => setUserEmail(e.target.value)}
+                      placeholder="email@example.com..."
+                      className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
+
+                  {/* Số Căn Cước (CCCD) */}
+                  <div>
+                    <label className="text-[10px] text-slate-600 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
+                      <FileText className="w-3 h-3 text-purple-600" /> Số Căn Cước (CCCD)
+                    </label>
+                    <input
+                      type="text"
+                      value={userCccd}
+                      onChange={(e) => setUserCccd(e.target.value)}
+                      placeholder="012345678901..."
+                      className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono font-semibold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
+
+                  {/* Năm Sinh */}
+                  <div>
+                    <label className="text-[10px] text-slate-600 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-purple-600" /> Năm Sinh
+                    </label>
+                    <input
+                      type="text"
+                      value={userBirthDate}
+                      onChange={(e) => setUserBirthDate(e.target.value)}
+                      placeholder="YYYY (ví dụ: 1998, 2000)..."
+                      className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono font-semibold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
+
+                  {/* Tài Khoản Ngân Hàng (Tk Bank) */}
+                  <div className="sm:col-span-2">
+                    <label className="text-[10px] text-slate-600 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
+                      <CreditCard className="w-3 h-3 text-purple-600" /> Tài Khoản Ngân Hàng (Tk Bank)
+                    </label>
+                    <input
+                      type="text"
+                      value={userBankAccount}
+                      onChange={(e) => setUserBankAccount(e.target.value)}
+                      placeholder="STK - Tên Ngân Hàng - Tên Chủ TK..."
+                      className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono font-semibold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
+
+                  {/* Kỹ Năng / Công Nghệ (Technology) */}
+                  <div className="sm:col-span-2">
+                    <label className="text-[10px] text-purple-700 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
+                      <Cpu className="w-3 h-3 text-purple-600" /> Kỹ Năng / Công Nghệ (Technology)
+                    </label>
+                    <input
+                      type="text"
+                      value={userTechnologies}
+                      onChange={(e) => setUserTechnologies(e.target.value)}
+                      placeholder="Angular, ReactJS, Java Spring, Python, DevOps..."
+                      className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
                 </div>
               </div>
+            )}
             </div>
 
             {/* Submit & Footer Actions */}
@@ -588,7 +834,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                     ) : (
                       <>
                         <Save className="w-4 h-4" />
-                        <span>Lưu Cấu Hình</span>
+                        <span>Lưu Thay Đổi</span>
                       </>
                     )}
                   </button>
