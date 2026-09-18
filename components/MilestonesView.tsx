@@ -20,6 +20,9 @@ import {
   MessageSquare,
   FileText,
   Flame,
+  Copy,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 
@@ -30,6 +33,7 @@ export const MilestonesView: React.FC = () => {
     updateMilestone,
     deleteMilestone,
     tasks,
+    duplicateTask,
     updateTask,
     reorderTasksInMilestone,
     deleteTask,
@@ -44,9 +48,20 @@ export const MilestonesView: React.FC = () => {
   // Sub-tabs: Milestones vs Ad-hoc tasks
   const [subTab, setSubTab] = useState<'MILESTONES' | 'ADHOC'>('MILESTONES');
 
+  // Helper to normalize milestone title display
+  const formatMilestoneTitle = (title: string, orderNumber: number): string => {
+    if (!title) return `Milestone ${orderNumber}`;
+    const match = title.match(/^Milestone\s+\d+\s*(:\s*.*)?$/i);
+    if (match) {
+      const rest = match[1] ? match[1] : '';
+      return `Milestone ${orderNumber}${rest}`;
+    }
+    return title;
+  };
+
   // Find default matching role for current user based on their specializations
   const getInitialRoleForUser = (): string => {
-    if (!currentUser) return 'ALL';
+    if (!currentUser) return roles[0]?.code || 'BA';
     const userSpecs = currentUser.specializations || [];
     
     // 1. Check direct or fuzzy match in roles list
@@ -60,17 +75,18 @@ export const MilestonesView: React.FC = () => {
       if (fuzzyMatch) return fuzzyMatch.code;
     }
 
-    // 2. Fallback to first role or ALL
-    return roles[0]?.code || 'ALL';
+    // 2. Fallback to first role or BA
+    return roles[0]?.code || 'BA';
   };
 
-  const [adminSelectedRole, setAdminSelectedRole] = useState<string>('ALL');
+  const [adminSelectedRole, setAdminSelectedRole] = useState<string>('BA');
 
   // Automatically select user's current role/specialization when component loads or user/roles change
   React.useEffect(() => {
     if (currentUser && roles.length > 0) {
       const bestRole = getInitialRoleForUser();
       setAdminSelectedRole(bestRole);
+      setMsRole(bestRole);
     }
   }, [currentUser?.id, currentUser?.specializations?.join(','), roles]);
 
@@ -80,7 +96,7 @@ export const MilestonesView: React.FC = () => {
   const [msTitle, setMsTitle] = useState('');
   const [msDesc, setMsDesc] = useState('');
   const [msTargetDate, setMsTargetDate] = useState('');
-  const [msRole, setMsRole] = useState<string>('ALL');
+  const [msRole, setMsRole] = useState<string>('BA');
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [targetMilestoneId, setTargetMilestoneId] = useState<string>('');
@@ -96,32 +112,44 @@ export const MilestonesView: React.FC = () => {
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
   const [editMsTitle, setEditMsTitle] = useState('');
   const [editMsDesc, setEditMsDesc] = useState('');
+
+  // Collapse / Expand milestones state
+  const [collapsedMilestones, setCollapsedMilestones] = useState<Set<string>>(new Set());
+  const [isAdhocCollapsed, setIsAdhocCollapsed] = useState(false);
+
+  const toggleCollapseMilestone = (milestoneId: string) => {
+    setCollapsedMilestones((prev) => {
+      const next = new Set(prev);
+      if (next.has(milestoneId)) {
+        next.delete(milestoneId);
+      } else {
+        next.add(milestoneId);
+      }
+      return next;
+    });
+  };
+
+  const handleCollapseAll = () => {
+    setCollapsedMilestones(new Set(filteredMilestones.map((m) => m.id)));
+  };
+
+  const handleExpandAll = () => {
+    setCollapsedMilestones(new Set());
+  };
   const [editMsTargetDate, setEditMsTargetDate] = useState('');
-  const [editMsRole, setEditMsRole] = useState<string>('ALL');
+  const [editMsRole, setEditMsRole] = useState<string>('BA');
 
   // Role filtering logic:
   // Check if a task's role matches current view filter
   const isTaskRoleMatch = (taskRole: Specialization): boolean => {
-    if (adminSelectedRole === 'ALL') return true;
-    if (adminSelectedRole) return taskRole === adminSelectedRole;
-    const userRoles = currentUser?.specializations || [];
-    return userRoles.includes(taskRole);
+    const currentRole = adminSelectedRole || roles[0]?.code || 'BA';
+    return taskRole === currentRole;
   };
 
   // Check if a milestone matches current view filter
   const isMilestoneRoleMatch = (ms: Milestone): boolean => {
-    if (!ms.role || ms.role === 'ALL' || adminSelectedRole === 'ALL') {
-      return true;
-    }
-    if (adminSelectedRole) {
-      return (
-        ms.role === adminSelectedRole ||
-        tasks.some((t) => t.milestoneId === ms.id && t.role === adminSelectedRole)
-      );
-    }
-    const userRoles = currentUser?.specializations || [];
-    if (userRoles.length === 0) return false;
-    return userRoles.includes(ms.role) || tasks.some((t) => t.milestoneId === ms.id && userRoles.includes(t.role));
+    const currentRole = adminSelectedRole || roles[0]?.code || 'BA';
+    return ms.role === currentRole;
   };
 
   // Checkbox toggle permission:
@@ -143,7 +171,7 @@ export const MilestonesView: React.FC = () => {
   // Filtered milestones and adhoc tasks
   const filteredMilestones = milestones
     .filter(isMilestoneRoleMatch)
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   const filteredAdhocTasks = tasks
     .filter((t) => (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) && isTaskRoleMatch(t.role))
@@ -162,7 +190,7 @@ export const MilestonesView: React.FC = () => {
     if (currentUser.role === 'Admin') return true;
     if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
       const userRoles = currentUser.specializations || [];
-      if (ms.role && ms.role !== 'ALL') {
+      if (ms.role) {
         return userRoles.includes(ms.role);
       }
       const msTasksAll = tasks.filter((t) => t.milestoneId === ms.id);
@@ -175,12 +203,10 @@ export const MilestonesView: React.FC = () => {
   const handleCreateMilestone = (e: React.FormEvent) => {
     e.preventDefault();
     if (!msTitle.trim()) return;
-    const finalRole: Specialization | 'ALL' | undefined =
+    const finalRole: Specialization =
       currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
-        ? (currentUser.specializations?.[0] as Specialization || 'BA')
-        : msRole === 'ALL'
-        ? 'ALL'
-        : (msRole as Specialization);
+        ? ((currentUser.specializations?.[0] as Specialization) || (adminSelectedRole as Specialization) || 'BA')
+        : ((msRole || adminSelectedRole || 'BA') as Specialization);
 
     addMilestone({
       title: msTitle,
@@ -200,7 +226,7 @@ export const MilestonesView: React.FC = () => {
     setEditMsTitle(ms.title);
     setEditMsDesc(ms.description || '');
     setEditMsTargetDate(ms.targetDate || '');
-    setEditMsRole(ms.role || 'ALL');
+    setEditMsRole(ms.role || adminSelectedRole || 'BA');
   };
 
   const handleSaveMilestone = (msId: string) => {
@@ -208,7 +234,7 @@ export const MilestonesView: React.FC = () => {
       title: editMsTitle,
       description: editMsDesc,
       targetDate: editMsTargetDate,
-      role: editMsRole === 'ALL' ? 'ALL' : (editMsRole as Specialization),
+      role: (editMsRole || adminSelectedRole || 'BA') as Specialization,
     });
     setEditingMilestoneId(null);
   };
@@ -262,18 +288,14 @@ export const MilestonesView: React.FC = () => {
     reorderTasksInMilestone(milestoneId, orderedIds);
   };
 
-  const handleOpenBreakTaskForMilestone = (milestoneId: string, milestoneRole?: Specialization | 'ALL') => {
+  const handleOpenBreakTaskForMilestone = (milestoneId: string, milestoneRole?: Specialization) => {
     setEditingTask(null);
     setTargetMilestoneId(milestoneId);
     const initRole =
       currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
         ? currentUser.specializations?.[0]
-        : adminSelectedRole !== 'ALL'
-        ? (adminSelectedRole as Specialization)
-        : milestoneRole && milestoneRole !== 'ALL'
-        ? milestoneRole
-        : undefined;
-    setModalInitialRole(initRole);
+        : milestoneRole || (adminSelectedRole as Specialization) || 'BA';
+    setModalInitialRole(initRole as Specialization);
     setIsTaskModalOpen(true);
   };
 
@@ -283,10 +305,8 @@ export const MilestonesView: React.FC = () => {
     const initRole =
       currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
         ? currentUser.specializations?.[0]
-        : adminSelectedRole !== 'ALL'
-        ? (adminSelectedRole as Specialization)
-        : undefined;
-    setModalInitialRole(initRole);
+        : (adminSelectedRole as Specialization) || 'BA';
+    setModalInitialRole(initRole as Specialization);
     setIsTaskModalOpen(true);
   };
 
@@ -369,14 +389,14 @@ export const MilestonesView: React.FC = () => {
             </span>
             <Dropdown
               value={adminSelectedRole}
-              onChange={setAdminSelectedRole}
-              options={[
-                { value: 'ALL', label: 'Tất Cả Role (Toàn Bộ Dự Án)' },
-                ...roles.map((r) => ({
-                  value: r.code,
-                  label: `Role ${r.code} (${r.name})`,
-                })),
-              ]}
+              onChange={(val) => {
+                setAdminSelectedRole(val);
+                setMsRole(val);
+              }}
+              options={roles.map((r) => ({
+                value: r.code,
+                label: `Role ${r.code} (${r.name})`,
+              }))}
               size="sm"
               buttonClassName="py-1.5 px-3 text-xs font-bold bg-white border-slate-300 text-indigo-700 shadow-2xs hover:border-indigo-400"
             />
@@ -399,7 +419,7 @@ export const MilestonesView: React.FC = () => {
               <label className="text-xs text-slate-500 block mb-1">Tên Milestone:</label>
               <input
                 type="text"
-                placeholder="VD: Milestone 4: Integration & System Testing"
+                placeholder={`VD: Milestone ${filteredMilestones.length + 1}: Tên cột mốc...`}
                 value={msTitle}
                 onChange={(e) => setMsTitle(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
@@ -410,21 +430,18 @@ export const MilestonesView: React.FC = () => {
               <label className="text-xs text-slate-500 block mb-1">Role Áp Dụng:</label>
               {currentUser?.role === 'Admin' ? (
                 <Dropdown
-                  value={msRole}
+                  value={msRole || adminSelectedRole || roles[0]?.code || 'BA'}
                   onChange={setMsRole}
-                  options={[
-                    { value: 'ALL', label: 'Tất cả / Chung Toàn Dự Án' },
-                    ...roles.map((r) => ({
-                      value: r.code,
-                      label: `Role ${r.code} (${r.name})`,
-                    })),
-                  ]}
+                  options={roles.map((r) => ({
+                    value: r.code,
+                    label: `Role ${r.code} (${r.name})`,
+                  }))}
                   className="w-full"
                   buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300"
                 />
               ) : (
                 <div className="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-slate-700 text-xs font-semibold flex items-center justify-between">
-                  <span>{currentUser?.specializations?.[0] || 'BA'}</span>
+                  <span>{currentUser?.specializations?.[0] || adminSelectedRole || 'BA'}</span>
                   <span className="text-[10px] text-slate-400 font-normal">Theo Leader</span>
                 </div>
               )}
@@ -469,7 +486,35 @@ export const MilestonesView: React.FC = () => {
 
       {/* TAB 1: MILESTONES LIST */}
       {subTab === 'MILESTONES' && (
-        <div className="space-y-6 tab-content-animate">
+        <div className="space-y-4 tab-content-animate">
+          {filteredMilestones.length > 0 && (
+            <div className="flex items-center justify-between text-xs text-slate-500 pb-0.5 px-0.5">
+              <span className="font-semibold text-slate-700">
+                Hiển thị {filteredMilestones.length} cột mốc ({tasks.filter((t) => t.milestoneId && isTaskRoleMatch(t.role)).length} đầu việc)
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleCollapseAll}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-amber-800 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg transition active:scale-95 shadow-2xs cursor-pointer flex items-center gap-1"
+                  title="Thu gọn tất cả các Milestone"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  <span>Thu gọn tất cả</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExpandAll}
+                  className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-amber-800 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-lg transition active:scale-95 shadow-2xs cursor-pointer flex items-center gap-1"
+                  title="Mở rộng tất cả các Milestone"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>Mở rộng tất cả</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {filteredMilestones.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
               <FolderOpen className="w-8 h-8 text-slate-300" />
@@ -483,7 +528,9 @@ export const MilestonesView: React.FC = () => {
               </span>
             </div>
           ) : (
-            filteredMilestones.map((ms) => {
+            filteredMilestones.map((ms, index) => {
+              const msOrderNumber = index + 1;
+              const displayTitle = formatMilestoneTitle(ms.title, msOrderNumber);
               const msTasks = tasks
                 .filter((t) => t.milestoneId === ms.id && isTaskRoleMatch(t.role))
                 .sort((a, b) => {
@@ -500,19 +547,39 @@ export const MilestonesView: React.FC = () => {
               const doneTasks = msTasks.filter((t) => t.status === 'Done').length;
               const progress = msTasks.length > 0 ? Math.round((doneTasks / msTasks.length) * 100) : 0;
               const isEditing = editingMilestoneId === ms.id;
+              const isCollapsed = collapsedMilestones.has(ms.id);
 
               return (
                 <div
                   key={ms.id}
                   className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm"
                 >
-                  {/* Milestone Header Bar */}
-                  <div className="bg-amber-50/70 p-4 border-b border-amber-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex items-start gap-3 flex-1">
-                      <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 font-bold text-sm shrink-0 shadow-2xs">
-                        {ms.order}
+                  {/* Milestone Header Bar (Click to Collapse / Expand) */}
+                  <div
+                    onClick={() => {
+                      if (!isEditing) {
+                        toggleCollapseMilestone(ms.id);
+                      }
+                    }}
+                    className={`bg-amber-50/70 p-3.5 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors cursor-pointer select-none hover:bg-amber-100/60 ${
+                      isCollapsed ? '' : 'border-b border-amber-100'
+                    }`}
+                    title={isCollapsed ? 'Bấm để mở rộng danh sách task trong Milestone' : 'Bấm để thu gọn Milestone'}
+                  >
+                    <div className="flex items-start gap-2.5 sm:gap-3 flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 font-bold text-sm shadow-2xs">
+                          {msOrderNumber}
+                        </div>
+                        <div className="w-6 h-6 rounded-lg text-amber-700 hover:bg-amber-200/60 flex items-center justify-center transition">
+                          <ChevronDown
+                            className={`w-4 h-4 transition-transform duration-300 ease-in-out ${
+                              isCollapsed ? '-rotate-90 text-amber-600' : 'rotate-0 text-amber-800'
+                            }`}
+                          />
+                        </div>
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0" onClick={(e) => isEditing && e.stopPropagation()}>
                         {isEditing ? (
                           <div className="space-y-2">
                             <input
@@ -550,15 +617,20 @@ export const MilestonesView: React.FC = () => {
                         ) : (
                           <>
                             <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 flex-wrap">
-                              {ms.title}
+                              {displayTitle}
                               {ms.role && (
                                 <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                  {ms.role === 'ALL' ? 'Toàn dự án' : `Role: ${ms.role}`}
+                                  Role: {ms.role}
                                 </span>
                               )}
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-slate-500 border border-slate-200 font-medium">
                                 {msTasks.length} đầu việc
                               </span>
+                              {isCollapsed && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-bold">
+                                  Đã thu gọn
+                                </span>
+                              )}
                             </h3>
                             <p className="text-xs text-slate-500 mt-0.5">{ms.description}</p>
                           </>
@@ -566,7 +638,7 @@ export const MilestonesView: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs shrink-0">
+                    <div className="flex items-center gap-3 text-xs shrink-0" onClick={(e) => e.stopPropagation()}>
                       <div className="text-right">
                         <span className="text-slate-400 block text-[10px]">Tiến độ Milestone</span>
                         <span className="font-bold text-emerald-600">{progress}% hoàn thành</span>
@@ -614,13 +686,19 @@ export const MilestonesView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Tasks List inside Milestone */}
-                  <div className="divide-y divide-slate-100">
-                    {msTasks.length === 0 ? (
-                      <div className="py-8 text-center text-slate-400 text-xs">
-                        Chưa có đầu việc nào được break trong cột mốc này cho role này.
-                      </div>
-                    ) : (
+                  {/* Tasks List inside Milestone with Smooth Accordion Animation */}
+                  <div
+                    className={`accordion-wrapper ${
+                      isCollapsed ? 'accordion-closed' : 'accordion-open'
+                    }`}
+                  >
+                    <div className="accordion-content">
+                      <div className="divide-y divide-slate-100">
+                        {msTasks.length === 0 ? (
+                          <div className="py-8 text-center text-slate-400 text-xs">
+                            Chưa có đầu việc nào được break trong cột mốc này cho role này.
+                          </div>
+                        ) : (
                       msTasks.map((t, idx) => {
                         const isDone = t.status === 'Done';
                         const isDragging = draggedMilestoneTaskId === t.id;
@@ -822,6 +900,16 @@ export const MilestonesView: React.FC = () => {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        duplicateTask(t.id);
+                                      }}
+                                      className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                                      title="Nhân bản task này (Duplicate)"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         setEditingTask(t);
                                         setTargetMilestoneId(t.milestoneId || ms.id);
                                         setModalInitialRole(t.role);
@@ -969,6 +1057,16 @@ export const MilestonesView: React.FC = () => {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          duplicateTask(t.id);
+                                        }}
+                                        className="p-1.5 bg-slate-100 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg active:scale-95"
+                                        title="Nhân bản task này (Duplicate)"
+                                      >
+                                        <Copy className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           setEditingTask(t);
                                           setTargetMilestoneId(t.milestoneId || ms.id);
                                           setModalInitialRole(t.role);
@@ -1004,6 +1102,8 @@ export const MilestonesView: React.FC = () => {
                         );
                       })
                     )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
@@ -1015,11 +1115,26 @@ export const MilestonesView: React.FC = () => {
       {/* TAB 2: AD-HOC & UNASSIGNED MILESTONE TASKS VIEW */}
       {subTab === 'ADHOC' && (
         <div className="bg-white border-2 border-indigo-200/80 rounded-2xl overflow-hidden shadow-sm tab-content-animate">
-          {/* Adhoc Section Header */}
-          <div className="bg-indigo-50/70 p-4 border-b border-indigo-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* Adhoc Section Header (Click to Collapse / Expand) */}
+          <div
+            onClick={() => setIsAdhocCollapsed(!isAdhocCollapsed)}
+            className={`bg-indigo-50/70 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors cursor-pointer select-none hover:bg-indigo-100/60 ${
+              isAdhocCollapsed ? '' : 'border-b border-indigo-100'
+            }`}
+            title={isAdhocCollapsed ? 'Bấm để mở rộng' : 'Bấm để thu gọn'}
+          >
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-indigo-100 border border-indigo-300 flex items-center justify-center text-indigo-700 font-bold shrink-0 shadow-2xs">
-                <Inbox className="w-4 h-4" />
+              <div className="flex items-center gap-1.5 shrink-0">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 border border-indigo-300 flex items-center justify-center text-indigo-700 font-bold shadow-2xs">
+                  <Inbox className="w-4 h-4" />
+                </div>
+                <div className="w-6 h-6 rounded-lg text-indigo-700 hover:bg-indigo-200/60 flex items-center justify-center transition">
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform duration-300 ease-in-out ${
+                      isAdhocCollapsed ? '-rotate-90 text-indigo-500' : 'rotate-0 text-indigo-700'
+                    }`}
+                  />
+                </div>
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
@@ -1027,6 +1142,11 @@ export const MilestonesView: React.FC = () => {
                   <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200 font-bold">
                     {filteredAdhocTasks.length} đầu việc
                   </span>
+                  {isAdhocCollapsed && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-300 font-bold">
+                      Đã thu gọn
+                    </span>
+                  )}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Các task phát sinh độc lập, chưa gắn vào cột mốc cụ thể nào. Leader có thể gán nhanh vào Milestone bất kỳ hoặc quản lý/xoá tại đây.
@@ -1034,7 +1154,7 @@ export const MilestonesView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 text-xs shrink-0">
+            <div className="flex items-center gap-3 text-xs shrink-0" onClick={(e) => e.stopPropagation()}>
               <div className="text-right">
                 <span className="text-slate-400 block text-[10px]">Tổng Effort</span>
                 <span className="font-bold text-indigo-600 font-mono">
@@ -1044,9 +1164,15 @@ export const MilestonesView: React.FC = () => {
             </div>
           </div>
 
-          {/* Adhoc Tasks List */}
-          <div className="divide-y divide-slate-100">
-            {filteredAdhocTasks.length === 0 ? (
+          {/* Adhoc Tasks List with Smooth Accordion Animation */}
+          <div
+            className={`accordion-wrapper ${
+              isAdhocCollapsed ? 'accordion-closed' : 'accordion-open'
+            }`}
+          >
+            <div className="accordion-content">
+              <div className="divide-y divide-slate-100">
+                {filteredAdhocTasks.length === 0 ? (
               <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
                 <FolderOpen className="w-8 h-8 text-slate-300" />
                 <span className="font-medium text-slate-600">Hiện không có task phát sinh ngoài milestone nào cho role này.</span>
@@ -1230,6 +1356,16 @@ export const MilestonesView: React.FC = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                duplicateTask(t.id);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                              title="Nhân bản task này (Duplicate)"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setEditingTask(t);
                                 setTargetMilestoneId('');
                                 setModalInitialRole(t.role);
@@ -1400,6 +1536,16 @@ export const MilestonesView: React.FC = () => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  duplicateTask(t.id);
+                                }}
+                                className="p-1.5 bg-slate-100 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg active:scale-95"
+                                title="Nhân bản task này (Duplicate)"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setEditingTask(t);
                                   setTargetMilestoneId('');
                                   setModalInitialRole(t.role);
@@ -1435,6 +1581,8 @@ export const MilestonesView: React.FC = () => {
               );
             })
           )}
+              </div>
+            </div>
           </div>
         </div>
       )}

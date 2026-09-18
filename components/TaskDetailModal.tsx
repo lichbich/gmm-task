@@ -31,6 +31,7 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
+  Copy,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { parseNoteLine, formatNewNoteLine, formatEditedNoteLine } from '../lib/notesHelper';
@@ -78,6 +79,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     canReportTask,
     weeklyAwards,
     deleteTask,
+    duplicateTask,
     currentUser,
     users,
     confirmDialog,
@@ -883,14 +885,30 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         {/* Fixed Footer */}
         <div className="flex items-center justify-between gap-3 p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900 rounded-b-3xl">
           {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') ? (
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/80 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Xóa Task
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800/80 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Xóa Task
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (task) {
+                    duplicateTask(task.id);
+                    handleClose();
+                  }
+                }}
+                className="px-3.5 py-2 text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                title="Nhân bản tạo 1 task mới từ đầu việc này"
+              >
+                <Copy className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                Nhân Bản Task
+              </button>
+            </div>
           ) : (
             <div />
           )}

@@ -163,6 +163,7 @@ interface AppContextType {
   
   tasks: Task[];
   addTask: (task: Omit<Task, 'id' | 'orderInMilestone'>) => void;
+  duplicateTask: (id: string) => Task | undefined;
   updateTask: (id: string, updates: Partial<Task>, options?: { skipLog?: boolean }) => void;
   deleteTask: (id: string) => void;
   reorderTasksInMilestone: (milestoneId: string, taskIds: string[]) => void;
@@ -205,6 +206,53 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_AUTH = 'gmm_task_auth_session_v2';
+
+export const renumberMilestonesByRole = (rawMilestones: Milestone[]): { renumbered: Milestone[]; changed: boolean } => {
+  let changed = false;
+  const roleGroups: Record<string, Milestone[]> = {};
+
+  // Group by role (default to Design if missing)
+  rawMilestones.forEach((m) => {
+    const roleKey = m.role && m.role !== 'ALL' ? m.role : 'Design';
+    if (!roleGroups[roleKey]) roleGroups[roleKey] = [];
+    roleGroups[roleKey].push(m);
+  });
+
+  const allRenumbered: Milestone[] = [];
+  Object.keys(roleGroups).forEach((roleKey) => {
+    const group = roleGroups[roleKey].sort((a, b) => (a.order || 0) - (b.order || 0));
+    group.forEach((m, idx) => {
+      const correctOrder = idx + 1;
+      let newTitle = m.title;
+      // If title starts with Milestone \d+: or Milestone \d+, update prefix to correctOrder
+      const match = m.title.match(/^Milestone\s+(\d+)\s*(:\s*.*)?$/i);
+      if (match) {
+        const oldNum = parseInt(match[1], 10);
+        const rest = match[2] ? match[2] : '';
+        if (oldNum !== correctOrder) {
+          newTitle = `Milestone ${correctOrder}${rest}`.trim();
+        }
+      }
+      const roleAssigned = m.role && m.role !== 'ALL' ? m.role : (roleKey as Specialization);
+      if (m.order !== correctOrder || m.title !== newTitle || m.role !== roleAssigned) {
+        changed = true;
+      }
+      allRenumbered.push({
+        ...m,
+        order: correctOrder,
+        title: newTitle,
+        role: roleAssigned,
+      });
+    });
+  });
+
+  allRenumbered.sort((a, b) => {
+    if (a.role !== b.role) return (a.role || '').localeCompare(b.role || '');
+    return a.order - b.order;
+  });
+
+  return { renumbered: allRenumbered, changed };
+};
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
@@ -368,7 +416,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           if (data.milestones) {
             const milestoneList = Object.values(data.milestones) as Milestone[];
-            setMilestones(milestoneList.sort((a, b) => a.order - b.order));
+            const { renumbered, changed } = renumberMilestonesByRole(milestoneList);
+            setMilestones(renumbered);
+            if (changed) {
+              syncMilestonesToFirebase(renumbered);
+            }
           } else {
             setMilestones([]);
           }
@@ -1052,28 +1104,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Milestone Management
   const addMilestone = (milestoneData: Omit<Milestone, 'id' | 'order'>) => {
+    const targetRole = milestoneData.role && milestoneData.role !== 'ALL' ? milestoneData.role : 'Design';
+    const currentRoleMs = milestones.filter((m) => (m.role || 'Design') === targetRole);
     const newMilestone: Milestone = {
       ...milestoneData,
+      role: targetRole,
       id: `ms-${Date.now()}`,
-      order: milestones.length + 1,
+      order: currentRoleMs.length + 1,
     };
     const updated = [...milestones, newMilestone];
-    setMilestones(updated);
-    syncMilestonesToFirebase(updated);
+    const { renumbered } = renumberMilestonesByRole(updated);
+    setMilestones(renumbered);
+    syncMilestonesToFirebase(renumbered);
   };
 
   const updateMilestone = (id: string, milestoneData: Partial<Milestone>) => {
     const updated = milestones.map((m) => (m.id === id ? { ...m, ...milestoneData } : m));
-    setMilestones(updated);
-    syncMilestonesToFirebase(updated);
+    const { renumbered } = renumberMilestonesByRole(updated);
+    setMilestones(renumbered);
+    syncMilestonesToFirebase(renumbered);
   };
 
   const deleteMilestone = (id: string) => {
     const updatedMs = milestones.filter((m) => m.id !== id);
     const updatedTs = tasks.filter((t) => t.milestoneId !== id);
-    setMilestones(updatedMs);
+    const { renumbered } = renumberMilestonesByRole(updatedMs);
+    setMilestones(renumbered);
     setTasks(updatedTs);
-    syncMilestonesToFirebase(updatedMs);
+    syncMilestonesToFirebase(renumbered);
     syncTasksToFirebase(updatedTs);
   };
 
@@ -1204,6 +1262,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateTaskNotes = (taskId: string, notes: string) => {
     updateTask(taskId, { notes });
     markNoteAsRead(taskId, notes);
+  };
+
+  const duplicateTask = (taskId: string): Task | undefined => {
+    const taskToClone = tasks.find((t) => t.id === taskId);
+    if (!taskToClone) return undefined;
+
+    const nowIso = new Date().toISOString();
+    const authorName = authSession?.name || 'Admin';
+    const authorAccount = authSession?.account || 'Admin';
+    const authorRole = authSession?.role || 'Admin';
+    const creatorDisplay = `${authorName} (@${authorAccount})`;
+
+    const initialLog: TaskActivityLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: nowIso,
+      authorName,
+      authorAccount,
+      authorRole,
+      actionType: 'CREATE',
+      summary: `Khởi tạo bằng cách nhân bản từ task "${taskToClone.title}"`,
+    };
+
+    const milestoneTasks = taskToClone.milestoneId
+      ? tasks.filter((t) => t.milestoneId === taskToClone.milestoneId)
+      : [];
+
+    const newTask: Task = {
+      ...taskToClone,
+      id: `tsk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      title: `${taskToClone.title} (Copy)`,
+      orderInMilestone: milestoneTasks.length + 1,
+      status: 'To do',
+      actualEffort: 0,
+      completionPercentage: 0,
+      lastSubmittedAt: undefined,
+      notes: '',
+      createdBy: creatorDisplay,
+      createdAt: nowIso,
+      updatedBy: creatorDisplay,
+      updatedAt: nowIso,
+      activityLogs: [initialLog],
+    };
+
+    const originalIndex = tasks.findIndex((t) => t.id === taskId);
+    const updated = [...tasks];
+    if (originalIndex >= 0) {
+      updated.splice(originalIndex + 1, 0, newTask);
+    } else {
+      updated.push(newTask);
+    }
+
+    setTasks(updated);
+    syncTasksToFirebase(updated);
+    return newTask;
   };
 
   const deleteTask = (id: string) => {
@@ -1542,6 +1654,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteMilestone,
         tasks,
         addTask,
+        duplicateTask,
         updateTask,
         deleteTask,
         reorderTasksInMilestone,
