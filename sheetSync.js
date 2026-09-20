@@ -33,6 +33,22 @@ function onOpen() {
 }
 
 /**
+ * Lấy số Tuần Saho hiện tại từ ngày thực tế (VD: Sep 20, 2026 -> ISO 38 -> Saho Week 93)
+ */
+function getCurrentSahoWeekNum() {
+    const now = new Date();
+    const yr = now.getFullYear();
+    const jan4 = new Date(yr, 0, 4);
+    const dayOfWeek = jan4.getDay() || 7;
+    const firstMonday = new Date(jan4);
+    firstMonday.setDate(jan4.getDate() - dayOfWeek + 1);
+
+    const diffDays = Math.floor((now.getTime() - firstMonday.getTime()) / (24 * 60 * 60 * 1000));
+    const isoWeekNo = Math.floor(diffDays / 7) + 1;
+    return isoWeekNo + 55;
+}
+
+/**
  * Tính toán Chuỗi ngày cho Tuần (Ví dụ: "(14/09-20/09)", "(21/09-27/09)")
  */
 function getWeekDateRangeStr(sahoWeekNum, yearNum) {
@@ -79,6 +95,7 @@ function syncTasksFormattedToSheet() {
         if (userContent && userContent !== 'null') {
             const usersData = JSON.parse(userContent);
             userAccounts = Object.values(usersData)
+                .filter(u => u && !u.disabled && u.status !== 'disabled')
                 .map(u => (u && u.account) ? String(u.account).trim() : '')
                 .filter(Boolean);
         }
@@ -227,28 +244,40 @@ function syncTasksFormattedToSheet() {
                 const personTasks = tasksByAssignee[accName];
 
                 personTasks.forEach(t => {
-                    // Đối với các tuần tới (VD: Tuần 94 trở đi), toàn bộ task mới/chuyển sang luôn có trạng thái là 'To do'.
-                    // Đối với tuần hiện tại/quá khứ (VD: Tuần 93 trở xuống), task nộp báo cáo sẽ có trạng thái 'Done'.
-                    const isNextWeekOrFuture = weekData.sahoWeekNum > 93;
+                    const currentSahoWeek = getCurrentSahoWeekNum();
+                    const isFutureWeek = weekData.sahoWeekNum > currentSahoWeek;
                     const isReported = !!t.lastSubmittedAt || t.status === 'Done';
-                    
-                    let finalStatus = t.status || "To do";
-                    if (isNextWeekOrFuture || t.status === 'To do') {
-                        finalStatus = "To do";
-                    } else if (isReported) {
-                        finalStatus = "Done";
-                    }
 
-                    // 2. Phần trăm công việc (Col E - ô trước ô Effort): giữ nguyên số phần trăm (%) đang có
+                    let finalStatus = "To do";
                     let pctStr = "";
-                    if (t.completionPercentage && Number(t.completionPercentage) > 0) {
-                        pctStr = `${t.completionPercentage}%`;
-                    } else if (isReported) {
-                        pctStr = "100%";
+
+                    if (isFutureWeek) {
+                        // Task thuộc tuần tới (Week 94+): Luôn ở trạng thái To do
+                        finalStatus = "To do";
+                        if (t.completionPercentage !== undefined && t.completionPercentage !== null && Number(t.completionPercentage) > 0) {
+                            pctStr = `${t.completionPercentage}%`;
+                        }
+                    } else {
+                        // Task thuộc tuần hiện tại / quá khứ (Week 93 trở xuống):
+                        if (isReported) {
+                            // Đã nộp báo cáo tuần này -> Đánh 'Done' trên Sheet
+                            finalStatus = "Done";
+                        } else {
+                            finalStatus = t.status || "To do";
+                        }
+
+                        // Lấy % tiến độ thực tế từ hệ thống (0%, 50%, 100%...)
+                        const comp = (t.completionPercentage !== undefined && t.completionPercentage !== null)
+                            ? Number(t.completionPercentage)
+                            : (isReported ? 100 : 0);
+                        
+                        pctStr = `${comp}%`;
                     }
 
-                    // 3. Số giờ làm (Col F)
-                    const effortVal = t.actualEffort || t.estimatedEffort || 0;
+                    // Số giờ làm (Col F)
+                    const effortVal = (t.actualEffort !== undefined && t.actualEffort !== null && t.actualEffort > 0)
+                        ? t.actualEffort
+                        : (t.estimatedEffort || 0);
 
                     allRowsToInsert.push([
                         "",                      // Col A (1): Trống (Bỏ STT)

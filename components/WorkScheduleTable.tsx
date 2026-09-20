@@ -109,11 +109,13 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
   const accountOptions: DropdownOption[] = [
     { value: 'ALL', label: 'Tất cả Thành Viên (Account)' },
-    ...users.map((u) => ({
-      value: u.account,
-      label: `${u.name} (${u.account})`,
-      subLabel: `${u.role} • ${u.specializations?.join(', ') || ''}`,
-    })),
+    ...users
+      .filter((u) => !u.disabled && u.status !== 'disabled')
+      .map((u) => ({
+        value: u.account,
+        label: `${u.name} (${u.account})`,
+        subLabel: `${u.role} • ${u.specializations?.join(', ') || ''}`,
+      })),
   ];
 
   const milestoneOptions: DropdownOption[] = [

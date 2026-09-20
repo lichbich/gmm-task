@@ -82,10 +82,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   if (!isRendered) return null;
 
-  // Filter team members who hold the specialization matching the task's role!
-  const eligibleAssignees = users.filter(
-    (u) => u.specializations && u.specializations.includes(role)
-  );
+  // Filter active team members who hold the specialization matching the task's role (excluding locked accounts)
+  const eligibleAssignees = users.filter((u) => {
+    const isLocked = u.disabled || u.status === 'disabled';
+    const isCurrentAssignee = task && task.assigneeAccount && u.account.toLowerCase() === task.assigneeAccount.toLowerCase();
+    if (isLocked && !isCurrentAssignee) return false;
+    return u.specializations && u.specializations.includes(role);
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
