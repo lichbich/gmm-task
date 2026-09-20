@@ -1487,6 +1487,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
           weekNumber: nextWeek,
           parentTaskId: t.id,
+          status: 'To do',
+          lastSubmittedAt: undefined,
+          isSubmittedLate: undefined,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });

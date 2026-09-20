@@ -281,6 +281,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       weekNumber: nextWeek,
       parentTaskId: t.id,
+      status: 'To do',
+      lastSubmittedAt: undefined,
+      isSubmittedLate: undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

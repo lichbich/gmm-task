@@ -153,6 +153,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const filteredTasks = useMemo(() => {
     return tasks
       .filter((t) => {
+        // Only show tasks belonging to current selected week & year
+        if (t.weekNumber !== selectedWeek || (t.year && t.year !== selectedYear)) {
+          return false;
+        }
+
         // Sub-tab filter: My Tasks default
         if (subTab === 'MY_TASKS') {
           if (!currentUser || !t.assigneeAccount || t.assigneeAccount.toLowerCase() !== currentUser.account.toLowerCase()) {
@@ -179,7 +184,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         return true;
       })
       .sort(sortByPriority);
-  }, [tasks, subTab, currentUser, searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus, milestones]);
+  }, [tasks, selectedWeek, selectedYear, subTab, currentUser, searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus, milestones]);
 
   const ROLE_ORDER: Specialization[] = roles.map((r) => r.code);
 

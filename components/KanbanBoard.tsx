@@ -35,7 +35,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
     canReportTask,
     confirmDialog,
     roles,
+    selectedWeek,
+    selectedYear,
   } = useApp();
+
+  const currentWeekTasks = React.useMemo(() => {
+    return tasks.filter(
+      (t) => t.weekNumber === selectedWeek && (!t.year || t.year === selectedYear)
+    );
+  }, [tasks, selectedWeek, selectedYear]);
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
@@ -422,7 +430,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
       <div className="md:hidden space-y-3">
         <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 gap-1">
           {columns.map((col) => {
-            const count = tasks.filter((t) => t.status === col.status).length;
+            const count = currentWeekTasks.filter((t) => t.status === col.status).length;
             const isActive = mobileActiveStatus === col.status;
             return (
               <button
@@ -447,7 +455,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
 
         {/* Mobile Active Column Cards */}
         {(() => {
-          const colTasks = [...tasks.filter((t) => t.status === mobileActiveStatus)].sort(sortByPriority);
+          const colTasks = [...currentWeekTasks.filter((t) => t.status === mobileActiveStatus)].sort(sortByPriority);
           if (colTasks.length === 0) {
             return (
               <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-1.5">
@@ -467,7 +475,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
       {/* DESKTOP VIEW: 3-Column Kanban Grid */}
       <div className="hidden md:grid grid-cols-3 gap-5 items-stretch h-[calc(100vh-210px)] min-h-[640px] max-h-[900px]">
         {columns.map((col) => {
-          const colTasks = [...tasks.filter((t) => t.status === col.status)].sort(sortByPriority);
+          const colTasks = [...currentWeekTasks.filter((t) => t.status === col.status)].sort(sortByPriority);
           const isOver = dragOverColumn === col.status;
           const activeTask = tasks.find((t) => t.id === draggedTaskIdRef.current);
           const isTargetDifferent = activeTask && activeTask.status !== col.status;
