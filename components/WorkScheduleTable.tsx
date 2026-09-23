@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, Specialization } from '../types/task';
+import { Task, TaskStatus, Specialization, Milestone } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
@@ -102,6 +102,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const handleRoleChange = (roleCode: string) => {
     setSelectedRole(roleCode);
     setSelectedAccount('ALL');
+    setSelectedMilestone('ALL');
   };
 
   const isMemberInRole = useCallback(
@@ -122,6 +123,35 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         (t) =>
           t.role?.toLowerCase() === currentRoleCode &&
           t.assigneeAccount?.toLowerCase() === u.account.toLowerCase()
+      );
+      if (hasTaskInRole) return true;
+
+      return false;
+    },
+    [tasks]
+  );
+
+  const isMilestoneInRole = useCallback(
+    (m: Milestone, roleCode: string): boolean => {
+      if (!roleCode || roleCode === 'ALL') return true;
+      const currentRoleCode = roleCode.toLowerCase();
+
+      // 1. Check if milestone role matches
+      if (m.role) {
+        const mRole = m.role.toLowerCase();
+        if (
+          mRole === 'all' ||
+          mRole === currentRoleCode ||
+          mRole.includes(currentRoleCode) ||
+          currentRoleCode.includes(mRole)
+        ) {
+          return true;
+        }
+      }
+
+      // 2. Check if any task in this milestone has the target role
+      const hasTaskInRole = tasks.some(
+        (t) => t.milestoneId === m.id && t.role?.toLowerCase() === currentRoleCode
       );
       if (hasTaskInRole) return true;
 
@@ -152,14 +182,19 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     [users, selectedRole, isMemberInRole]
   );
 
-  const milestoneOptions: DropdownOption[] = [
-    { value: 'ALL', label: 'Tất cả Milestone' },
-    { value: 'NO_MILESTONE', label: '📌 Task Ngoài Milestone (Chưa gán)' },
-    ...milestones.map((m) => ({
-      value: m.id,
-      label: `🚩 ${m.title}`,
-    })),
-  ];
+  const milestoneOptions: DropdownOption[] = useMemo(
+    () => [
+      { value: 'ALL', label: 'Tất cả Milestone' },
+      { value: 'NO_MILESTONE', label: '📌 Task Ngoài Milestone (Chưa gán)' },
+      ...milestones
+        .filter((m) => isMilestoneInRole(m, selectedRole))
+        .map((m) => ({
+          value: m.id,
+          label: `🚩 ${m.title}`,
+        })),
+    ],
+    [milestones, selectedRole, isMilestoneInRole]
+  );
 
   const statusOptions: DropdownOption[] = [
     { value: 'ALL', label: 'Tất cả Trạng Thái' },
