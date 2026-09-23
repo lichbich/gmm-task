@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local test scripts & sheet sync utilities
+/scratch/
+*clear_firebase*
+*seed_test*
+sheetSync*
+securekey.json
+

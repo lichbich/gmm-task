@@ -415,15 +415,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
           </p>
         </div>
 
-        {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
-          <button
-            onClick={() => onOpenTaskModal?.()}
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Tạo Task Mới
-          </button>
-        )}
+        <button
+          onClick={() => onOpenTaskModal?.()}
+          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          Tạo Task Mới
+        </button>
       </div>
 
       {/* MOBILE VIEW: Segmented Column Switcher & Card List */}

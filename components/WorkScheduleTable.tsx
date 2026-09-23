@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskStatus, Specialization } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
@@ -99,6 +99,37 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     setSelectedAccount('ALL');
   };
 
+  const handleRoleChange = (roleCode: string) => {
+    setSelectedRole(roleCode);
+    setSelectedAccount('ALL');
+  };
+
+  const isMemberInRole = useCallback(
+    (u: any, roleCode: string): boolean => {
+      if (!u || u.disabled || u.status === 'disabled') return false;
+      if (!roleCode || roleCode === 'ALL') return true;
+      const currentRoleCode = roleCode.toLowerCase();
+
+      // 1. Check specializations match
+      const hasSpecMatch = (u.specializations || []).some((spec: string) => {
+        const s = spec.toLowerCase();
+        return s === currentRoleCode || s.includes(currentRoleCode) || currentRoleCode.includes(s);
+      });
+      if (hasSpecMatch) return true;
+
+      // 2. Check if user has any tasks assigned under this role
+      const hasTaskInRole = tasks.some(
+        (t) =>
+          t.role?.toLowerCase() === currentRoleCode &&
+          t.assigneeAccount?.toLowerCase() === u.account.toLowerCase()
+      );
+      if (hasTaskInRole) return true;
+
+      return false;
+    },
+    [tasks]
+  );
+
   const roleOptions: DropdownOption[] = [
     { value: 'ALL', label: 'Tất cả Role' },
     ...roles.map((r) => ({
@@ -107,16 +138,19 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     })),
   ];
 
-  const accountOptions: DropdownOption[] = [
-    { value: 'ALL', label: 'Tất cả Thành Viên (Account)' },
-    ...users
-      .filter((u) => !u.disabled && u.status !== 'disabled')
-      .map((u) => ({
-        value: u.account,
-        label: `${u.name} (${u.account})`,
-        subLabel: `${u.role} • ${u.specializations?.join(', ') || ''}`,
-      })),
-  ];
+  const accountOptions: DropdownOption[] = useMemo(
+    () => [
+      { value: 'ALL', label: 'Tất cả Thành Viên (Account)' },
+      ...users
+        .filter((u) => isMemberInRole(u, selectedRole))
+        .map((u) => ({
+          value: u.account,
+          label: `${u.name} (${u.account})`,
+          subLabel: `${u.role} • ${u.specializations?.join(', ') || ''}`,
+        })),
+    ],
+    [users, selectedRole, isMemberInRole]
+  );
 
   const milestoneOptions: DropdownOption[] = [
     { value: 'ALL', label: 'Tất cả Milestone' },
@@ -1007,7 +1041,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               <div className="w-full">
                 <Dropdown
                   value={selectedRole}
-                  onChange={setSelectedRole}
+                  onChange={handleRoleChange}
                   options={roleOptions}
                   className="w-full"
                   buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
@@ -1336,7 +1370,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                 </label>
                 <Dropdown
                   value={selectedRole}
-                  onChange={setSelectedRole}
+                  onChange={handleRoleChange}
                   options={roleOptions}
                   className="w-full"
                   buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"

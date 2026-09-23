@@ -25,6 +25,7 @@ export interface DropdownProps<T = string> {
   disabled?: boolean;
   searchable?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  align?: 'left' | 'right';
 }
 
 export function Dropdown<T extends string | number>({
@@ -40,9 +41,11 @@ export function Dropdown<T extends string | number>({
   disabled = false,
   searchable,
   size = 'md',
+  align,
 }: DropdownProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [menuAlign, setMenuAlign] = useState<'left' | 'right'>(align || 'left');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -50,6 +53,23 @@ export function Dropdown<T extends string | number>({
 
   // Auto-enable search if there are more than 7 options unless explicitly specified false
   const shouldEnableSearch = searchable ?? options.length > 7;
+
+  // Auto-detect menu alignment based on element position relative to screen width
+  useEffect(() => {
+    if (isOpen && dropdownRef.current) {
+      if (align) {
+        setMenuAlign(align);
+      } else {
+        const rect = dropdownRef.current.getBoundingClientRect();
+        const screenWidth = window.innerWidth;
+        if (rect.left > screenWidth * 0.55) {
+          setMenuAlign('right');
+        } else {
+          setMenuAlign('left');
+        }
+      }
+    }
+  }, [isOpen, align]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -100,6 +120,8 @@ export function Dropdown<T extends string | number>({
     lg: 'text-sm py-2.5 px-3.5 rounded-xl',
   }[size];
 
+  const alignmentClass = menuAlign === 'right' ? 'right-0 left-auto' : 'left-0';
+
   return (
     <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
       {label && (
@@ -115,7 +137,7 @@ export function Dropdown<T extends string | number>({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`w-full bg-white border border-slate-200/90 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 flex items-center justify-between gap-2 shadow-2xs transition-all duration-150 active:scale-[0.99] text-left select-none ${sizeClasses} ${
           disabled ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer'
-        } ${isOpen ? 'ring-2 ring-indigo-500/20 border-indigo-500' : ''} ${buttonClassName}`}
+        } ${isOpen ? 'ring-2 ring-indigo-500/20 border-indigo-500 z-10' : ''} ${buttonClassName}`}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {icon && <span className="shrink-0 text-slate-400">{icon}</span>}
@@ -139,7 +161,7 @@ export function Dropdown<T extends string | number>({
       {/* Floating Popover Menu */}
       {isOpen && (
         <div
-          className={`absolute left-0 top-full mt-1.5 z-50 min-w-full w-max max-w-xs bg-white border border-slate-200/90 rounded-2xl shadow-xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ${menuClassName}`}
+          className={`absolute ${alignmentClass} top-full mt-1.5 z-[100] min-w-full w-max max-w-xs bg-white border border-slate-200/90 rounded-2xl shadow-xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150 ${menuClassName}`}
           style={{ minWidth: '100%' }}
         >
           {/* Search box if enabled */}

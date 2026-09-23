@@ -12,5 +12,21 @@ const database = getDatabase(app);
 
 export { app, database, ref, onValue, set, update, remove };
 
-// Root node name for project
-export const DB_ROOT_NODE = 'gmm-task';
+// Root node name for project:
+// Khi chạy ở localhost (local dev), sử dụng node 'gmm-task-test'.
+// Khi deploy production, sử dụng node 'gmm-task'.
+const getDbRootNode = (): string => {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+      return 'gmm-task-test';
+    }
+  }
+  if (process.env.NODE_ENV === 'development') {
+    return 'gmm-task-test';
+  }
+  return 'gmm-task';
+};
+
+export const DB_ROOT_NODE = getDbRootNode();
+

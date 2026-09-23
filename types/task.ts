@@ -235,6 +235,13 @@ export interface WeeklyHistoryArchive {
   tasksSnapshot?: Task[];
 }
 
+export const isTaskUnworked = (t: Task): boolean => {
+  if (t.status === 'Done') return false;
+  const pct = t.completionPercentage || 0;
+  const effort = t.actualEffort || 0;
+  return pct === 0 && effort === 0;
+};
+
 export type ResourceLevel =
   | 'Business Plan'
   | 'Level 1 - Business'

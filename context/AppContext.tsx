@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization, isTaskUnworked } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
@@ -90,14 +90,47 @@ export const DEFAULT_ROLES: RoleItem[] = [
     order: 4,
   },
   {
+    id: 'role-sa',
+    code: 'SA',
+    name: 'System Architecture (Kiến trúc hệ thống)',
+    description: 'Thiết kế kiến trúc tổng thể, cơ sở dữ liệu & giải pháp kĩ thuật',
+    color: 'indigo',
+    order: 5,
+  },
+  {
     id: 'role-qa',
     code: 'QA',
     name: 'Quality Assurance (Kiểm thử)',
     description: 'Kiểm thử tính năng, kiểm soát chất lượng và viết test cases',
     color: 'rose',
-    order: 5,
+    order: 6,
+  },
+  {
+    id: 'role-devops',
+    code: 'DevOps',
+    name: 'DevOps & Cloud (Hạ tầng)',
+    description: 'Triển khai CI/CD, hạ tầng đám mây và vận hành hệ thống',
+    color: 'cyan',
+    order: 7,
+  },
+  {
+    id: 'role-ai',
+    code: 'AI',
+    name: 'AI & Machine Learning (Trí tuệ nhân tạo)',
+    description: 'Nghiên cứu & tích hợp mô hình AI, xử lý dữ liệu thông minh',
+    color: 'slate',
+    order: 8,
+  },
+  {
+    id: 'role-mobile',
+    code: 'Mobile',
+    name: 'Mobile Development (Ứng dụng di động)',
+    description: 'Phát triển ứng dụng di động iOS/Android',
+    color: 'amber',
+    order: 9,
   },
 ];
+
 
 interface LoginResult {
   success: boolean;
@@ -466,11 +499,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const roleList = Object.values(data.roles) as RoleItem[];
             setRoles(roleList.sort((a, b) => (a.order || 0) - (b.order || 0)));
           } else {
-            // Seed default roles to Firebase if node is empty
-            const rolesObj: Record<string, RoleItem> = {};
-            DEFAULT_ROLES.forEach((r) => { rolesObj[r.id] = r; });
-            set(ref(database, `${DB_ROOT_NODE}/roles`), rolesObj).catch(console.error);
-            setRoles(DEFAULT_ROLES);
+            setRoles([]);
           }
           if (data.resources) {
             const resList = Object.values(data.resources) as ProjectResource[];
@@ -1453,28 +1482,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (t) => t.weekNumber === selectedWeek && t.year === selectedYear && t.assigneeAccount && t.assigneeAccount.trim() !== ''
     );
 
-    const completedTasks = currentWeekAssignedTasks.filter((t) => t.status === 'Done');
-    const unfinishedTasks = currentWeekAssignedTasks.filter((t) => t.status !== 'Done');
+    // Separate tasks into worked (has progress/effort or Done) vs unworked (0% progress & 0h effort)
+    const workedTasks = currentWeekAssignedTasks.filter((t) => !isTaskUnworked(t));
+    const unworkedTasks = currentWeekAssignedTasks.filter((t) => isTaskUnworked(t));
 
-    // Create Archive Record for current week with full snapshot of all tasks in selectedWeek
+    const completedTasksCount = workedTasks.filter((t) => t.status === 'Done').length;
+    const rolledOverTasksCount = workedTasks.filter((t) => t.status !== 'Done').length;
+
+    // Create Archive Record for current week:
+    // IMPORTANT: Exclude 0%/0h unworked tasks from tasksSnapshot so they do NOT pollute historical logs!
     const archiveRecord: WeeklyHistoryArchive = {
       id: `archive-${selectedWeek}-${Date.now()}`,
       weekNumber: selectedWeek,
       year: selectedYear,
       archivedAt: new Date().toISOString(),
-      completedTasksCount: completedTasks.length,
-      rolledOverTasksCount: unfinishedTasks.length,
+      completedTasksCount: completedTasksCount,
+      rolledOverTasksCount: rolledOverTasksCount,
       awards: computeWeeklyAwards(),
-      tasksSnapshot: JSON.parse(JSON.stringify(currentWeekAssignedTasks)),
+      tasksSnapshot: JSON.parse(JSON.stringify(workedTasks)),
     };
 
     const updatedArchives = [...weeklyArchives, archiveRecord];
     setWeeklyArchives(updatedArchives);
     syncArchivesToFirebase(updatedArchives);
 
-    // Create continuation tasks for nextWeek for all unfinished assigned tasks while preserving current week history
-    const newTasksList = [...tasks];
-    unfinishedTasks.forEach((t) => {
+    // Update tasks array:
+    // 1. Move unworked tasks (0% & 0h) directly to nextWeek (clears them from currentWeek)
+    const newTasksList = tasks
+      .map((t) => {
+        if (t.weekNumber === selectedWeek && t.year === selectedYear && t.assigneeAccount && isTaskUnworked(t)) {
+          const alreadyHasNextWeekTask = tasks.some(
+            (nt) =>
+              nt.id !== t.id &&
+              nt.weekNumber === nextWeek &&
+              nt.year === selectedYear &&
+              (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
+          );
+          if (alreadyHasNextWeekTask) {
+            return null; // Remove duplicate unworked task from current week
+          }
+          return {
+            ...t,
+            weekNumber: nextWeek,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return t;
+      })
+      .filter(Boolean) as Task[];
+
+    // 2. For partially worked unfinished tasks, create continuation tasks for nextWeek while keeping original record in current week
+    const partiallyWorkedUnfinished = currentWeekAssignedTasks.filter(
+      (t) => t.status !== 'Done' && !isTaskUnworked(t)
+    );
+
+    partiallyWorkedUnfinished.forEach((t) => {
       const alreadyHasNextWeekTask = newTasksList.some(
         (nt) =>
           nt.weekNumber === nextWeek &&

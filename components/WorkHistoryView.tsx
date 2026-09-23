@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, WeeklyHistoryArchive, TaskStatus } from '../types/task';
+import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { Dropdown } from './common/Dropdown';
@@ -126,7 +126,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
     const range = getWeekDateRangeStr(selectedWeek, selectedYear);
     confirmDialog({
       title: `Chốt Lịch Sử & Kết Thúc Tuần ${selectedWeek}`,
-      message: `Bạn có chắc chắn muốn chốt lịch sử công việc Tuần ${selectedWeek} (${range.startDate} đến ${range.endDate})?\n\n• Tất cả log công việc tuần ${selectedWeek} sẽ được lưu trữ vào Lịch Sử Công Việc.\n• Các công việc HOÀN THÀNH (100%) sẽ được lưu lại trong lịch sử.\n• Các công việc LÀM DỞ sẽ tự động chuyển sang Tuần ${selectedWeek + 1} để các thành viên làm tiếp.\n• Leader có thể phân công thêm task mới cho Tuần ${selectedWeek + 1}.`,
+      message: `Bạn có chắc chắn muốn chốt lịch sử công việc Tuần ${selectedWeek} (${range.startDate} đến ${range.endDate})?\n\n• Tất cả log công việc có tiến độ/effort Tuần ${selectedWeek} sẽ được lưu trữ vào Lịch Sử Công Việc.\n• Các công việc HOÀN THÀNH (100%) và CÔNG VIỆC LÀM DỞ (>0%) sẽ được lưu lại trong lịch sử.\n• Các công việc CHƯA LÀM TÍ NÀO (0% & 0h) sẽ được tự động xóa khỏi tuần cũ và chuyển sang Tuần ${selectedWeek + 1} cho người được phân công (không đưa vào Lịch sử để tránh rác hệ thống).\n• Leader có thể phân công thêm task mới cho Tuần ${selectedWeek + 1}.`,
       confirmText: `Đồng ý kết thúc Tuần ${selectedWeek}`,
       cancelText: 'Hủy bỏ',
       type: 'warning',
@@ -134,7 +134,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
     });
   };
 
-  // Determine tasks list for selected archive (Only assigned tasks are in history logs)
+  // Determine tasks list for selected archive (Only assigned tasks with work done are in history logs)
   const archivedTasksSnapshot: Task[] = React.useMemo(() => {
     if (!activeArchive) return [];
     const snapshot = activeArchive.tasksSnapshot || [];
@@ -152,7 +152,10 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
       }
     });
 
-    return Array.from(map.values()).filter((t) => t.assigneeAccount && t.assigneeAccount.trim() !== '');
+    // EXCLUDE 0% & 0h unworked tasks from historical log display
+    return Array.from(map.values()).filter(
+      (t) => t.assigneeAccount && t.assigneeAccount.trim() !== '' && !isTaskUnworked(t)
+    );
   }, [activeArchive, tasks]);
 
   // Filter archived tasks by search & role
@@ -260,9 +263,9 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
       </div>
 
       {/* Integrated Week Archive Section Container */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm relative">
         {/* Header & Controls Toolbar */}
-        <div className="p-4 sm:p-5 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-30">
           <div className="flex items-center gap-2">
             <FolderArchive className="w-5 h-5 text-amber-500 shrink-0" />
             <h3 className="text-sm font-bold text-slate-800">
@@ -313,8 +316,9 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
           </div>
         </div>
 
-        {/* Content Body */}
-        {weeklyArchives.length === 0 ? (
+        {/* Content Body Wrapper (overflow-hidden ONLY on bottom content) */}
+        <div className="overflow-hidden rounded-b-2xl">
+          {weeklyArchives.length === 0 ? (
           <div className="py-12 text-center bg-slate-50 text-xs text-slate-500 space-y-2">
             <History className="w-8 h-8 text-slate-300 mx-auto" />
             <p className="font-semibold text-slate-700">Chưa có bản lưu lịch sử tuần nào</p>
@@ -654,9 +658,10 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
                 </div>
               </>
             )}
+            </div>
           </div>
+        ) : null}
         </div>
-      ) : null}
       </div>
 
       {/* Task Discussion Modal */}

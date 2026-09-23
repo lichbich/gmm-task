@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Milestone, User as UserType } from '../types/task';
+import { Task, Milestone, User as UserType, isTaskUnworked } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { Dropdown } from './common/Dropdown';
 import { getWeekDateRangeStr } from './WorkHistoryView';
@@ -265,29 +265,40 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     Math.round(nextWeekAssignedTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0) * 100) / 100;
 
   const handleTransferToNextWeek = (t: Task) => {
-    // Check if continuation task already exists in next week
+    const isUnworked = isTaskUnworked(t);
+
     const existingNextWeek = tasks.find(
       (nt) =>
+        nt.id !== t.id &&
         nt.weekNumber === nextWeek &&
         nt.year === selectedYear &&
         (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
     );
 
-    if (existingNextWeek) return;
-
-    // Create continuation task for next week, keeping original task in current week intact for historical log!
-    const continuationTask: Task = {
-      ...t,
-      id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-      weekNumber: nextWeek,
-      parentTaskId: t.id,
-      status: 'To do',
-      lastSubmittedAt: undefined,
-      isSubmittedLate: undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    addTask(continuationTask);
+    if (isUnworked) {
+      if (existingNextWeek) {
+        // Next week already has a task for this, delete the 0%/0h ghost task from current week
+        deleteTask(t.id);
+      } else {
+        // Directly move the 0%/0h task to nextWeek (clears it from current week)
+        updateTask(t.id, { weekNumber: nextWeek });
+      }
+    } else {
+      if (existingNextWeek) return;
+      // Continuation task for partially worked task
+      const continuationTask: Task = {
+        ...t,
+        id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        weekNumber: nextWeek,
+        parentTaskId: t.id,
+        status: 'To do',
+        lastSubmittedAt: undefined,
+        isSubmittedLate: undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      addTask(continuationTask);
+    }
   };
 
   return (
@@ -710,9 +721,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       </div>
 
       {/* SECTION 2: NEXT WEEK PLANNED TASKS TABLE */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm space-y-0">
+      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-0 relative">
         {/* Controls Toolbar */}
-        <div className="p-4 sm:p-5 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-30">
           <div className="flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-indigo-600 shrink-0" />
             <h3 className="text-sm font-bold text-slate-800">

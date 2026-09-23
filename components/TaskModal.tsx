@@ -71,9 +71,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDescription('');
       setRole(defaultRole);
       setEstimatedEffort(2);
-      setAssigneeAccount(defaultAssignee !== undefined ? defaultAssignee : '');
-      // SYNCHRONIZATION: Always use initialMilestoneId when passed from Milestone!
-      setMilestoneId(initialMilestoneId !== undefined ? initialMilestoneId : (milestones[0]?.id || ''));
+      setAssigneeAccount(defaultAssignee !== undefined ? defaultAssignee : (currentUser?.role === 'Member' && currentUser?.account ? currentUser.account : ''));
+      // SYNCHRONIZATION: Members always create ad-hoc/standalone tasks (milestoneId = ''), Leaders/Admins use initialMilestoneId
+      setMilestoneId(currentUser?.role === 'Member' ? '' : (initialMilestoneId !== undefined ? initialMilestoneId : (milestones[0]?.id || '')));
       setStatus('To do');
       setPriority('Medium');
       setNotes('');
@@ -81,6 +81,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   }, [task, isOpen, milestones, users, defaultRole, initialMilestoneId, defaultAssignee]);
 
   if (!isRendered) return null;
+
+  const isMember = currentUser?.role === 'Member';
 
   // Filter active team members who hold the specialization matching the task's role (excluding locked accounts)
   const eligibleAssignees = users.filter((u) => {
@@ -166,7 +168,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                {task ? 'Chỉnh Sửa & Phân Công Task' : 'Tạo / Break Task Mới (Leader)'}
+                {task
+                  ? 'Chỉnh Sửa & Phân Công Task'
+                  : milestoneId
+                  ? 'Break Task Mới từ Milestone'
+                  : 'Tạo Task Tự Do Mới'}
               </h3>
               <p className="text-xs text-slate-500">Thiết lập đầu việc, số giờ ước tính, phân công và ghi chú luồng task</p>
             </div>
@@ -187,25 +193,34 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <label className="text-xs font-semibold text-slate-700 block mb-1">
                 Thuộc Cột Mốc Milestone:
               </label>
-              <Dropdown
-                value={milestoneId}
-                onChange={setMilestoneId}
-                options={[
-                  { value: '', label: '📌 Không gán Milestone (Task tự do / Phát sinh ngoài)' },
-                  ...milestones
-                    .filter((m) => {
-                      if (currentUser?.role === 'Admin') return true;
-                      if (m.role && m.role !== 'ALL') return m.role === role;
-                      return true;
-                    })
-                    .map((m) => ({
-                      value: m.id,
-                      label: `🚩 ${m.title}${m.role && m.role !== 'ALL' ? ` [${m.role}]` : ''}`,
-                    })),
-                ]}
-                className="w-full"
-                buttonClassName="py-2.5 px-3 text-xs bg-slate-50 border-slate-300/90 font-medium"
-              />
+              {isMember && !task ? (
+                <div className="w-full bg-slate-50 border border-slate-300/90 rounded-xl px-3 py-2 text-slate-700 text-xs font-semibold flex items-center justify-between gap-2 h-[38px] shadow-2xs">
+                  <span>📌 Không gán Milestone (Task tự do / Phát sinh ngoài)</span>
+                  <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md font-medium shrink-0">
+                    Thành viên (Task Tự Do)
+                  </span>
+                </div>
+              ) : (
+                <Dropdown
+                  value={milestoneId}
+                  onChange={setMilestoneId}
+                  options={[
+                    { value: '', label: '📌 Không gán Milestone (Task tự do / Phát sinh ngoài)' },
+                    ...milestones
+                      .filter((m) => {
+                        if (currentUser?.role === 'Admin') return true;
+                        if (m.role && m.role !== 'ALL') return m.role === role;
+                        return true;
+                      })
+                      .map((m) => ({
+                        value: m.id,
+                        label: `🚩 ${m.title}${m.role && m.role !== 'ALL' ? ` [${m.role}]` : ''}`,
+                      })),
+                  ]}
+                  className="w-full"
+                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 border-slate-300/90 font-medium"
+                />
+              )}
             </div>
 
             {/* Task Title */}
