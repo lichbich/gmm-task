@@ -151,8 +151,12 @@ export type TaskStatus = 'To do' | 'In Progress' | 'Done';
 export interface Milestone {
   id: string;
   title: string;
-  description: string;
-  targetDate: string;
+  goal?: string;
+  description?: string;
+  timeline?: string;
+  moduleCode?: string;
+  deliverable?: string;
+  targetDate?: string;
   order: number;
   status: 'Planned' | 'In Progress' | 'Completed';
   role?: Specialization | 'ALL';

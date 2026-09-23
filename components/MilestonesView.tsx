@@ -39,6 +39,7 @@ export const MilestonesView: React.FC = () => {
     updateTask,
     reorderTasksInMilestone,
     deleteTask,
+    deleteTasks,
     currentUser,
     confirmDialog,
     hasUnreadNote,
@@ -48,8 +49,8 @@ export const MilestonesView: React.FC = () => {
     users,
   } = useApp();
 
-  // Sub-tabs: Milestones vs Ad-hoc tasks
-  const [subTab, setSubTab] = useState<'MILESTONES' | 'ADHOC'>('MILESTONES');
+  // Sub-tabs: Milestones vs Ad-hoc tasks (Default to ADHOC)
+  const [subTab, setSubTab] = useState<'MILESTONES' | 'ADHOC'>('ADHOC');
 
   // Helper to normalize milestone title display
   const formatMilestoneTitle = (title: string, orderNumber: number): string => {
@@ -89,7 +90,6 @@ export const MilestonesView: React.FC = () => {
     if (currentUser && roles.length > 0) {
       const bestRole = getInitialRoleForUser();
       setAdminSelectedRole(bestRole);
-      setMsRole(bestRole);
     }
   }, [currentUser?.id, currentUser?.specializations?.join(','), roles]);
 
@@ -97,9 +97,10 @@ export const MilestonesView: React.FC = () => {
 
   const [isAddMsOpen, setIsAddMsOpen] = useState(false);
   const [msTitle, setMsTitle] = useState('');
-  const [msDesc, setMsDesc] = useState('');
-  const [msTargetDate, setMsTargetDate] = useState('');
-  const [msRole, setMsRole] = useState<string>('BA');
+  const [msGoal, setMsGoal] = useState('');
+  const [msTimeline, setMsTimeline] = useState('');
+  const [msModuleCode, setMsModuleCode] = useState('');
+  const [msDeliverable, setMsDeliverable] = useState('');
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [targetMilestoneId, setTargetMilestoneId] = useState<string>('');
@@ -114,7 +115,10 @@ export const MilestonesView: React.FC = () => {
   // Inline edit milestone state
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
   const [editMsTitle, setEditMsTitle] = useState('');
-  const [editMsDesc, setEditMsDesc] = useState('');
+  const [editMsGoal, setEditMsGoal] = useState('');
+  const [editMsTimeline, setEditMsTimeline] = useState('');
+  const [editMsModuleCode, setEditMsModuleCode] = useState('');
+  const [editMsDeliverable, setEditMsDeliverable] = useState('');
 
   // Collapse / Expand milestones state
   const [collapsedMilestones, setCollapsedMilestones] = useState<Set<string>>(new Set());
@@ -145,11 +149,11 @@ export const MilestonesView: React.FC = () => {
   // Assignee / Member filter state
   const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
 
-  // Collapsed state for Done task cards (by section/milestone ID)
-  const [collapsedDoneSections, setCollapsedDoneSections] = useState<Set<string>>(new Set());
+  // Expanded state for Done task cards (by section/milestone ID) - default to empty Set (collapsed by default)
+  const [expandedDoneSections, setExpandedDoneSections] = useState<Set<string>>(new Set());
 
-  const toggleCollapseDoneSection = (sectionId: string) => {
-    setCollapsedDoneSections((prev) => {
+  const toggleExpandDoneSection = (sectionId: string) => {
+    setExpandedDoneSections((prev) => {
       const next = new Set(prev);
       if (next.has(sectionId)) {
         next.delete(sectionId);
@@ -157,6 +161,61 @@ export const MilestonesView: React.FC = () => {
         next.add(sectionId);
       }
       return next;
+    });
+  };
+
+  // Selected task IDs for bulk operations in ADHOC tab
+  const [selectedAdhocTaskIds, setSelectedAdhocTaskIds] = useState<Set<string>>(new Set());
+
+  const toggleSelectAdhocTask = (taskId: string) => {
+    setSelectedAdhocTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAllAdhoc = (adhocList: Task[]) => {
+    const allSelected =
+      adhocList.length > 0 && adhocList.every((t) => selectedAdhocTaskIds.has(t.id));
+    if (allSelected) {
+      setSelectedAdhocTaskIds(new Set());
+    } else {
+      setSelectedAdhocTaskIds(new Set(adhocList.map((t) => t.id)));
+    }
+  };
+
+  const handleDeleteSelectedAdhoc = () => {
+    const ids = Array.from(selectedAdhocTaskIds);
+    if (ids.length === 0) return;
+    confirmDialog({
+      title: 'Xác nhận xóa các task đã chọn',
+      message: `Bạn có chắc chắn muốn xóa ${ids.length} đầu việc tự do đã chọn? Thao tác này không thể hoàn tác.`,
+      confirmText: `Xóa ${ids.length} task`,
+      type: 'danger',
+      onConfirm: () => {
+        deleteTasks(ids);
+        setSelectedAdhocTaskIds(new Set());
+      },
+    });
+  };
+
+  const handleDeleteAllAdhoc = (adhocList: Task[]) => {
+    if (adhocList.length === 0) return;
+    confirmDialog({
+      title: 'Xác nhận xóa TẤT CẢ task tự do',
+      message: `Bạn có chắc chắn muốn xóa toàn bộ ${adhocList.length} đầu việc tự do & phát sinh trong bộ lọc hiện tại? Thao tác này không thể hoàn tác.`,
+      confirmText: `Xóa toàn bộ ${adhocList.length} task`,
+      type: 'danger',
+      onConfirm: () => {
+        const allIds = adhocList.map((t) => t.id);
+        deleteTasks(allIds);
+        setSelectedAdhocTaskIds(new Set());
+      },
     });
   };
 
@@ -172,10 +231,19 @@ export const MilestonesView: React.FC = () => {
     return t.assigneeAccount?.toLowerCase() === assigneeFilter.toLowerCase();
   };
 
-  // Check if a milestone matches current view filter
+  // PO & Admin check: ONLY PO or Admin can create/edit/delete Milestones!
+  const isPOOrAdmin = (u?: any): boolean => {
+    if (!u) return false;
+    if (u.role === 'Admin') return true;
+    const specs = u.specializations || [];
+    return specs.some((s: string) => s.toUpperCase() === 'PO');
+  };
+
+  const canCreateMilestone = isPOOrAdmin(currentUser);
+
+  // Check if a milestone matches current view filter (Milestones are common across all roles!)
   const isMilestoneRoleMatch = (ms: Milestone): boolean => {
-    const currentRole = adminSelectedRole || roles[0]?.code || 'BA';
-    return ms.role === currentRole;
+    return true;
   };
 
   // Check if a user member belongs to the active role (by specialization or assigned task)
@@ -244,55 +312,48 @@ export const MilestonesView: React.FC = () => {
   );
 
   const canManageMilestone = (ms: Milestone): boolean => {
-    if (!currentUser) return false;
-    if (currentUser.role === 'Admin') return true;
-    if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
-      const userRoles = currentUser.specializations || [];
-      if (ms.role) {
-        return userRoles.includes(ms.role);
-      }
-      const msTasksAll = tasks.filter((t) => t.milestoneId === ms.id);
-      if (msTasksAll.length === 0) return true;
-      return msTasksAll.some((t) => userRoles.includes(t.role));
-    }
-    return false;
+    return isPOOrAdmin(currentUser);
   };
 
   const handleCreateMilestone = (e: React.FormEvent) => {
     e.preventDefault();
     if (!msTitle.trim()) return;
-    const finalRole: Specialization =
-      currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
-        ? ((currentUser.specializations?.[0] as Specialization) || (adminSelectedRole as Specialization) || 'BA')
-        : ((msRole || adminSelectedRole || 'BA') as Specialization);
 
     addMilestone({
       title: msTitle,
-      description: msDesc,
-      targetDate: msTargetDate || '2026-09-30',
+      goal: msGoal,
+      description: msGoal,
+      timeline: msTimeline,
+      moduleCode: msModuleCode,
+      deliverable: msDeliverable,
       status: 'In Progress',
-      role: finalRole,
+      role: 'ALL',
     });
     setMsTitle('');
-    setMsDesc('');
-    setMsTargetDate('');
+    setMsGoal('');
+    setMsTimeline('');
+    setMsModuleCode('');
+    setMsDeliverable('');
     setIsAddMsOpen(false);
   };
 
   const handleStartEditMilestone = (ms: Milestone) => {
     setEditingMilestoneId(ms.id);
     setEditMsTitle(ms.title);
-    setEditMsDesc(ms.description || '');
-    setEditMsTargetDate(ms.targetDate || '');
-    setEditMsRole(ms.role || adminSelectedRole || 'BA');
+    setEditMsGoal(ms.goal || ms.description || '');
+    setEditMsTimeline(ms.timeline || '');
+    setEditMsModuleCode(ms.moduleCode || '');
+    setEditMsDeliverable(ms.deliverable || '');
   };
 
   const handleSaveMilestone = (msId: string) => {
     updateMilestone(msId, {
       title: editMsTitle,
-      description: editMsDesc,
-      targetDate: editMsTargetDate,
-      role: (editMsRole || adminSelectedRole || 'BA') as Specialization,
+      goal: editMsGoal,
+      description: editMsGoal,
+      timeline: editMsTimeline,
+      moduleCode: editMsModuleCode,
+      deliverable: editMsDeliverable,
     });
     setEditingMilestoneId(null);
   };
@@ -435,13 +496,21 @@ export const MilestonesView: React.FC = () => {
 
             <button
               type="button"
-              disabled={!canToggle}
+              disabled={milestoneId ? !canToggle : false}
               onClick={(e) => {
                 e.stopPropagation();
-                handleToggleTaskDone(t);
+                if (!milestoneId) {
+                  toggleSelectAdhocTask(t.id);
+                } else {
+                  handleToggleTaskDone(t);
+                }
               }}
               className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
-                !canToggle
+                !milestoneId
+                  ? selectedAdhocTaskIds.has(t.id)
+                    ? 'bg-indigo-600 border-2 border-indigo-600 text-white shadow-xs'
+                    : 'border-2 border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/60 text-transparent hover:text-indigo-400 cursor-pointer active:scale-90'
+                  : !canToggle
                   ? 'cursor-not-allowed opacity-40 ' +
                     (isDone
                       ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
@@ -452,14 +521,18 @@ export const MilestonesView: React.FC = () => {
                       : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
               }`}
               title={
-                !canToggle
+                !milestoneId
+                  ? selectedAdhocTaskIds.has(t.id)
+                    ? 'Bỏ chọn task này'
+                    : 'Chọn task để thực hiện xóa nhanh'
+                  : !canToggle
                   ? 'Chỉ người được giao việc hoặc Leader/Admin mới có quyền đánh dấu hoàn thành'
                   : isDone
-                  ? 'Đánh dấu chưa hoàn thành (chuyển lại lên danh sách làm việc)'
-                  : 'Đánh dấu đã hoàn thành (chuyển xuống danh sách công việc đã hoàn thành)'
+                  ? 'Đánh dấu chưa hoàn thành'
+                  : 'Đánh dấu đã hoàn thành'
               }
             >
-              <Check className={`w-3.5 h-3.5 ${isDone ? 'stroke-[3]' : 'stroke-[2]'}`} />
+              <Check className={`w-3.5 h-3.5 ${(!milestoneId ? selectedAdhocTaskIds.has(t.id) : isDone) ? 'stroke-[3]' : 'stroke-[2]'}`} />
             </button>
 
             <span className="w-5 text-center font-mono text-slate-400 font-bold shrink-0 text-[11px]">
@@ -628,13 +701,21 @@ export const MilestonesView: React.FC = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
-                disabled={!canToggle}
+                disabled={milestoneId ? !canToggle : false}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleToggleTaskDone(t);
+                  if (!milestoneId) {
+                    toggleSelectAdhocTask(t.id);
+                  } else {
+                    handleToggleTaskDone(t);
+                  }
                 }}
                 className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
-                  !canToggle
+                  !milestoneId
+                    ? selectedAdhocTaskIds.has(t.id)
+                      ? 'bg-indigo-600 border-2 border-indigo-600 text-white shadow-xs'
+                      : 'border-2 border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/60 text-transparent hover:text-indigo-400 cursor-pointer active:scale-90'
+                    : !canToggle
                     ? 'cursor-not-allowed opacity-40 ' +
                       (isDone
                         ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
@@ -644,8 +725,19 @@ export const MilestonesView: React.FC = () => {
                         ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
                         : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
                 }`}
+                title={
+                  !milestoneId
+                    ? selectedAdhocTaskIds.has(t.id)
+                      ? 'Bỏ chọn task này'
+                      : 'Chọn task để thực hiện xóa nhanh'
+                    : !canToggle
+                    ? 'Chỉ người được giao việc hoặc Leader/Admin mới có quyền đánh dấu hoàn thành'
+                    : isDone
+                    ? 'Đánh dấu chưa hoàn thành'
+                    : 'Đánh dấu đã hoàn thành'
+                }
               >
-                <Check className={`w-3.5 h-3.5 ${isDone ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                <Check className={`w-3.5 h-3.5 ${(!milestoneId ? selectedAdhocTaskIds.has(t.id) : isDone) ? 'stroke-[3]' : 'stroke-[2]'}`} />
               </button>
               <span className="font-mono text-slate-400 font-bold text-xs">
                 #{idx + 1}
@@ -792,18 +884,18 @@ export const MilestonesView: React.FC = () => {
                 <span className="sm:hidden">Quản Lý Milestones</span>
                 <span className="hidden sm:inline">Quản Lý Milestones & Break Tasks</span>
               </h2>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
-                {currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin' ? 'Leader, Advisor & Admin' : 'Thành viên'}
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                {canCreateMilestone ? 'PO & Admin (Tạo Milestone)' : 'Leader & Thành viên (Break Task)'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Quản lý các cột mốc Milestone, bẻ task từ milestone cho thành viên hoặc quản lý các đầu việc phát sinh.
+              Quản lý các cột mốc Milestone chung dự án, bẻ task từ milestone cho thành viên hoặc quản lý các đầu việc phát sinh.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             {subTab === 'MILESTONES' ? (
-              (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
+              canCreateMilestone && (
                 <button
                   onClick={() => setIsAddMsOpen(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded-xl shadow-md shadow-amber-500/20 transition active:scale-95 shrink-0 cursor-pointer"
@@ -888,7 +980,6 @@ export const MilestonesView: React.FC = () => {
                 value={adminSelectedRole}
                 onChange={(val) => {
                   setAdminSelectedRole(val);
-                  setMsRole(val);
                   setAssigneeFilter('ALL');
                 }}
                 options={roles.map((r) => ({
@@ -907,75 +998,80 @@ export const MilestonesView: React.FC = () => {
       {subTab === 'MILESTONES' && isAddMsOpen && (
         <form
           onSubmit={handleCreateMilestone}
-          className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 tab-content-animate"
+          className="bg-white border border-amber-200/90 rounded-2xl p-5 shadow-sm space-y-4 tab-content-animate"
         >
-          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
             <Layers className="w-4 h-4 text-amber-500" />
-            Tạo Cột Mốc Milestone Mới
+            Tạo Cột Mốc Milestone Mới (Đồng Bộ Theo Sheet)
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="md:col-span-2">
-              <label className="text-xs text-slate-500 block mb-1">Tên Milestone:</label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Milestone (Tên cột mốc *):</label>
               <input
                 type="text"
-                placeholder={`VD: Milestone ${filteredMilestones.length + 1}: Tên cột mốc...`}
+                placeholder="VD: 1. Foundation"
                 value={msTitle}
                 onChange={(e) => setMsTitle(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
                 required
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Role Áp Dụng:</label>
-              {currentUser?.role === 'Admin' ? (
-                <Dropdown
-                  value={msRole || adminSelectedRole || roles[0]?.code || 'BA'}
-                  onChange={setMsRole}
-                  options={roles.map((r) => ({
-                    value: r.code,
-                    label: `Role ${r.code} (${r.name})`,
-                  }))}
-                  className="w-full"
-                  buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300"
-                />
-              ) : (
-                <div className="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-slate-700 text-xs font-semibold flex items-center justify-between">
-                  <span>{currentUser?.specializations?.[0] || adminSelectedRole || 'BA'}</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Theo Leader</span>
-                </div>
-              )}
-            </div>
-            <div>
-              <label className="text-xs text-slate-500 block mb-1">Ngày Hoàn Thành Mục Tiêu:</label>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Timeline (Thời gian dự kiến):</label>
               <input
-                type="date"
-                value={msTargetDate}
-                onChange={(e) => setMsTargetDate(e.target.value)}
+                type="text"
+                placeholder="VD: (2-3 tuần) hoặc Tuần 1-3"
+                value={msTimeline}
+                onChange={(e) => setMsTimeline(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
               />
             </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Module Code (Mã module):</label>
+              <input
+                type="text"
+                placeholder="VD: HR_001, SC_002, FA_005"
+                value={msModuleCode}
+                onChange={(e) => setMsModuleCode(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-slate-500 block mb-1">Mô tả mục tiêu:</label>
-            <input
-              type="text"
-              placeholder="Chi tiết yêu cầu của milestone..."
-              value={msDesc}
-              onChange={(e) => setMsDesc(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
-            />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Goal (Mục tiêu của Milestone):</label>
+              <textarea
+                rows={2}
+                placeholder="VD: Xây dựng nền tảng dùng chung cho toàn bộ ERP..."
+                value={msGoal}
+                onChange={(e) => setMsGoal(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Deliverable (Sản phẩm bàn giao):</label>
+              <textarea
+                rows={2}
+                placeholder="VD: Login, Phân quyền, Upload file, Gửi email..."
+                value={msDeliverable}
+                onChange={(e) => setMsDeliverable(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-none"
+              />
+            </div>
           </div>
-          <div className="flex justify-end gap-2">
+
+          <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={() => setIsAddMsOpen(false)}
-              className="px-4 py-2 bg-slate-100 text-slate-600 text-xs rounded-xl hover:bg-slate-200 transition active:scale-95"
+              className="px-4 py-2 bg-slate-100 text-slate-600 text-xs font-semibold rounded-xl hover:bg-slate-200 transition active:scale-95 cursor-pointer"
             >
               Hủy
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-amber-500 text-white text-xs font-semibold rounded-xl hover:bg-amber-400 shadow-md transition active:scale-95"
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded-xl shadow-md transition active:scale-95 cursor-pointer"
             >
               Lưu Milestone
             </button>
@@ -1041,7 +1137,7 @@ export const MilestonesView: React.FC = () => {
               const progress = msTasksAll.length > 0 ? Math.round((doneCount / msTasksAll.length) * 100) : 0;
               const isEditing = editingMilestoneId === ms.id;
               const isCollapsed = collapsedMilestones.has(ms.id);
-              const isDoneCollapsed = collapsedDoneSections.has(ms.id);
+              const isDoneCollapsed = !expandedDoneSections.has(ms.id);
 
               return (
                 <div
@@ -1075,46 +1171,72 @@ export const MilestonesView: React.FC = () => {
                       </div>
                       <div className="flex-1 min-w-0" onClick={(e) => isEditing && e.stopPropagation()}>
                         {isEditing ? (
-                          <div className="space-y-2">
-                            <input
-                              value={editMsTitle}
-                              onChange={(e) => setEditMsTitle(e.target.value)}
-                              className="w-full bg-white border border-amber-300 rounded-lg px-2 py-1 text-sm font-bold text-slate-700 focus:outline-none focus:border-amber-400"
-                            />
-                            <input
-                              value={editMsDesc}
-                              onChange={(e) => setEditMsDesc(e.target.value)}
-                              placeholder="Mô tả..."
-                              className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600 focus:outline-none focus:border-amber-400"
-                            />
-                            <input
-                              type="date"
-                              value={editMsTargetDate}
-                              onChange={(e) => setEditMsTargetDate(e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-600 focus:outline-none focus:border-amber-400"
-                            />
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleSaveMilestone(ms.id)}
-                                className="px-3 py-1 bg-amber-500 text-white text-xs font-semibold rounded-lg hover:bg-amber-400 transition"
-                              >
-                                Lưu
-                              </button>
+                          <div className="space-y-2 bg-white p-3 rounded-xl border border-amber-300 shadow-2xs">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                              <input
+                                value={editMsTitle}
+                                onChange={(e) => setEditMsTitle(e.target.value)}
+                                placeholder="Milestone (Tên cột mốc)..."
+                                className="bg-slate-50 border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-amber-400"
+                              />
+                              <input
+                                value={editMsTimeline}
+                                onChange={(e) => setEditMsTimeline(e.target.value)}
+                                placeholder="Timeline (VD: (2-3 tuần))..."
+                                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400"
+                              />
+                              <input
+                                value={editMsModuleCode}
+                                onChange={(e) => setEditMsModuleCode(e.target.value)}
+                                placeholder="Module Code (VD: HR_001, SC_002)..."
+                                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-600 focus:outline-none focus:border-amber-400"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              <textarea
+                                rows={2}
+                                value={editMsGoal}
+                                onChange={(e) => setEditMsGoal(e.target.value)}
+                                placeholder="Goal (Mục tiêu của Milestone)..."
+                                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400 resize-none"
+                              />
+                              <textarea
+                                rows={2}
+                                value={editMsDeliverable}
+                                onChange={(e) => setEditMsDeliverable(e.target.value)}
+                                placeholder="Deliverable (Sản phẩm bàn giao)..."
+                                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400 resize-none"
+                              />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-1">
                               <button
                                 onClick={() => setEditingMilestoneId(null)}
-                                className="px-3 py-1 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200 transition"
+                                className="px-3 py-1 bg-slate-100 text-slate-600 text-xs rounded-lg hover:bg-slate-200 transition cursor-pointer"
                               >
                                 Hủy
+                              </button>
+                              <button
+                                onClick={() => handleSaveMilestone(ms.id)}
+                                className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded-lg shadow-2xs transition cursor-pointer"
+                              >
+                                Lưu thay đổi
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <>
-                            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2 flex-wrap">
-                              {displayTitle}
-                              {ms.role && (
-                                <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                  Role: {ms.role}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-base font-bold text-slate-800">
+                                {displayTitle}
+                              </h3>
+                              {(ms.timeline || ms.targetDate) && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-800 border border-amber-300 font-bold">
+                                  ⏱️ {ms.timeline || ms.targetDate}
+                                </span>
+                              )}
+                              {ms.moduleCode && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300 font-mono font-medium">
+                                  📦 {ms.moduleCode}
                                 </span>
                               )}
                               <span className="text-[10px] px-2 py-0.5 rounded-full bg-white text-slate-500 border border-slate-200 font-medium">
@@ -1125,9 +1247,22 @@ export const MilestonesView: React.FC = () => {
                                   Đã thu gọn
                                 </span>
                               )}
-                            </h3>
-                            <p className="text-xs text-slate-500 mt-0.5">{ms.description}</p>
-                          </>
+                            </div>
+
+                            {/* Goal */}
+                            {(ms.goal || ms.description) && (
+                              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                                🎯 <strong className="text-slate-700">Goal:</strong> {ms.goal || ms.description}
+                              </p>
+                            )}
+
+                            {/* Deliverable */}
+                            {ms.deliverable && (
+                              <p className="text-xs text-emerald-800 font-medium bg-emerald-50/70 px-2.5 py-1 rounded-lg border border-emerald-200/80 inline-block">
+                                🚀 <strong className="text-emerald-900">Deliverable:</strong> {ms.deliverable}
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1205,7 +1340,7 @@ export const MilestonesView: React.FC = () => {
                         <div className="m-3 border border-emerald-200 bg-emerald-50/40 rounded-xl overflow-hidden shadow-2xs">
                           {/* Card Toggle Header */}
                           <div
-                            onClick={() => toggleCollapseDoneSection(ms.id)}
+                            onClick={() => toggleExpandDoneSection(ms.id)}
                             className="bg-emerald-100/70 hover:bg-emerald-200/70 p-3 flex items-center justify-between cursor-pointer select-none transition"
                             title={isDoneCollapsed ? 'Bấm để mở rộng các công việc đã hoàn thành' : 'Bấm để thu gọn'}
                           >
@@ -1250,7 +1385,7 @@ export const MilestonesView: React.FC = () => {
       {subTab === 'ADHOC' && (() => {
         const adhocActiveTasks = sortActiveTasks(filteredAdhocTasks.filter((t) => t.status !== 'Done'));
         const adhocDoneTasks = filteredAdhocTasks.filter((t) => t.status === 'Done');
-        const isAdhocDoneCollapsed = collapsedDoneSections.has('adhoc');
+        const isAdhocDoneCollapsed = !expandedDoneSections.has('adhoc');
 
         return (
           <div className="bg-white border-2 border-indigo-200/80 rounded-2xl overflow-hidden shadow-sm tab-content-animate">
@@ -1310,6 +1445,55 @@ export const MilestonesView: React.FC = () => {
               }`}
             >
               <div className="accordion-content">
+                {/* Quick Bulk Delete Toolbar */}
+                {filteredAdhocTasks.length > 0 && (
+                  <div className="px-4 py-2.5 bg-slate-50/90 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const isAllSelected =
+                          filteredAdhocTasks.length > 0 &&
+                          filteredAdhocTasks.every((t) => selectedAdhocTaskIds.has(t.id));
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleSelectAllAdhoc(filteredAdhocTasks)}
+                            className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer select-none group"
+                          >
+                            <div
+                              className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                                isAllSelected
+                                  ? 'bg-indigo-600 border-2 border-indigo-600 text-white shadow-xs'
+                                  : 'border-2 border-slate-300 group-hover:border-indigo-500 group-hover:bg-indigo-50/60 text-transparent'
+                              }`}
+                            >
+                              <Check className={`w-3.5 h-3.5 ${isAllSelected ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                            </div>
+                            <span>Chọn tất cả ({filteredAdhocTasks.length} task)</span>
+                          </button>
+                        );
+                      })()}
+                      {selectedAdhocTaskIds.size > 0 && (
+                        <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                          Đã chọn {selectedAdhocTaskIds.size}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {selectedAdhocTaskIds.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleDeleteSelectedAdhoc}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Xóa {selectedAdhocTaskIds.size} task đã chọn
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="divide-y divide-slate-100">
                   {filteredAdhocTasks.length === 0 ? (
                     <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
@@ -1331,7 +1515,7 @@ export const MilestonesView: React.FC = () => {
                   <div className="m-3 border border-emerald-200 bg-emerald-50/40 rounded-xl overflow-hidden shadow-2xs">
                     {/* Card Toggle Header */}
                     <div
-                      onClick={() => toggleCollapseDoneSection('adhoc')}
+                      onClick={() => toggleExpandDoneSection('adhoc')}
                       className="bg-emerald-100/70 hover:bg-emerald-200/70 p-3 flex items-center justify-between cursor-pointer select-none transition"
                       title={isAdhocDoneCollapsed ? 'Bấm để mở rộng các công việc đã hoàn thành' : 'Bấm để thu gọn'}
                     >

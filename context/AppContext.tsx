@@ -199,6 +199,7 @@ interface AppContextType {
   duplicateTask: (id: string) => Task | undefined;
   updateTask: (id: string, updates: Partial<Task>, options?: { skipLog?: boolean }) => void;
   deleteTask: (id: string) => void;
+  deleteTasks: (ids: string[]) => void;
   reorderTasksInMilestone: (milestoneId: string, taskIds: string[]) => void;
   
   submitTaskReport: (taskId: string, actualEffort: number, completionPercentage: number, status: TaskStatus, notes?: string) => void;
@@ -1353,6 +1354,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncTasksToFirebase(updated);
   };
 
+  const deleteTasks = (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    const updated = tasks.filter((t) => !idSet.has(t.id));
+    setTasks(updated);
+    syncTasksToFirebase(updated);
+  };
+
   const reorderTasksInMilestone = (milestoneId: string, orderedTaskIds: string[]) => {
     const updated = tasks.map((task) => {
       if (task.milestoneId !== milestoneId) return task;
@@ -1722,6 +1731,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         duplicateTask,
         updateTask,
         deleteTask,
+        deleteTasks,
         reorderTasksInMilestone,
         submitTaskReport,
         updateTaskNotes,
