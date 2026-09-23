@@ -19,8 +19,12 @@ export const AwardLeaderboard: React.FC = () => {
     confirmDialog,
   } = useApp();
 
-  const topEffortMember = weeklyAwards.find((w) => w.isTopEffort && w.totalEffort > 0);
-  const lateMembers = weeklyAwards.filter((w) => w.isLate);
+  const isWeekFinalized = weeklyArchives.some(
+    (a) => a.weekNumber === selectedWeek && a.year === selectedYear
+  );
+
+  const topEffortMember = isWeekFinalized ? weeklyAwards.find((w) => w.isTopEffort && w.totalEffort > 0) : undefined;
+  const lateMembers = isWeekFinalized ? weeklyAwards.filter((w) => w.isLate) : [];
 
   const handleRollover = () => {
     confirmDialog({
@@ -86,6 +90,21 @@ export const AwardLeaderboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Notice if Week Not Finalized */}
+      {!isWeekFinalized && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl p-3 sm:p-4 flex items-center gap-3 text-xs text-amber-800 dark:text-amber-300 shadow-xs">
+          <Clock className="w-5 h-5 text-amber-600 shrink-0" />
+          <div>
+            <strong className="block text-amber-900 dark:text-amber-200 text-sm mb-0.5">
+              Chưa chốt Tuần {selectedWeek}
+            </strong>
+            <span>
+              Admin chưa bấm nút <strong>"Chốt Tuần {selectedWeek}"</strong>. Danh hiệu <strong>Thưởng (Top Effort)</strong> và các mức <strong>Cảnh Báo Phạt</strong> sẽ chỉ được áp dụng và hiển thị chính thức sau khi tuần được chốt.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Grid Highlights (Top Effort & Penalty Warning) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         {/* 🟢 TOP EFFORT BANNER */}
@@ -132,7 +151,9 @@ export const AwardLeaderboard: React.FC = () => {
             </div>
           ) : (
             <div className="py-4 text-center text-slate-400 text-xs">
-              Chưa có dữ liệu tính Thưởng tuần này.
+              {isWeekFinalized
+                ? 'Chưa có dữ liệu tính Thưởng tuần này.'
+                : `Chưa chốt Tuần ${selectedWeek}. Danh hiệu Thưởng sẽ công bố sau khi chốt tuần.`}
             </div>
           )}
         </div>
@@ -183,10 +204,14 @@ export const AwardLeaderboard: React.FC = () => {
                 </div>
               ))}
             </div>
-          ) : (
+          ) : isWeekFinalized ? (
             <div className="py-4 text-center text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center justify-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               <span>100% thành viên đã nộp đúng hạn! Không có phạt nào.</span>
+            </div>
+          ) : (
+            <div className="py-4 text-center text-slate-400 text-xs">
+              Chưa chốt Tuần {selectedWeek}. Cảnh báo Phạt sẽ công bố sau khi chốt tuần.
             </div>
           )}
         </div>

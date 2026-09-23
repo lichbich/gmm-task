@@ -37,6 +37,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
     roles,
     selectedWeek,
     selectedYear,
+    weeklyArchives,
   } = useApp();
 
   const currentWeekTasks = React.useMemo(() => {
@@ -179,8 +180,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
   };
 
   const renderKanbanCard = (t: Task, isMobile: boolean = false) => {
-    const isTop = isTopEffortAccount(t.assigneeAccount);
-    const isLate = t.isSubmittedLate;
+    const isWeekFinalized = weeklyArchives.some(
+      (a) => a.weekNumber === (t.weekNumber || selectedWeek) && a.year === (t.year || selectedYear)
+    );
+    const isTop = isWeekFinalized && isTopEffortAccount(t.assigneeAccount);
+    const isLate = isWeekFinalized && t.isSubmittedLate;
     const isAssignedToMe = canReportTask(t);
     const canMove = canMoveTask(t);
     const isBeingDragged = draggedTaskId === t.id;

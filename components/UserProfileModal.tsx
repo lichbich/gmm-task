@@ -29,7 +29,7 @@ interface UserProfileModalProps {
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose }) => {
-  const { currentUser, users, tasks, roles, selectedWeek, selectedYear, weeklyAwards, updateUser, changePassword, logout } =
+  const { currentUser, users, tasks, roles, selectedWeek, selectedYear, weeklyAwards, weeklyArchives, updateUser, changePassword, logout } =
     useApp();
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
@@ -80,9 +80,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const currentWeekEffort = userCurrentTasks.reduce((acc, t) => acc + (t.actualEffort || 0), 0);
   const totalEffortCumulative = (userRecord.totalEffort || 0) + currentWeekEffort;
 
-  const userAward = weeklyAwards.find((w) => w.account === currentUser.account);
-  const isTopEffort = userAward?.isTopEffort || false;
-  const isLate = userAward?.isLate || false;
+  const isWeekFinalized = weeklyArchives.some(
+    (a) => a.weekNumber === selectedWeek && a.year === selectedYear
+  );
+  const userAward = weeklyAwards.find((w) => w.account === currentUser?.account);
+  const isTopEffort = isWeekFinalized && (userAward?.isTopEffort || false);
+  const isLate = isWeekFinalized && (userAward?.isLate || false);
 
   const startEditInfo = () => {
     setEditName(userRecord.name || '');

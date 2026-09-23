@@ -84,6 +84,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     users,
     confirmDialog,
     markNoteAsRead,
+    weeklyArchives,
+    selectedWeek,
+    selectedYear,
   } = useApp();
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
@@ -169,9 +172,13 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const isEditable = canEditTask(task);
   const isMyTaskToReport = canReportTask(task);
 
+  const isWeekFinalized = weeklyArchives.some(
+    (a) => a.weekNumber === (task.weekNumber || selectedWeek) && a.year === (task.year || selectedYear)
+  );
+
   const award = weeklyAwards.find((w) => w.account === task.assigneeAccount);
-  const isTopEffort = award?.isTopEffort || false;
-  const isLate = task.isSubmittedLate;
+  const isTopEffort = isWeekFinalized && (award?.isTopEffort || false);
+  const isLate = isWeekFinalized && task.isSubmittedLate;
 
   // Metadata fallbacks
   const creatorDisplay = task.createdBy || 'QuynhNV (Leader)';

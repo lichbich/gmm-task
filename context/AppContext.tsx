@@ -1507,7 +1507,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       archivedAt: new Date().toISOString(),
       completedTasksCount: completedTasksCount,
       rolledOverTasksCount: rolledOverTasksCount,
-      awards: computeWeeklyAwards(),
+      awards: calculateWeeklyAwardsForWeek(selectedWeek, selectedYear, true),
       tasksSnapshot: JSON.parse(JSON.stringify(workedTasks)),
     };
 
@@ -1573,14 +1573,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedWeek(nextWeek);
   };
 
-  // Compute Weekly Award Summaries
-  const computeWeeklyAwards = (): WeeklyAwardSummary[] => {
+  // Helper to calculate weekly awards (with optional reward/penalty enablement)
+  const calculateWeeklyAwardsForWeek = (
+    targetWeek: number,
+    targetYear: number,
+    isFinalized: boolean = true
+  ): WeeklyAwardSummary[] => {
     const currentWeekTasks = tasks.filter(
-      (t) => t.weekNumber === selectedWeek && t.year === selectedYear
+      (t) => t.weekNumber === targetWeek && t.year === targetYear
     );
 
-    const sundayNoon = getWeekSundayNoon(selectedWeek, selectedYear);
-    const deadline = getWeekDeadline(selectedWeek, selectedYear);
+    const sundayNoon = getWeekSundayNoon(targetWeek, targetYear);
+    const deadline = getWeekDeadline(targetWeek, targetYear);
     const now = new Date(simulatedTime);
     const isPastDeadline = now.getTime() > deadline.getTime();
 
@@ -1663,12 +1667,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let penaltyType: 'LATE' | 'MISSING' | 'NONE' = 'NONE';
       let penaltyReason = '';
 
-      if (isMissingReport) {
-        penaltyType = 'MISSING';
-        penaltyReason = `Chưa nộp báo cáo (${stats.count}/${stats.total} task) quá hạn 22:00 CN`;
-      } else if (isLateSubmission) {
-        penaltyType = 'LATE';
-        penaltyReason = `Nộp báo cáo muộn sau 22:00 CN`;
+      if (isFinalized) {
+        if (isMissingReport) {
+          penaltyType = 'MISSING';
+          penaltyReason = `Chưa nộp báo cáo (${stats.count}/${stats.total} task) quá hạn 22:00 CN`;
+        } else if (isLateSubmission) {
+          penaltyType = 'LATE';
+          penaltyReason = `Nộp báo cáo muộn sau 22:00 CN`;
+        }
       }
 
       awards.push({
@@ -1679,16 +1685,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         totalEffort: stats.totalEffort,
         submittedCount: stats.count,
         totalTasks: stats.total,
-        isTopEffort: maxEffort > 0 && stats.totalEffort === maxEffort,
-        isLate: stats.isLate || isMissingReport,
+        isTopEffort: isFinalized && maxEffort > 0 && stats.totalEffort === maxEffort,
+        isLate: isFinalized && (stats.isLate || isMissingReport),
         lastSubmittedAt: stats.lastSubmittedAt,
-        isMissingReport,
+        isMissingReport: isFinalized && isMissingReport,
         penaltyType,
         penaltyReason,
       });
     });
 
     return awards.sort((a, b) => b.totalEffort - a.totalEffort);
+  };
+
+  // Compute Weekly Award Summaries
+  const computeWeeklyAwards = (): WeeklyAwardSummary[] => {
+    const isFinalized = weeklyArchives.some(
+      (a) => a.weekNumber === selectedWeek && a.year === selectedYear
+    );
+
+    const archive = weeklyArchives.find(
+      (a) => a.weekNumber === selectedWeek && a.year === selectedYear
+    );
+
+    if (archive && archive.awards) {
+      return archive.awards;
+    }
+
+    return calculateWeeklyAwardsForWeek(selectedWeek, selectedYear, isFinalized);
   };
 
   const setSimulatedTime = (time: string) => setSimulatedTimeState(time);

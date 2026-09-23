@@ -53,6 +53,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     selectedWeek,
     selectedYear,
     simulatedTime,
+    weeklyArchives,
   } = useApp();
 
   // Sub-tabs state: ALWAYS DEFAULT to 'MY_TASKS' when accessing
@@ -398,7 +399,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
   // Reusable task row renderer
   const renderTaskRow = (t: Task, displayIdx: number) => {
-    const isTopEffort = isTopEffortAccount(t.assigneeAccount);
+    const isWeekFinalized = weeklyArchives.some(
+      (a) => a.weekNumber === (t.weekNumber || selectedWeek) && a.year === (t.year || selectedYear)
+    );
+    const isTopEffort = isWeekFinalized && isTopEffortAccount(t.assigneeAccount);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
     const deadline = getWeekDeadline(t.weekNumber || selectedWeek, t.year || selectedYear);
     const nowTime = new Date(simulatedTime).getTime();
@@ -412,8 +416,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       (!!t.lastSubmittedAt &&
         new Date(t.lastSubmittedAt).getTime() >= sundayNoon.getTime());
 
-    const isUnsubmittedLate = !isReported && isPastDeadline && !!t.assigneeAccount;
-    const isSubmittedLate = isReported && !isTaskDone && !!t.isSubmittedLate;
+    const isUnsubmittedLate = isWeekFinalized && !isReported && isPastDeadline && !!t.assigneeAccount;
+    const isSubmittedLate = isWeekFinalized && isReported && !isTaskDone && !!t.isSubmittedLate;
     const isLate = isSubmittedLate || isUnsubmittedLate;
     const isAssignedToMe = canReportTask(t);
     const hasAlert = isLate || isTopEffort;
@@ -711,7 +715,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       t.assigneeAccount &&
       t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase();
 
-    const isTopEffort = isTopEffortAccount(t.assigneeAccount);
+    const isWeekFinalized = weeklyArchives.some(
+      (a) => a.weekNumber === (t.weekNumber || selectedWeek) && a.year === (t.year || selectedYear)
+    );
+    const isTopEffort = isWeekFinalized && isTopEffortAccount(t.assigneeAccount);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
     const deadline = getWeekDeadline(t.weekNumber || selectedWeek, t.year || selectedYear);
     const nowTime = new Date(simulatedTime).getTime();
@@ -724,8 +731,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       (!!t.lastSubmittedAt &&
         new Date(t.lastSubmittedAt).getTime() >= sundayNoon.getTime());
 
-    const isUnsubmittedLate = !isReported && isPastDeadline && !!t.assigneeAccount;
-    const isSubmittedLate = isReported && !isTaskDone && !!t.isSubmittedLate;
+    const isUnsubmittedLate = isWeekFinalized && !isReported && isPastDeadline && !!t.assigneeAccount;
+    const isSubmittedLate = isWeekFinalized && isReported && !isTaskDone && !!t.isSubmittedLate;
     const isLate = isSubmittedLate || isUnsubmittedLate;
 
     const unread = hasUnreadNote(t);
