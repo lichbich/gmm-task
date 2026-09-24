@@ -37,6 +37,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
   const [mounted, setMounted] = useState(false);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD'>('ALL');
 
+  const isNotificationGranted =
+    isPushEnabled ||
+    (typeof window !== 'undefined' &&
+      'Notification' in window &&
+      Notification.permission === 'granted');
+
   const {
     isRendered,
     isVisible,
@@ -217,37 +223,28 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
               </div>
             </div>
 
-            {/* Device Push Notification Banner */}
-            <div className="px-4 py-2.5 bg-indigo-50/70 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between gap-2 text-xs shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <Smartphone className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <div className="min-w-0">
-                  <span className="font-semibold text-slate-700 dark:text-slate-200 block truncate text-[11px]">
-                    Thông báo thiết bị
-                  </span>
+            {/* Device Push Notification Banner - Only shown if not yet enabled */}
+            {!isNotificationGranted && (
+              <div className="px-4 py-2.5 bg-indigo-50/70 dark:bg-indigo-950/40 border-b border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between gap-2 text-xs shrink-0 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Smartphone className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-700 dark:text-slate-200 block truncate text-[11px]">
+                      Thông báo thiết bị
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={requestNotificationPermission}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition shrink-0 cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs active:scale-95"
+                  >
+                    <span>Bật thông báo</span>
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={requestNotificationPermission}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition shrink-0 cursor-pointer ${
-                    isPushEnabled
-                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
-                      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs'
-                  }`}
-                >
-                  {isPushEnabled ? (
-                    <>
-                      <Check className="w-3 h-3" />
-                      <span>Đã bật</span>
-                    </>
-                  ) : (
-                    <span>Bật thông báo</span>
-                  )}
-                </button>
-              </div>
-            </div>
+            )}
 
             {/* Filter Sub-Tabs */}
             <div className="flex border-b border-slate-100 dark:border-slate-800 px-4 pt-2 gap-4 text-xs shrink-0 bg-white dark:bg-slate-900">

@@ -713,10 +713,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const requestNotificationPermission = async () => {
-    if (!authSession) return;
-    const token = await registerDeviceForPushNotifications(authSession.account);
-    if (token) {
-      setIsPushEnabled(true);
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setIsPushEnabled(true);
+      } else {
+        setIsPushEnabled(false);
+        return;
+      }
+    } catch (e) {
+      console.warn('requestPermission error:', e);
+      if (Notification.permission === 'granted') {
+        setIsPushEnabled(true);
+      }
+    }
+
+    if (authSession && Notification.permission === 'granted') {
+      registerDeviceForPushNotifications(authSession.account).catch(console.error);
     }
   };
 
