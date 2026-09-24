@@ -1480,33 +1480,37 @@ export const MilestonesView: React.FC = () => {
                         <span className="font-bold text-indigo-600 font-mono">{totalHours}h</span>
                       </div>
 
-                      {canManageMilestone(ms) && !isEditing && (
+                      {!isEditing && (
                         <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleStartEditMilestone(ms)}
-                            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-100 rounded-lg transition"
-                            title="Sửa milestone"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              confirmDialog({
-                                title: 'Xác nhận xóa Milestone',
-                                message: `Bạn có chắc chắn muốn xóa cột mốc "${ms.title}"? Tất cả các đầu việc trong milestone này cũng sẽ bị xóa vĩnh viễn.`,
-                                confirmText: 'Xác nhận xóa',
-                                type: 'danger',
-                                onConfirm: () => deleteMilestone(ms.id),
-                              });
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                            title="Xóa milestone"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {canManageMilestone(ms) && (
+                            <>
+                              <button
+                                onClick={() => handleStartEditMilestone(ms)}
+                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-100 rounded-lg transition cursor-pointer"
+                                title="Sửa milestone"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  confirmDialog({
+                                    title: 'Xác nhận xóa Milestone',
+                                    message: `Bạn có chắc chắn muốn xóa cột mốc "${ms.title}"? Tất cả các đầu việc trong milestone này cũng sẽ bị xóa vĩnh viễn.`,
+                                    confirmText: 'Xác nhận xóa',
+                                    type: 'danger',
+                                    onConfirm: () => deleteMilestone(ms.id),
+                                  });
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                                title="Xóa milestone"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => handleOpenBreakTaskForMilestone(ms.id, ms.role)}
-                            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition flex items-center gap-1.5 shadow-sm active:scale-95"
+                            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold transition flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer text-xs"
                             title={`Tạo và break task trực tiếp vào ${ms.title}`}
                           >
                             <Plus className="w-3.5 h-3.5" />
@@ -1782,6 +1786,7 @@ export const MilestonesView: React.FC = () => {
           setIsTaskModalOpen(false);
           setEditingTask(null);
           setModalInitialRole(undefined);
+          setTargetMilestoneId('');
         }}
       />
     </div>
