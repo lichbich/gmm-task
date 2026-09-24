@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Lock, User as UserIcon, CheckCircle, Key, LogIn, Sparkles, ArrowLeft } from 'lucide-react';
+import { Lock, User as UserIcon, CheckCircle, Key, LogIn, Sparkles, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { GMMLogo } from './common/GMMLogo';
 
 export const LoginModal: React.FC = () => {
@@ -10,6 +10,7 @@ export const LoginModal: React.FC = () => {
 
   const [accountInput, setAccountInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   // First-time setup state
@@ -17,6 +18,8 @@ export const LoginModal: React.FC = () => {
   const [targetUserId, setTargetUserId] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   if (authSession) return null; // Already logged in
 
@@ -99,7 +102,7 @@ export const LoginModal: React.FC = () => {
                 Staff Code (Username Đăng Nhập):
               </label>
               <div className="relative">
-                <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="VD: QuynhNV, ThanhNDT, LichDT, NhiHT..."
@@ -116,15 +119,23 @@ export const LoginModal: React.FC = () => {
                 Mật Khẩu (Password):
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="Nhập mật khẩu (Mật khẩu tạm thời hoặc chính thức)..."
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-10 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
+                  title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
               <p className="text-[10px] text-slate-400 mt-1">
                 💡 Nếu là lần đầu tiên đăng nhập, nhập Mật khẩu tạm thời do Admin cấp để đổi mật khẩu chính thức.
@@ -154,15 +165,23 @@ export const LoginModal: React.FC = () => {
                 Mật Khẩu Mới:
               </label>
               <div className="relative">
-                <Key className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <Key className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
-                  type="password"
+                  type={showNewPassword ? 'text' : 'password'}
                   placeholder="Nhập mật khẩu mới..."
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-10 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
+                  title={showNewPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -171,15 +190,23 @@ export const LoginModal: React.FC = () => {
                 Xác Nhận Mật Khẩu Mới:
               </label>
               <div className="relative">
-                <CheckCircle className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <CheckCircle className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 <input
-                  type="password"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   placeholder="Nhập lại mật khẩu mới..."
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-10 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
+                  title={showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -190,6 +217,8 @@ export const LoginModal: React.FC = () => {
                   setIsFirstTimeSetup(false);
                   setNewPassword('');
                   setConfirmPassword('');
+                  setShowNewPassword(false);
+                  setShowConfirmPassword(false);
                   setErrorMsg('');
                 }}
                 className="group flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all duration-200 flex items-center justify-center gap-2 border border-slate-200 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer"
