@@ -272,6 +272,11 @@ export async function sendPushNotification({
 }) {
   if (!targetAccount) return;
 
+  // Prevent sending notifications to oneself
+  if (senderAccount && targetAccount.trim().toLowerCase() === senderAccount.trim().toLowerCase()) {
+    return;
+  }
+
   const targetUrl = url || (taskId ? `/?openTaskId=${taskId}` : '/');
   const notificationId = `notif-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const notifPayload: AppNotification = {

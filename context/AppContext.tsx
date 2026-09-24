@@ -650,7 +650,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const latest = list[0];
             const isRecent =
               new Date(latest.createdAt).getTime() > Date.now() - 15000;
-            if (!latest.isRead && isRecent) {
+            const isSelf =
+              latest.senderAccount &&
+              authSession?.account &&
+              latest.senderAccount.trim().toLowerCase() === authSession.account.trim().toLowerCase();
+            if (!latest.isRead && isRecent && !isSelf) {
               playNotificationChime();
               showLocalBrowserNotification(
                 latest.title,
@@ -1366,22 +1370,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks(updated);
     syncTasksToFirebase(updated);
 
-    // Push notification to assigned member
+    // Push notification to assigned member (only if assigned to someone else)
     if (newTask.assigneeAccount) {
       const isSelf =
-        newTask.assigneeAccount.toLowerCase() ===
-        (authSession?.account || '').toLowerCase();
-      sendPushNotification({
-        targetAccount: newTask.assigneeAccount,
-        title: isSelf
-          ? `📋 Bạn vừa tạo task mới: ${newTask.title}`
-          : `📋 Bạn có task mới từ @${authSession?.account || 'Leader'}`,
-        body: `[${newTask.role || 'Task'}] ${newTask.title}`,
-        taskId: newTask.id,
-        senderAccount: authSession?.account,
-        senderName: authSession?.name,
-        type: 'TASK_ASSIGNED',
-      });
+        newTask.assigneeAccount.trim().toLowerCase() ===
+        (authSession?.account || '').trim().toLowerCase();
+      if (!isSelf) {
+        sendPushNotification({
+          targetAccount: newTask.assigneeAccount,
+          title: `📋 Bạn có task mới từ @${authSession?.account || 'Leader'}`,
+          body: `[${newTask.role || 'Task'}] ${newTask.title}`,
+          taskId: newTask.id,
+          senderAccount: authSession?.account,
+          senderName: authSession?.name,
+          type: 'TASK_ASSIGNED',
+        });
+      }
     }
   };
 
@@ -1477,19 +1481,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updates.assigneeAccount !== currentTask.assigneeAccount
     ) {
       const isSelf =
-        updates.assigneeAccount.toLowerCase() ===
-        (authSession?.account || '').toLowerCase();
-      sendPushNotification({
-        targetAccount: updates.assigneeAccount,
-        title: isSelf
-          ? `🔄 Bạn vừa cập nhật phân công task: ${currentTask.title}`
-          : `🔄 Bạn được giao task từ @${authSession?.account || 'Leader'}`,
-        body: `[${currentTask.role || 'Task'}] ${currentTask.title}`,
-        taskId: id,
-        senderAccount: authSession?.account,
-        senderName: authSession?.name,
-        type: 'TASK_ASSIGNED',
-      });
+        updates.assigneeAccount.trim().toLowerCase() ===
+        (authSession?.account || '').trim().toLowerCase();
+      if (!isSelf) {
+        sendPushNotification({
+          targetAccount: updates.assigneeAccount,
+          title: `🔄 Bạn được giao task từ @${authSession?.account || 'Leader'}`,
+          body: `[${currentTask.role || 'Task'}] ${currentTask.title}`,
+          taskId: id,
+          senderAccount: authSession?.account,
+          senderName: authSession?.name,
+          type: 'TASK_ASSIGNED',
+        });
+      }
     }
   };
 
@@ -1498,17 +1502,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     markNoteAsRead(taskId, notes);
 
     const task = tasks.find((t) => t.id === taskId);
-    if (task?.assigneeAccount) {
-      const isSelf =
-        task.assigneeAccount.toLowerCase() ===
-        (authSession?.account || '').toLowerCase();
-      const lastLine = notes.split('\n').filter(Boolean).pop() || '';
-      const cleanLine = lastLine.replace(/^\[.*?\]\s*/, '').trim();
+    if (!task) return;
+
+    const currentAccount = (authSession?.account || '').trim().toLowerCase();
+    const assigneeAccount = (task.assigneeAccount || '').trim().toLowerCase();
+
+    // Check creator account (e.g. from task.createdBy "Admin (@admin)" or similar)
+    const creatorMatch = task.createdBy?.match(/@([a-zA-Z0-9._-]+)/);
+    const creatorAccount = creatorMatch ? creatorMatch[1].trim().toLowerCase() : '';
+
+    const lastLine = notes.split('\n').filter(Boolean).pop() || '';
+    const cleanLine = lastLine.replace(/^\[.*?\]\s*/, '').trim();
+
+    // 1. If someone else (e.g. Leader/colleague) wrote a note in the task -> notify Assignee
+    if (task.assigneeAccount && assigneeAccount !== currentAccount) {
       sendPushNotification({
         targetAccount: task.assigneeAccount,
-        title: isSelf
-          ? `💬 Ghi chú mới trong task của bạn`
-          : `💬 @${authSession?.account || 'Thành viên'} vừa thảo luận trong task`,
+        title: `💬 @${authSession?.account || 'Thành viên'} vừa thảo luận trong task`,
+        body: `[${task.title}]: "${cleanLine.slice(0, 80)}"`,
+        taskId: taskId,
+        senderAccount: authSession?.account,
+        senderName: authSession?.name,
+        type: 'TASK_NOTE',
+      });
+    }
+
+    // 2. If the Assignee (or another colleague) wrote a note in a task created by a Leader/Creator -> notify Creator
+    if (creatorAccount && creatorAccount !== currentAccount && creatorAccount !== assigneeAccount) {
+      sendPushNotification({
+        targetAccount: creatorAccount,
+        title: `💬 @${authSession?.account || 'Thành viên'} vừa thảo luận trong task`,
         body: `[${task.title}]: "${cleanLine.slice(0, 80)}"`,
         taskId: taskId,
         senderAccount: authSession?.account,
