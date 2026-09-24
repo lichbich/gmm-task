@@ -112,48 +112,51 @@ export const Header: React.FC<HeaderProps> = ({
         {/* TOP HEADER ROW: LOGO, MAIN 3 MANAGEMENT TABS, USER PROFILE */}
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-4">
           {/* Brand Logo & Title */}
-          <GMMLogo size={36} showText={true} />
+          <GMMLogo size={36} showText={true} subtextClassName="hidden xl:block" />
 
           {/* MAIN 3 TOP MANAGEMENT TABS (DESKTOP) */}
           <div className="hidden md:flex items-center bg-slate-100 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200 dark:border-slate-800 gap-1 shadow-2xs">
             {/* TAB 1: QUẢN LÝ TASK */}
             <button
               onClick={() => setActiveMainSection('tasks')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 lg:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer whitespace-nowrap ${
                 activeMainSection === 'tasks'
                   ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500 font-extrabold'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <CheckSquare className={`w-3.5 h-3.5 ${activeMainSection === 'tasks' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
-              <span>Quản Lý Task</span>
+              <CheckSquare className={`w-3.5 h-3.5 shrink-0 ${activeMainSection === 'tasks' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+              <span className="hidden lg:inline">Quản Lý Task</span>
+              <span className="lg:hidden">Task</span>
             </button>
 
             {/* TAB 2: QUẢN LÝ RESOURCE */}
             <button
               onClick={() => setActiveMainSection('resources')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 lg:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer whitespace-nowrap ${
                 activeMainSection === 'resources'
                   ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500 font-extrabold'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
               }`}
             >
-              <FolderGit2 className={`w-3.5 h-3.5 ${activeMainSection === 'resources' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
-              <span>Quản Lý Resource</span>
+              <FolderGit2 className={`w-3.5 h-3.5 shrink-0 ${activeMainSection === 'resources' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+              <span className="hidden lg:inline">Quản Lý Resource</span>
+              <span className="lg:hidden">Resource</span>
             </button>
 
             {/* TAB 3: QUẢN LÝ USER (ADMIN ONLY) */}
             {currentUser?.role === 'Admin' && (
               <button
                 onClick={() => setActiveMainSection('users')}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 lg:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer whitespace-nowrap ${
                   activeMainSection === 'users'
                     ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 border border-purple-500 font-extrabold'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
                 }`}
               >
-                <ShieldCheck className={`w-3.5 h-3.5 ${activeMainSection === 'users' ? 'text-white' : 'text-purple-400'}`} />
-                <span>Quản Lý User (Admin)</span>
+                <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${activeMainSection === 'users' ? 'text-white' : 'text-purple-400'}`} />
+                <span className="hidden lg:inline">Quản Lý User (Admin)</span>
+                <span className="lg:hidden">User (Admin)</span>
               </button>
             )}
           </div>
@@ -180,7 +183,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center gap-1 sm:gap-2">
                 <button
                   onClick={() => setIsProfileModalOpen(true)}
-                  className="group flex items-center gap-2 sm:gap-3 p-1 sm:p-1.5 sm:pr-3.5 bg-slate-50/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-700 hover:border-indigo-300 rounded-2xl transition-all shadow-xs hover:shadow-md active:scale-[0.98] text-left cursor-pointer"
+                  className="group flex items-center gap-2 sm:gap-3 p-1 sm:p-1.5 sm:pr-3 bg-slate-50/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-700 hover:border-indigo-300 rounded-2xl transition-all shadow-xs hover:shadow-md active:scale-[0.98] text-left cursor-pointer"
                   title="Bấm để xem thông tin chi tiết & Đổi mật khẩu"
                 >
                   {/* User Avatar */}
@@ -197,27 +200,27 @@ export const Header: React.FC<HeaderProps> = ({
                     />
                   </div>
 
-                  {/* Name, Role & Specialization (Hidden on very small screens) */}
-                  <div className="hidden sm:block leading-tight">
+                  {/* Name, Role & Specialization (Shown on lg+ screens) */}
+                  <div className="hidden lg:block leading-tight">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate max-w-[130px]">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate max-w-[90px] xl:max-w-[130px]">
                         {userRecord?.name || currentUser.name}
                       </span>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${theme.badge}`}>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 ${theme.badge}`}>
                         {userRecord?.role || currentUser.role}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="hidden xl:flex items-center gap-1.5 mt-0.5">
                       <span className="text-[10px] text-slate-400 font-mono">@{currentUser.account}</span>
                       <span className="text-[10px] text-slate-300 dark:text-slate-600">•</span>
-                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium truncate max-w-[100px]">
                         {userRecord?.specializations?.join(', ') || 'BA'}
                       </span>
                     </div>
                   </div>
 
-                  <div className="hidden sm:flex items-center text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition pl-1">
+                  <div className="hidden lg:flex items-center text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition pl-0.5">
                     <ChevronDown className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
                   </div>
                 </button>

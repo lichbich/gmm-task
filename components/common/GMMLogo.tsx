@@ -101,7 +101,7 @@ export const GMMLogo: React.FC<GMMLogoProps> = ({
               Saho Task System
             </h1>
           </div>
-          <p className={`hidden sm:block text-xs text-slate-500 dark:text-slate-400 font-medium truncate ${subtextClassName}`}>
+          <p className={`hidden xl:block text-xs text-slate-500 dark:text-slate-400 font-medium truncate ${subtextClassName}`}>
             Hệ thống quản lý task & báo cáo thưởng/phạt 10h CN
           </p>
         </div>

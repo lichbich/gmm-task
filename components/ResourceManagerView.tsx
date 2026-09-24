@@ -334,83 +334,85 @@ export const ResourceManagerView: React.FC = () => {
           </div>
 
           {/* DESKTOP SEARCH & INLINE FILTERS (>= md) */}
-          <div className="hidden md:flex flex-wrap items-center gap-2 flex-1">
-            {/* Search Input */}
-            <div className="relative flex-1 min-w-[220px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Tìm kiếm tài liệu, sơ đồ, Figma, srs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
+          <div className="hidden md:flex flex-wrap items-center justify-between gap-2.5 w-full">
+            <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+              {/* Search Input */}
+              <div className="relative flex-1 min-w-[180px] max-w-sm">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm tài liệu, sơ đồ, Figma..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                    title="Xóa tìm kiếm"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Level Filter Dropdown */}
+              <Dropdown
+                value={selectedLevelFilter}
+                onChange={setSelectedLevelFilter}
+                options={[
+                  { value: 'ALL', label: 'Tất Cả Level' },
+                  ...LEVEL_OPTIONS.map((l) => ({ value: l.id, label: l.id })),
+                ]}
+                size="sm"
+                buttonClassName="py-1.5 px-3 text-xs font-semibold bg-slate-50 border-slate-300 text-slate-700 shrink-0"
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
-                  title="Xóa tìm kiếm"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+
+              {/* Tool Filter Dropdown */}
+              <Dropdown
+                value={selectedToolFilter}
+                onChange={setSelectedToolFilter}
+                options={[
+                  { value: 'ALL', label: 'Tất Cả Công Cụ (Tools)' },
+                  { value: 'Draw.io', label: 'Draw.io Diagram' },
+                  { value: 'Figma', label: 'Figma Design' },
+                  { value: 'Sheet', label: 'Google Sheets' },
+                  { value: 'Doc', label: 'Google Docs' },
+                  { value: 'AI Studio', label: 'Google AI Studio' },
+                ]}
+                size="sm"
+                buttonClassName="py-1.5 px-3 text-xs font-semibold bg-slate-50 border-slate-300 text-slate-700 shrink-0"
+              />
             </div>
 
-            {/* Level Filter Dropdown */}
-            <Dropdown
-              value={selectedLevelFilter}
-              onChange={setSelectedLevelFilter}
-              options={[
-                { value: 'ALL', label: 'Tất Cả Level' },
-                ...LEVEL_OPTIONS.map((l) => ({ value: l.id, label: l.id })),
-              ]}
-              size="sm"
-              buttonClassName="py-1.5 px-3 text-xs font-semibold bg-slate-50 border-slate-300 text-slate-700"
-            />
-
-            {/* Tool Filter Dropdown */}
-            <Dropdown
-              value={selectedToolFilter}
-              onChange={setSelectedToolFilter}
-              options={[
-                { value: 'ALL', label: 'Tất Cả Công Cụ (Tools)' },
-                { value: 'Draw.io', label: 'Draw.io Diagram' },
-                { value: 'Figma', label: 'Figma Design' },
-                { value: 'Sheet', label: 'Google Sheets' },
-                { value: 'Doc', label: 'Google Docs' },
-                { value: 'AI Studio', label: 'Google AI Studio' },
-              ]}
-              size="sm"
-              buttonClassName="py-1.5 px-3 text-xs font-semibold bg-slate-50 border-slate-300 text-slate-700"
-            />
-          </div>
-
-          {/* Desktop View Switcher: Card Grid vs Table View */}
-          <div className="hidden md:flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 gap-1">
-            <button
-              onClick={() => setViewMode('GRID')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 ${
-                viewMode === 'GRID'
-                  ? 'bg-white text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title="Xem dưới dạng Card phân cấp"
-            >
-              <LayoutGrid className="w-3.5 h-3.5 text-indigo-600" />
-              Dạng Card
-            </button>
-            <button
-              onClick={() => setViewMode('TABLE')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 ${
-                viewMode === 'TABLE'
-                  ? 'bg-white text-indigo-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-              title="Xem dưới dạng Bảng như Google Sheet gốc"
-            >
-              <TableIcon className="w-3.5 h-3.5 text-indigo-600" />
-              Dạng Bảng Excel
-            </button>
+            {/* Desktop View Switcher: Card Grid vs Table View */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 gap-1 ml-auto">
+              <button
+                onClick={() => setViewMode('GRID')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 whitespace-nowrap ${
+                  viewMode === 'GRID'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Xem dưới dạng Card phân cấp"
+              >
+                <LayoutGrid className="w-3.5 h-3.5 text-indigo-600" />
+                Dạng Card
+              </button>
+              <button
+                onClick={() => setViewMode('TABLE')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 whitespace-nowrap ${
+                  viewMode === 'TABLE'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Xem dưới dạng Bảng như Google Sheet gốc"
+              >
+                <TableIcon className="w-3.5 h-3.5 text-indigo-600" />
+                Dạng Bảng Excel
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -646,18 +648,18 @@ export const ResourceManagerView: React.FC = () => {
 
           {/* Desktop Table (>= md) */}
           <div className="hidden md:block overflow-x-auto custom-scrollbar relative">
-            <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+            <table className="w-full text-left text-xs border-collapse min-w-[960px]">
               <thead>
                 <tr className="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-wider border-b border-slate-200 text-[10px]">
-                  <th className="py-3 px-3 w-12 text-center">STT</th>
-                  <th className="py-3 px-3 w-40">LEVEL</th>
-                  <th className="py-3 px-3 w-44">NAME (HẠNG MỤC)</th>
-                  <th className="py-3 px-4 w-52">CONTENT (NỘI DUNG)</th>
-                  <th className="py-3 px-3 text-center w-32">TOOL</th>
-                  <th className="py-3 px-4 w-52">LINK (BREAK DOWN) - ƯU TIÊN</th>
-                  <th className="py-3 px-4 w-52">LINK (ORIGIN) - ĐẶC BIỆT</th>
+                  <th className="py-3 px-3 w-10 text-center whitespace-nowrap">STT</th>
+                  <th className="py-3 px-3 w-36 whitespace-nowrap">LEVEL</th>
+                  <th className="py-3 px-3 min-w-[150px]">NAME (HẠNG MỤC)</th>
+                  <th className="py-3 px-4 min-w-[180px]">CONTENT (NỘI DUNG)</th>
+                  <th className="py-3 px-3 text-center w-28 whitespace-nowrap">TOOL</th>
+                  <th className="py-3 px-4 min-w-[180px]">LINK (BREAK DOWN) - ƯU TIÊN</th>
+                  <th className="py-3 px-4 min-w-[180px]">LINK (ORIGIN) - ĐẶC BIỆT</th>
                   {canManage && (
-                    <th className="py-3 px-4 text-center w-28 sticky right-0 bg-slate-100 border-l border-slate-200 z-10 shadow-sm text-slate-800">
+                    <th className="py-3 px-4 text-center w-24 sticky right-0 bg-slate-100 border-l border-slate-200 z-10 shadow-sm text-slate-800 whitespace-nowrap">
                       THAO TÁC
                     </th>
                   )}
