@@ -614,7 +614,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (snapshot) => {
         const data = snapshot.val();
         if (data) {
-          const list = Object.values(data) as AppNotification[];
+          const rawList = Object.values(data) as AppNotification[];
+          // Deduplicate notifications (by id, and ignore exact duplicate titles within 3 seconds)
+          const seenIds = new Set<string>();
+          const seenSignatures = new Set<string>();
+          const list: AppNotification[] = [];
+
+          rawList.forEach((n) => {
+            if (!n || !n.id) return;
+            if (seenIds.has(n.id)) return;
+            seenIds.add(n.id);
+
+            // Deduplicate same event created within 3s window (e.g. from previous tests)
+            const timeWindow = Math.floor(new Date(n.createdAt).getTime() / 3000);
+            const signature = `${n.targetAccount}_${n.title}_${n.body}_${n.taskId || ''}_${timeWindow}`;
+            if (seenSignatures.has(signature)) return;
+            seenSignatures.add(signature);
+
+            list.push(n);
+          });
+
           list.sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           );

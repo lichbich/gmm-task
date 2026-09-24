@@ -80,6 +80,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const {
+      id: providedId,
       targetAccount,
       targetAccounts,
       title,
@@ -90,6 +91,7 @@ export async function POST(req: Request) {
       senderName,
       type = 'TASK_ASSIGNED',
       dbRootNode = 'gmm-task',
+      skipDbWrite = false,
     } = body;
 
     const accounts: string[] = [];
@@ -108,7 +110,7 @@ export async function POST(req: Request) {
     const messaging = adminApp ? getMessaging(adminApp) : null;
 
     for (const acc of accounts) {
-      const notificationId = `notif-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      const notificationId = providedId || `notif-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
       const notifPayload = {
         id: notificationId,
         targetAccount: acc,
@@ -123,10 +125,12 @@ export async function POST(req: Request) {
         url: url,
       };
 
-      // 1. Direct REST Realtime DB write to recipient's notification inbox
-      await writeRtdbRest(`${dbRootNode}/notifications/${acc}/${notificationId}`, notifPayload);
-      if (acc.toLowerCase() !== acc) {
-        await writeRtdbRest(`${dbRootNode}/notifications/${acc.toLowerCase()}/${notificationId}`, notifPayload);
+      // 1. Direct REST Realtime DB write to recipient's notification inbox (only if not already saved by client)
+      if (!skipDbWrite) {
+        await writeRtdbRest(`${dbRootNode}/notifications/${acc}/${notificationId}`, notifPayload);
+        if (acc.toLowerCase() !== acc) {
+          await writeRtdbRest(`${dbRootNode}/notifications/${acc.toLowerCase()}/${notificationId}`, notifPayload);
+        }
       }
 
       // 2. Fetch registered FCM device tokens for background push

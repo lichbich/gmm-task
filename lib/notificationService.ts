@@ -213,6 +213,7 @@ export async function sendPushNotification({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: notificationId,
         targetAccount,
         title,
         body,
@@ -222,6 +223,7 @@ export async function sendPushNotification({
         senderName,
         type,
         dbRootNode: DB_ROOT_NODE,
+        skipDbWrite: true,
       }),
     }).catch((err) => {
       console.warn('[NotificationService] Background push fetch failed:', err);
