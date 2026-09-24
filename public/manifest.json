@@ -1,0 +1,22 @@
+{
+  "name": "Saho Task System",
+  "short_name": "Saho Task",
+  "description": "Hệ thống quản lý task & báo cáo tiến độ thời gian thực",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/badge.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    }
+  ]
+}

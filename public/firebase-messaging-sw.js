@@ -1,6 +1,9 @@
 // Service Worker for Android & Desktop Web Push & Local Notifications
 // Guarantees 100% reliability without crashing even if external CDNs are unavailable
 
+const LOGO_ICON = '/logo.png?v=2';
+const BADGE_ICON = '/badge.png?v=2';
+
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -15,8 +18,8 @@ self.addEventListener('message', (event) => {
     const { title, options } = event.data;
     const finalOptions = {
       ...options,
-      icon: options?.icon || '/logo.png',
-      badge: options?.badge || '/badge.png',
+      icon: options?.icon || LOGO_ICON,
+      badge: options?.badge || BADGE_ICON,
       vibrate: options?.vibrate || [200, 100, 200],
       requireInteraction: true,
     };
@@ -50,8 +53,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: body,
-    icon: '/logo.png',
-    badge: '/badge.png',
+    icon: LOGO_ICON,
+    badge: BADGE_ICON,
     tag: tag,
     renotify: true,
     requireInteraction: true,
@@ -124,8 +127,8 @@ try {
 
     return self.registration.showNotification(title, {
       body,
-      icon: '/logo.png',
-      badge: '/badge.png',
+      icon: LOGO_ICON,
+      badge: BADGE_ICON,
       tag: taskId ? `task-${taskId}` : `saho-${Date.now()}`,
       renotify: true,
       requireInteraction: true,

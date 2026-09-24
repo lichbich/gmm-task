@@ -73,8 +73,8 @@ export async function showLocalBrowserNotification(
   const notifTag = tag || `saho-${Date.now()}`;
   const options: any = {
     body,
-    icon: '/logo.png',
-    badge: '/badge.png',
+    icon: '/logo.png?v=2',
+    badge: '/badge.png?v=2',
     tag: notifTag,
     renotify: true,
     requireInteraction: true,

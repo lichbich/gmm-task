@@ -162,8 +162,8 @@ export async function POST(req: Request) {
         notification: {
           title: title || 'Saho Task',
           body: content || '',
-          icon: '/logo.png',
-          badge: '/badge.png',
+          icon: '/logo.png?v=2',
+          badge: '/badge.png?v=2',
         },
         data: {
           title: title || 'Saho Task',
@@ -247,8 +247,8 @@ export async function POST(req: Request) {
                 notification: {
                   title: title || 'Saho Task',
                   body: content || '',
-                  icon: '/logo.png',
-                  badge: '/badge.png',
+                  icon: '/logo.png?v=2',
+                  badge: '/badge.png?v=2',
                   vibrate: [200, 100, 200],
                   tag: taskId ? `task-${taskId}` : `notif-${Date.now()}`,
                   renotify: true,
