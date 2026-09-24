@@ -130,13 +130,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
     handleClose();
   };
 
-  const handleTestNotification = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!currentUser) return;
-    const { sendTestNotification } = await import('../lib/notificationService');
-    await sendTestNotification(currentUser.account);
-  };
-
   return (
     <div className="relative">
       {/* Bell Trigger Button */}
@@ -236,14 +229,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={handleTestNotification}
-                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-700 transition active:scale-95 cursor-pointer"
-                  title="Bấm để kiểm tra thử âm thanh chuông và thông báo nổi"
-                >
-                  🔔 Thử ngay
-                </button>
-
                 <button
                   onClick={requestNotificationPermission}
                   className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition shrink-0 cursor-pointer ${
