@@ -1643,6 +1643,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       requestedWeekNumber: targetW,
       updatedAt: new Date().toISOString(),
     });
+
+    // Notify Leaders and Admins about the assignment request
+    const task = tasks.find((t) => t.id === taskId);
+    const leadersAndAdmins = users.filter(
+      (u) =>
+        (u.role === 'Leader' || u.role === 'Admin') &&
+        u.account.toLowerCase() !== memberAccount.toLowerCase()
+    );
+    leadersAndAdmins.forEach((leader) => {
+      sendPushNotification({
+        targetAccount: leader.account,
+        title: `✋ @${memberAccount} vừa gửi yêu cầu nhận task`,
+        body: `Task: ${task?.title || 'Đầu việc mới'} (Tuần ${targetW})`,
+        taskId: taskId,
+        senderAccount: memberAccount,
+        senderName: authSession?.name || memberAccount,
+        type: 'TASK_ASSIGNED',
+      });
+    });
   };
 
   // Approve task assignment request (For Leader / Admin)

@@ -181,6 +181,33 @@ export async function sendPushNotification({
 }) {
   if (!targetAccount) return;
 
+  const notificationId = `notif-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  const notifPayload: AppNotification = {
+    id: notificationId,
+    targetAccount,
+    senderAccount: senderAccount || 'System',
+    senderName: senderName || senderAccount || 'System',
+    title: title || 'Thông báo mới',
+    body: body || '',
+    taskId: taskId || undefined,
+    type: type || 'TASK_ASSIGNED',
+    isRead: false,
+    createdAt: new Date().toISOString(),
+    url: url || '/',
+  };
+
+  // 1. Direct Realtime DB write via Client SDK (Instant sub-100ms sync to all active sessions)
+  try {
+    set(ref(database, `${DB_ROOT_NODE}/notifications/${targetAccount}/${notificationId}`), notifPayload).catch(console.error);
+
+    if (targetAccount.toLowerCase() !== targetAccount) {
+      set(ref(database, `${DB_ROOT_NODE}/notifications/${targetAccount.toLowerCase()}/${notificationId}`), notifPayload).catch(console.error);
+    }
+  } catch (err) {
+    console.debug('Error writing direct notification:', err);
+  }
+
+  // 2. Call server-side API to send FCM push to background/closed devices
   try {
     fetch('/api/send-push', {
       method: 'POST',
