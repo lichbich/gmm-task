@@ -581,3 +581,20 @@ html.dark .bg-slate-100 {
   min-height: 0;
 }
 
+/* ==========================================================================
+   DESKTOP NOTIFICATION POPOVER ANCHORING
+   ========================================================================== */
+@media (min-width: 640px) {
+  .notification-popover-desktop {
+    position: fixed !important;
+    top: var(--popover-top, 64px) !important;
+    left: var(--popover-left, auto) !important;
+    right: auto !important;
+  }
+}
+
+.notification-arrow {
+  left: var(--arrow-left, 50%);
+  transform: translateX(-50%) rotate(45deg);
+}
+
