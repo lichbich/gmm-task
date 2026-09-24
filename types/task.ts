@@ -154,9 +154,10 @@ export interface Milestone {
   goal?: string;
   description?: string;
   timeline?: string;
+  deadline?: string;
+  targetDate?: string;
   moduleCode?: string;
   deliverable?: string;
-  targetDate?: string;
   order: number;
   status: 'Planned' | 'In Progress' | 'Completed';
   role?: Specialization | 'ALL';

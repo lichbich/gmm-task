@@ -25,8 +25,101 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  Calendar,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+
+// Helper to parse deliverable lines/bullets/commas into individual clean items
+const parseDeliverables = (raw?: string): string[] => {
+  if (!raw || !raw.trim()) return [];
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const items: string[] = [];
+
+  for (const line of lines) {
+    const cleanLine = line.replace(/^[-•*–—\d+.)\]]+\s*/, '').trim();
+    if (!cleanLine) continue;
+
+    if (lines.length === 1 && (cleanLine.includes(',') || cleanLine.includes(';'))) {
+      const subItems = cleanLine
+        .split(/[,;]/)
+        .map((s) => s.trim().replace(/^[-•*–—\d+.)\]]+\s*/, ''))
+        .filter(Boolean);
+      items.push(...subItems);
+    } else {
+      items.push(cleanLine);
+    }
+  }
+
+  return items;
+};
+
+// Helper to format deadline and compute relative status (overdue, urgent, upcoming)
+const formatDeadlineBadge = (deadlineStr?: string) => {
+  if (!deadlineStr || !deadlineStr.trim()) return null;
+  const raw = deadlineStr.trim();
+  const parts = raw.split('-');
+  let d: Date;
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    d = new Date(y, m, day);
+  } else {
+    d = new Date(raw);
+  }
+
+  if (isNaN(d.getTime())) {
+    return {
+      text: `Hạn chót: ${raw}`,
+      isOverdue: false,
+      isUrgent: false,
+      daysDiff: null,
+    };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(d);
+  target.setHours(0, 0, 0, 0);
+
+  const diffMs = target.getTime() - today.getTime();
+  const daysDiff = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  const day = String(target.getDate()).padStart(2, '0');
+  const month = String(target.getMonth() + 1).padStart(2, '0');
+  const year = target.getFullYear();
+  const dateFormatted = `${day}/${month}/${year}`;
+
+  if (daysDiff < 0) {
+    return {
+      text: `Hạn chót: ${dateFormatted} (Quá hạn ${Math.abs(daysDiff)} ngày)`,
+      isOverdue: true,
+      isUrgent: false,
+      daysDiff,
+    };
+  } else if (daysDiff === 0) {
+    return {
+      text: `Hạn chót: ${dateFormatted} (Hôm nay)`,
+      isOverdue: false,
+      isUrgent: true,
+      daysDiff: 0,
+    };
+  } else if (daysDiff <= 3) {
+    return {
+      text: `Hạn chót: ${dateFormatted} (Còn ${daysDiff} ngày)`,
+      isOverdue: false,
+      isUrgent: true,
+      daysDiff,
+    };
+  } else {
+    return {
+      text: `Hạn chót: ${dateFormatted} (Còn ${daysDiff} ngày)`,
+      isOverdue: false,
+      isUrgent: false,
+      daysDiff,
+    };
+  }
+};
 
 export const MilestonesView: React.FC = () => {
   const {
@@ -99,6 +192,7 @@ export const MilestonesView: React.FC = () => {
   const [msTitle, setMsTitle] = useState('');
   const [msGoal, setMsGoal] = useState('');
   const [msTimeline, setMsTimeline] = useState('');
+  const [msDeadline, setMsDeadline] = useState('');
   const [msModuleCode, setMsModuleCode] = useState('');
   const [msDeliverable, setMsDeliverable] = useState('');
 
@@ -117,8 +211,22 @@ export const MilestonesView: React.FC = () => {
   const [editMsTitle, setEditMsTitle] = useState('');
   const [editMsGoal, setEditMsGoal] = useState('');
   const [editMsTimeline, setEditMsTimeline] = useState('');
+  const [editMsDeadline, setEditMsDeadline] = useState('');
   const [editMsModuleCode, setEditMsModuleCode] = useState('');
   const [editMsDeliverable, setEditMsDeliverable] = useState('');
+
+  // Expandable deliverables state (Set of milestone IDs whose deliverable items are fully expanded)
+  const [expandedDeliverables, setExpandedDeliverables] = useState<Set<string>>(new Set());
+
+  const toggleExpandDeliverable = (msId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedDeliverables((prev) => {
+      const next = new Set(prev);
+      if (next.has(msId)) next.delete(msId);
+      else next.add(msId);
+      return next;
+    });
+  };
 
   // Collapse / Expand milestones state
   const [collapsedMilestones, setCollapsedMilestones] = useState<Set<string>>(new Set());
@@ -324,6 +432,8 @@ export const MilestonesView: React.FC = () => {
       goal: msGoal,
       description: msGoal,
       timeline: msTimeline,
+      deadline: msDeadline,
+      targetDate: msDeadline,
       moduleCode: msModuleCode,
       deliverable: msDeliverable,
       status: 'In Progress',
@@ -332,6 +442,7 @@ export const MilestonesView: React.FC = () => {
     setMsTitle('');
     setMsGoal('');
     setMsTimeline('');
+    setMsDeadline('');
     setMsModuleCode('');
     setMsDeliverable('');
     setIsAddMsOpen(false);
@@ -342,6 +453,7 @@ export const MilestonesView: React.FC = () => {
     setEditMsTitle(ms.title);
     setEditMsGoal(ms.goal || ms.description || '');
     setEditMsTimeline(ms.timeline || '');
+    setEditMsDeadline(ms.deadline || ms.targetDate || '');
     setEditMsModuleCode(ms.moduleCode || '');
     setEditMsDeliverable(ms.deliverable || '');
   };
@@ -352,6 +464,8 @@ export const MilestonesView: React.FC = () => {
       goal: editMsGoal,
       description: editMsGoal,
       timeline: editMsTimeline,
+      deadline: editMsDeadline,
+      targetDate: editMsDeadline,
       moduleCode: editMsModuleCode,
       deliverable: editMsDeliverable,
     });
@@ -1004,7 +1118,7 @@ export const MilestonesView: React.FC = () => {
             <Layers className="w-4 h-4 text-amber-500" />
             Tạo Cột Mốc Milestone Mới (Đồng Bộ Theo Sheet)
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">Milestone (Tên cột mốc *):</label>
               <input
@@ -1027,6 +1141,18 @@ export const MilestonesView: React.FC = () => {
               />
             </div>
             <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                <span>Deadline (Hạn chót xong):</span>
+              </label>
+              <input
+                type="date"
+                value={msDeadline}
+                onChange={(e) => setMsDeadline(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+              />
+            </div>
+            <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">Module Code (Mã module):</label>
               <input
                 type="text"
@@ -1042,7 +1168,7 @@ export const MilestonesView: React.FC = () => {
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">Goal (Mục tiêu của Milestone):</label>
               <textarea
-                rows={2}
+                rows={3}
                 placeholder="VD: Xây dựng nền tảng dùng chung cho toàn bộ ERP..."
                 value={msGoal}
                 onChange={(e) => setMsGoal(e.target.value)}
@@ -1050,10 +1176,13 @@ export const MilestonesView: React.FC = () => {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Deliverable (Sản phẩm bàn giao):</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-700">Deliverable (Sản phẩm bàn giao):</label>
+                <span className="text-[10px] text-slate-400 font-normal">Xuống dòng cho mỗi sản phẩm</span>
+              </div>
               <textarea
-                rows={2}
-                placeholder="VD: Login, Phân quyền, Upload file, Gửi email..."
+                rows={3}
+                placeholder={`VD:\nLogin\nPhân quyền\nUpload file\nGửi email...`}
                 value={msDeliverable}
                 onChange={(e) => setMsDeliverable(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 resize-none"
@@ -1138,6 +1267,11 @@ export const MilestonesView: React.FC = () => {
               const isEditing = editingMilestoneId === ms.id;
               const isCollapsed = collapsedMilestones.has(ms.id);
               const isDoneCollapsed = !expandedDoneSections.has(ms.id);
+              const deliverableItems = parseDeliverables(ms.deliverable);
+              const isDeliverableExpanded = expandedDeliverables.has(ms.id);
+              const visibleDeliverables = isDeliverableExpanded ? deliverableItems : deliverableItems.slice(0, 3);
+              const hasMoreDeliverables = deliverableItems.length > 3;
+              const deadlineInfo = formatDeadlineBadge(ms.deadline || ms.targetDate);
 
               return (
                 <div
@@ -1171,42 +1305,72 @@ export const MilestonesView: React.FC = () => {
                       </div>
                       <div className="flex-1 min-w-0" onClick={(e) => isEditing && e.stopPropagation()}>
                         {isEditing ? (
-                          <div className="space-y-2 bg-white p-3 rounded-xl border border-amber-300 shadow-2xs">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                              <input
-                                value={editMsTitle}
-                                onChange={(e) => setEditMsTitle(e.target.value)}
-                                placeholder="Milestone (Tên cột mốc)..."
-                                className="bg-slate-50 border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-amber-400"
-                              />
-                              <input
-                                value={editMsTimeline}
-                                onChange={(e) => setEditMsTimeline(e.target.value)}
-                                placeholder="Timeline (VD: (2-3 tuần))..."
-                                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400"
-                              />
-                              <input
-                                value={editMsModuleCode}
-                                onChange={(e) => setEditMsModuleCode(e.target.value)}
-                                placeholder="Module Code (VD: HR_001, SC_002)..."
-                                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-600 focus:outline-none focus:border-amber-400"
-                              />
+                          <div className="space-y-2.5 bg-white p-3.5 rounded-xl border border-amber-300 shadow-2xs">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                              <div>
+                                <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">Tên cột mốc:</label>
+                                <input
+                                  value={editMsTitle}
+                                  onChange={(e) => setEditMsTitle(e.target.value)}
+                                  placeholder="Milestone (Tên cột mốc)..."
+                                  className="w-full bg-slate-50 border border-amber-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-amber-400"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">Thời gian dự kiến:</label>
+                                <input
+                                  value={editMsTimeline}
+                                  onChange={(e) => setEditMsTimeline(e.target.value)}
+                                  placeholder="Timeline (VD: (2-3 tuần))..."
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-semibold text-slate-600 block mb-0.5 flex items-center gap-1">
+                                  <Calendar className="w-3 h-3 text-amber-600" />
+                                  <span>Hạn chót xong:</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={editMsDeadline}
+                                  onChange={(e) => setEditMsDeadline(e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-amber-400"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">Mã module:</label>
+                                <input
+                                  value={editMsModuleCode}
+                                  onChange={(e) => setEditMsModuleCode(e.target.value)}
+                                  placeholder="Module Code (VD: HR_001)..."
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-600 focus:outline-none focus:border-amber-400"
+                                />
+                              </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                              <textarea
-                                rows={2}
-                                value={editMsGoal}
-                                onChange={(e) => setEditMsGoal(e.target.value)}
-                                placeholder="Goal (Mục tiêu của Milestone)..."
-                                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400 resize-none"
-                              />
-                              <textarea
-                                rows={2}
-                                value={editMsDeliverable}
-                                onChange={(e) => setEditMsDeliverable(e.target.value)}
-                                placeholder="Deliverable (Sản phẩm bàn giao)..."
-                                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400 resize-none"
-                              />
+                              <div>
+                                <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">Mục tiêu (Goal):</label>
+                                <textarea
+                                  rows={2}
+                                  value={editMsGoal}
+                                  onChange={(e) => setEditMsGoal(e.target.value)}
+                                  placeholder="Goal (Mục tiêu của Milestone)..."
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400 resize-none"
+                                />
+                              </div>
+                              <div>
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <label className="text-[11px] font-semibold text-slate-600">Sản phẩm bàn giao (Deliverable):</label>
+                                  <span className="text-[10px] text-slate-400 font-normal">Xuống dòng mỗi mục</span>
+                                </div>
+                                <textarea
+                                  rows={2}
+                                  value={editMsDeliverable}
+                                  onChange={(e) => setEditMsDeliverable(e.target.value)}
+                                  placeholder="Deliverable (Sản phẩm bàn giao - mỗi dòng 1 mục)..."
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400 resize-none"
+                                />
+                              </div>
                             </div>
                             <div className="flex justify-end gap-2 pt-1">
                               <button
@@ -1224,14 +1388,29 @@ export const MilestonesView: React.FC = () => {
                             </div>
                           </div>
                         ) : (
-                          <div className="space-y-1">
+                          <div className="space-y-1.5 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h3 className="text-base font-bold text-slate-800">
+                              <h3 className="text-base font-bold text-slate-800 tracking-tight">
                                 {displayTitle}
                               </h3>
-                              {(ms.timeline || ms.targetDate) && (
-                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-800 border border-amber-300 font-bold">
-                                  ⏱️ {ms.timeline || ms.targetDate}
+                              {ms.timeline && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100/90 text-amber-800 border border-amber-300 font-bold flex items-center gap-1">
+                                  ⏱️ {ms.timeline}
+                                </span>
+                              )}
+                              {deadlineInfo && (
+                                <span
+                                  className={`text-[11px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border shadow-2xs ${
+                                    deadlineInfo.isOverdue
+                                      ? 'bg-rose-50 text-rose-700 border-rose-300'
+                                      : deadlineInfo.isUrgent
+                                      ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                      : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                  }`}
+                                  title={deadlineInfo.isOverdue ? 'Milestone đã quá hạn' : 'Hạn chót hoàn thành'}
+                                >
+                                  <Calendar className="w-3 h-3 shrink-0" />
+                                  <span>{deadlineInfo.text}</span>
                                 </span>
                               )}
                               {ms.moduleCode && (
@@ -1256,12 +1435,36 @@ export const MilestonesView: React.FC = () => {
                               </p>
                             )}
 
-                            {/* Deliverable */}
-                            {ms.deliverable && (
+                            {/* Deliverables parsed as clean chips */}
+                            {deliverableItems.length > 0 ? (
+                              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-900 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md shrink-0">
+                                  🚀 Deliverable:
+                                </span>
+                                {visibleDeliverables.map((item, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center text-[11px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200/90 px-2 py-0.5 rounded-md shadow-2xs"
+                                  >
+                                    {item}
+                                  </span>
+                                ))}
+                                {hasMoreDeliverables && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => toggleExpandDeliverable(ms.id, e)}
+                                    className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-white hover:bg-emerald-50 border border-emerald-300 px-1.5 py-0.5 rounded-md transition active:scale-95 shadow-2xs cursor-pointer"
+                                    title={isDeliverableExpanded ? 'Thu gọn bớt danh sách sản phẩm bàn giao' : 'Xem toàn bộ sản phẩm bàn giao'}
+                                  >
+                                    {isDeliverableExpanded ? 'Thu gọn' : `+${deliverableItems.length - 3} mục khác`}
+                                  </button>
+                                )}
+                              </div>
+                            ) : ms.deliverable ? (
                               <p className="text-xs text-emerald-800 font-medium bg-emerald-50/70 px-2.5 py-1 rounded-lg border border-emerald-200/80 inline-block">
                                 🚀 <strong className="text-emerald-900">Deliverable:</strong> {ms.deliverable}
                               </p>
-                            )}
+                            ) : null}
                           </div>
                         )}
                       </div>
