@@ -524,22 +524,22 @@ export const MilestonesView: React.FC = () => {
   const handleOpenBreakTaskForMilestone = (milestoneId: string, milestoneRole?: Specialization) => {
     setEditingTask(null);
     setTargetMilestoneId(milestoneId);
-    const initRole =
-      currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
-        ? currentUser.specializations?.[0]
-        : milestoneRole || (adminSelectedRole as Specialization) || 'BA';
-    setModalInitialRole(initRole as Specialization);
+    const userRole = getInitialRoleForUser();
+    const effectiveRole =
+      (adminSelectedRole as Specialization) ||
+      (userRole as Specialization) ||
+      (milestoneRole && milestoneRole !== 'ALL' ? milestoneRole : undefined) ||
+      'BA';
+    setModalInitialRole(effectiveRole as Specialization);
     setIsTaskModalOpen(true);
   };
 
   const handleOpenCreateAdhocTask = () => {
     setEditingTask(null);
     setTargetMilestoneId('');
-    const initRole =
-      currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
-        ? currentUser.specializations?.[0]
-        : (adminSelectedRole as Specialization) || 'BA';
-    setModalInitialRole(initRole as Specialization);
+    const userRole = getInitialRoleForUser();
+    const effectiveRole = (adminSelectedRole as Specialization) || (userRole as Specialization) || 'BA';
+    setModalInitialRole(effectiveRole as Specialization);
     setIsTaskModalOpen(true);
   };
 

@@ -32,18 +32,51 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const allRoleCodes = roles.map((r) => r.code);
 
+  // Helper to match a role string against roles list
+  const matchRoleCode = (spec: string): string => {
+    const direct = roles.find((r) => r.code.toLowerCase() === spec.toLowerCase());
+    if (direct) return direct.code;
+    const fuzzy = roles.find(
+      (r) => r.code.toLowerCase().includes(spec.toLowerCase()) || spec.toLowerCase().includes(r.code.toLowerCase())
+    );
+    if (fuzzy) return fuzzy.code;
+    return spec;
+  };
+
   // Compute allowed roles for the current user: Admin can define any role, Leader only within specializations
   const allowedRoles: Specialization[] =
     currentUser?.role === 'Admin'
       ? allRoleCodes
       : currentUser?.specializations && currentUser.specializations.length > 0
-      ? currentUser.specializations
+      ? Array.from(new Set(currentUser.specializations.map(matchRoleCode)))
       : [allRoleCodes[0] || 'BA'];
 
+  // Match target role against allowedRoles (direct, case-insensitive, fuzzy)
+  const matchRoleInAllowed = (target?: string): Specialization | undefined => {
+    if (!target) return undefined;
+    const direct = allowedRoles.find((r) => r === target);
+    if (direct) return direct;
+    const ci = allowedRoles.find((r) => r.toLowerCase() === target.toLowerCase());
+    if (ci) return ci;
+    const fuzzy = allowedRoles.find(
+      (r) => r.toLowerCase().includes(target.toLowerCase()) || target.toLowerCase().includes(r.toLowerCase())
+    );
+    if (fuzzy) return fuzzy;
+    return undefined;
+  };
+
+  // Default role resolution: match initialRole -> match user specialization -> first allowed role
+  const getUserDefaultRole = (): Specialization => {
+    const userSpecs = currentUser?.specializations || [];
+    for (const spec of userSpecs) {
+      const match = matchRoleInAllowed(spec);
+      if (match) return match;
+    }
+    return allowedRoles[0] || 'BA';
+  };
+
   const defaultRole: Specialization =
-    initialRole && allowedRoles.includes(initialRole)
-      ? initialRole
-      : allowedRoles[0] || 'BA';
+    matchRoleInAllowed(initialRole) || getUserDefaultRole();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
