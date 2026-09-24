@@ -2,6 +2,14 @@
 importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js');
 
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 const firebaseConfig = {
   projectId: "docugen-676bf",
   messagingSenderId: "631881183468",

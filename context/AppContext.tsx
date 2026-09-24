@@ -598,11 +598,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // Check if browser notification permission is already granted
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setIsPushEnabled(Notification.permission === 'granted');
-      if (Notification.permission === 'granted') {
-        registerDeviceForPushNotifications(authSession.account).catch(console.error);
+    // Check if browser notification permission is already granted and ensure Service Worker is active
+    if (typeof window !== 'undefined') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker
+          .register('/firebase-messaging-sw.js', { scope: '/' })
+          .catch(console.error);
+      }
+      if ('Notification' in window) {
+        setIsPushEnabled(Notification.permission === 'granted');
+        if (Notification.permission === 'granted') {
+          registerDeviceForPushNotifications(authSession.account).catch(console.error);
+        }
       }
     }
 

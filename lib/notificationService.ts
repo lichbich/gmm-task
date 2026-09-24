@@ -47,9 +47,9 @@ export function playNotificationChime() {
 }
 
 /**
- * Show a native OS/browser notification banner
+ * Show a native OS/browser notification banner (supports Mobile Android/iOS via ServiceWorker)
  */
-export function showLocalBrowserNotification(
+export async function showLocalBrowserNotification(
   title: string,
   body: string,
   url: string = '/',
@@ -58,14 +58,40 @@ export function showLocalBrowserNotification(
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
 
-  try {
-    const notif = new Notification(title, {
-      body,
-      icon: '/logo.svg',
-      badge: '/favicon.svg',
-      tag: tag || `saho-${Date.now()}`,
-    });
+  const notifTag = tag || `saho-${Date.now()}`;
+  const options: any = {
+    body,
+    icon: '/logo.svg',
+    badge: '/favicon.svg',
+    tag: notifTag,
+    renotify: true,
+    requireInteraction: true,
+    vibrate: [200, 100, 200],
+    data: {
+      url: url || '/',
+    },
+  };
 
+  // 1. Mandatory on Android Chrome & Mobile browsers: Use ServiceWorkerRegistration.showNotification
+  if ('serviceWorker' in navigator) {
+    try {
+      let reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+        await navigator.serviceWorker.ready;
+      }
+      if (reg && 'showNotification' in reg) {
+        await reg.showNotification(title, options);
+        return;
+      }
+    } catch (swErr) {
+      console.debug('[NotificationService] ServiceWorker showNotification error, falling back:', swErr);
+    }
+  }
+
+  // 2. Fallback for Desktop browsers
+  try {
+    const notif = new Notification(title, options);
     notif.onclick = () => {
       window.focus();
       if (url && url !== '/') {
@@ -74,7 +100,7 @@ export function showLocalBrowserNotification(
       notif.close();
     };
   } catch (e) {
-    console.debug('Error showing local notification:', e);
+    console.debug('[NotificationService] Desktop Notification error:', e);
   }
 }
 
