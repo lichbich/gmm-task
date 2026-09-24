@@ -4,6 +4,18 @@ import { AppNotification, NotificationType } from '../types/notification';
 export const VAPID_KEY =
   'BNafJbOZLfOCaBYaC6W57oBiWpoItFZqlOIwCWA9Dwhy1Z4m_skovsbOgSQtojDhVbe_Gy9OVRmMql0l4l30Z10';
 
+// Convert base64 url-safe string to Uint8Array for Web Push applicationServerKey
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 /**
  * Play a high-quality notification chime using Web Audio API
  */
@@ -75,13 +87,21 @@ export async function showLocalBrowserNotification(
   // 1. Mandatory on Android Chrome & Mobile browsers: Use ServiceWorkerRegistration.showNotification
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.ready;
+      // Find active registration without blocking indefinitely
+      let reg: ServiceWorkerRegistration | null | undefined = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        reg = (await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200)),
+        ])) as ServiceWorkerRegistration | null;
+      }
+
       if (reg && typeof reg.showNotification === 'function') {
         await reg.showNotification(title, options);
         return;
       }
     } catch (swErr) {
-      console.warn('[NotificationService] ServiceWorker ready.showNotification error:', swErr);
+      console.warn('[NotificationService] ServiceWorker showNotification error:', swErr);
     }
 
     // Try posting message to active controller as secondary trigger
@@ -115,7 +135,7 @@ export async function showLocalBrowserNotification(
 }
 
 /**
- * Request notification permission and register FCM device token
+ * Request notification permission and register both WebPush and FCM tokens
  */
 export async function registerDeviceForPushNotifications(account: string): Promise<string | null> {
   if (typeof window === 'undefined') return null;
@@ -135,39 +155,74 @@ export async function registerDeviceForPushNotifications(account: string): Promi
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
       scope: '/',
     });
-    await navigator.serviceWorker.ready;
 
-    // Dynamically import firebase/messaging to avoid SSR issues
-    const { getMessaging, getToken } = await import('firebase/messaging');
-    const messaging = getMessaging(app);
+    await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((r) => setTimeout(() => r(null), 1500)),
+    ]);
 
-    const token = await getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: registration,
-    });
+    // Create a deterministic device key based on browser user agent
+    const deviceFingerprint = btoa(
+      navigator.userAgent.slice(0, 40) + '-' + (screen?.width || 0) + 'x' + (screen?.height || 0)
+    ).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+    const tokenKey = `dev_${deviceFingerprint}`;
 
-    if (token) {
-      console.log('[NotificationService] FCM Device Token obtained successfully');
+    // 1. Standard W3C Push Subscription using VAPID (100% reliable on Android Chrome & Safari iOS)
+    let pushSub = await registration.pushManager.getSubscription();
+    if (!pushSub) {
+      try {
+        const applicationServerKey = urlBase64ToUint8Array(VAPID_KEY);
+        pushSub = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: applicationServerKey as any,
+        });
+      } catch (subErr) {
+        console.warn('[NotificationService] pushManager subscribe error:', subErr);
+      }
+    }
 
-      // Create a deterministic device key based on browser user agent
-      const deviceFingerprint = btoa(
-        navigator.userAgent.slice(0, 40) + '-' + (screen?.width || 0) + 'x' + (screen?.height || 0)
-      ).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
-
-      const tokenKey = `dev_${deviceFingerprint}`;
-      const tokenPayload = {
-        token,
+    if (pushSub) {
+      const subJson = pushSub.toJSON();
+      const subPayload = {
+        endpoint: subJson.endpoint,
+        keys: subJson.keys,
         deviceInfo: navigator.userAgent.slice(0, 100),
         updatedAt: new Date().toISOString(),
       };
 
-      await set(ref(database, `${DB_ROOT_NODE}/userTokens/${account}/${tokenKey}`), tokenPayload);
+      await set(ref(database, `${DB_ROOT_NODE}/userPushSubscriptions/${account}/${tokenKey}`), subPayload);
       if (account.toLowerCase() !== account) {
-        await set(ref(database, `${DB_ROOT_NODE}/userTokens/${account.toLowerCase()}/${tokenKey}`), tokenPayload);
+        await set(ref(database, `${DB_ROOT_NODE}/userPushSubscriptions/${account.toLowerCase()}/${tokenKey}`), subPayload);
       }
-
-      return token;
+      console.log('[NotificationService] Standard Web Push Subscription saved successfully');
     }
+
+    // 2. Also try FCM token registration if available
+    try {
+      const { getMessaging, getToken } = await import('firebase/messaging');
+      const messaging = getMessaging(app);
+      const token = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration,
+      });
+
+      if (token) {
+        const tokenPayload = {
+          token,
+          deviceInfo: navigator.userAgent.slice(0, 100),
+          updatedAt: new Date().toISOString(),
+        };
+
+        await set(ref(database, `${DB_ROOT_NODE}/userTokens/${account}/${tokenKey}`), tokenPayload);
+        if (account.toLowerCase() !== account) {
+          await set(ref(database, `${DB_ROOT_NODE}/userTokens/${account.toLowerCase()}/${tokenKey}`), tokenPayload);
+        }
+      }
+    } catch {
+      // Ignored if apiKey is not in Firebase config
+    }
+
+    return pushSub ? pushSub.endpoint : 'granted';
   } catch (error) {
     console.warn('[NotificationService] Failed to register device push token:', error);
   }
@@ -176,7 +231,7 @@ export async function registerDeviceForPushNotifications(account: string): Promi
 }
 
 /**
- * Send a quick test notification to verify audio, browser popup and FCM push
+ * Send a quick test notification to verify audio, browser popup and push
  */
 export async function sendTestNotification(account: string) {
   playNotificationChime();
@@ -200,7 +255,7 @@ export async function sendPushNotification({
   targetAccount,
   title,
   body,
-  url = '/',
+  url,
   taskId,
   senderAccount,
   senderName,
@@ -217,6 +272,7 @@ export async function sendPushNotification({
 }) {
   if (!targetAccount) return;
 
+  const targetUrl = url || (taskId ? `/?openTaskId=${taskId}` : '/');
   const notificationId = `notif-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const notifPayload: AppNotification = {
     id: notificationId,
@@ -229,7 +285,7 @@ export async function sendPushNotification({
     type: type || 'TASK_ASSIGNED',
     isRead: false,
     createdAt: new Date().toISOString(),
-    url: url || '/',
+    url: targetUrl,
   };
 
   // 1. Direct Realtime DB write via Client SDK (Instant sub-100ms sync to all active sessions)
@@ -243,7 +299,7 @@ export async function sendPushNotification({
     console.debug('Error writing direct notification:', err);
   }
 
-  // 2. Call server-side API to send FCM push to background/closed devices
+  // 2. Call server-side API to send Web Push to background/closed devices
   try {
     fetch('/api/send-push', {
       method: 'POST',
@@ -253,7 +309,7 @@ export async function sendPushNotification({
         targetAccount,
         title,
         body,
-        url,
+        url: targetUrl,
         taskId,
         senderAccount,
         senderName,

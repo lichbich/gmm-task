@@ -655,8 +655,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               showLocalBrowserNotification(
                 latest.title,
                 latest.body,
-                latest.url,
-                latest.id
+                latest.url || (latest.taskId ? `/?openTaskId=${latest.taskId}` : '/'),
+                latest.taskId ? `task-${latest.taskId}` : latest.id
               );
             }
           }

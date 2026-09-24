@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AppProvider, useApp } from '../context/AppContext';
 import { Header, MainSectionType } from '../components/Header';
 import { WorkScheduleTable } from '../components/WorkScheduleTable';
@@ -17,7 +17,7 @@ import { LoginModal } from '../components/LoginModal';
 import { Task } from '../types/task';
 
 function MainApp() {
-  const { authSession, tasks } = useApp();
+  const { authSession, tasks, weeklyArchives } = useApp();
   const [activeMainSection, setActiveMainSection] = useState<MainSectionType>('tasks');
   const [activeTaskTab, setActiveTaskTab] = useState<string>('schedule');
 
@@ -34,20 +34,70 @@ function MainApp() {
     setIsTaskModalOpen(true);
   };
 
-  const handleSelectTaskFromNotification = (taskId: string, notif?: any) => {
-    let target = taskId ? tasks.find((t) => t.id === taskId) : undefined;
-    if (!target && notif) {
-      // Fallback search by title if taskId was missing or from older notification format
-      target = tasks.find(
-        (t) =>
-          (notif.body && t.title && notif.body.toLowerCase().includes(t.title.toLowerCase())) ||
-          (notif.title && t.title && notif.title.toLowerCase().includes(t.title.toLowerCase()))
-      );
+  const handleSelectTaskFromNotification = useCallback(
+    (taskId: string, notif?: any) => {
+      const cleanId = taskId ? String(taskId).trim() : '';
+
+      // 1. Search in current tasks
+      let target = cleanId
+        ? tasks.find((t) => String(t.id).trim() === cleanId)
+        : undefined;
+
+      // 2. Search in weeklyArchives if not found in current tasks
+      if (!target && cleanId && weeklyArchives) {
+        for (const archive of weeklyArchives) {
+          if (Array.isArray(archive.tasksSnapshot)) {
+            const found = archive.tasksSnapshot.find((t: Task) => String(t.id).trim() === cleanId);
+            if (found) {
+              target = found;
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Fallback search by title
+      if (!target && notif) {
+        const searchTitle = (notif.title || notif.body || '').toLowerCase();
+        target = tasks.find((t) => t.title && searchTitle.includes(t.title.toLowerCase()));
+      }
+
+      if (target) {
+        setSelectedTaskForDetail(target);
+      }
+    },
+    [tasks, weeklyArchives]
+  );
+
+  // Auto-handle notification click target from URL or ServiceWorker message
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // 1. Check URL parameters (e.g. from system notification tap on Android/Desktop)
+    const params = new URLSearchParams(window.location.search);
+    const openTaskId = params.get('openTaskId') || params.get('taskId');
+    if (openTaskId && tasks.length > 0) {
+      handleSelectTaskFromNotification(openTaskId);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('openTaskId');
+      url.searchParams.delete('taskId');
+      window.history.replaceState({}, '', url.pathname + (url.search || ''));
     }
-    if (target) {
-      setSelectedTaskForDetail(target);
+
+    // 2. Listen to message from Service Worker (when a notification is clicked while tab is already open)
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'OPEN_TASK_NOTIFICATION' && event.data.taskId) {
+        handleSelectTaskFromNotification(event.data.taskId);
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+      return () => {
+        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+      };
     }
-  };
+  }, [tasks, weeklyArchives, handleSelectTaskFromNotification]);
 
   return (
     <div suppressHydrationWarning className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col antialiased selection:bg-indigo-200 selection:text-indigo-900 relative">

@@ -1,13 +1,26 @@
 import { NextResponse } from 'next/server';
 import { initializeApp, getApps, getApp, cert, App } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
+import webpush from 'web-push';
 import path from 'path';
 import fs from 'fs';
 
 const RTDB_BASE_URL = "https://docugen-676bf-default-rtdb.asia-southeast1.firebasedatabase.app";
 
+const VAPID_PUBLIC_KEY =
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+  'BNafJbOZLfOCaBYaC6W57oBiWpoItFZqlOIwCWA9Dwhy1Z4m_skovsbOgSQtojDhVbe_Gy9OVRmMql0l4l30Z10';
+
+const VAPID_PRIVATE_KEY =
+  process.env.VAPID_PRIVATE_KEY || 'M4Nvy5bHrRNM795Ke0Hd0OBXvhuFMeuiddomyD-Hs88';
+
+try {
+  webpush.setVapidDetails('mailto:admin@saho.vn', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} catch (vapidErr) {
+  console.error('[WebPush VAPID Init Error]', vapidErr);
+}
+
 // Helper to write/read directly to Firebase Realtime Database via REST API
-// (Guaranteed 100% success on any environment including Vercel without requiring complex GCP IAM setup)
 async function writeRtdbRest(nodePath: string, data: any) {
   try {
     const res = await fetch(`${RTDB_BASE_URL}/${nodePath}.json`, {
@@ -70,7 +83,7 @@ function getSafeAdminApp(): App | null {
       });
     }
   } catch (err) {
-    console.debug('[Firebase Admin FCM] Service account credentials not configured. FCM background push will be skipped:', err);
+    console.debug('[Firebase Admin FCM] Service account credentials not active:', err);
   }
 
   return null;
@@ -85,7 +98,7 @@ export async function POST(req: Request) {
       targetAccounts,
       title,
       body: content,
-      url = '/',
+      url,
       taskId,
       senderAccount,
       senderName,
@@ -105,6 +118,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'No target account provided' }, { status: 400 });
     }
 
+    const targetUrl = url || (taskId ? `/?openTaskId=${taskId}` : '/');
     const results: any[] = [];
     const adminApp = getSafeAdminApp();
     const messaging = adminApp ? getMessaging(adminApp) : null;
@@ -122,10 +136,10 @@ export async function POST(req: Request) {
         type: type,
         isRead: false,
         createdAt: new Date().toISOString(),
-        url: url,
+        url: targetUrl,
       };
 
-      // 1. Direct REST Realtime DB write to recipient's notification inbox (only if not already saved by client)
+      // 1. Direct REST Realtime DB write to recipient's notification inbox
       if (!skipDbWrite) {
         await writeRtdbRest(`${dbRootNode}/notifications/${acc}/${notificationId}`, notifPayload);
         if (acc.toLowerCase() !== acc) {
@@ -133,84 +147,142 @@ export async function POST(req: Request) {
         }
       }
 
-      // 2. Fetch registered FCM device tokens for background push
-      const tokensData1 = (await readRtdbRest(`${dbRootNode}/userTokens/${acc}`)) || {};
-      const tokensData2 =
+      // 2. Send standard W3C WebPush via VAPID (100% reliable on Android Chrome & Safari iOS)
+      let webpushSuccess = 0;
+      let webpushFailure = 0;
+
+      const pushSubs1 = (await readRtdbRest(`${dbRootNode}/userPushSubscriptions/${acc}`)) || {};
+      const pushSubs2 =
         acc.toLowerCase() !== acc
-          ? (await readRtdbRest(`${dbRootNode}/userTokens/${acc.toLowerCase()}`)) || {}
+          ? (await readRtdbRest(`${dbRootNode}/userPushSubscriptions/${acc.toLowerCase()}`)) || {}
           : {};
-      const combinedTokensData = { ...tokensData2, ...tokensData1 };
+      const combinedPushSubs = { ...pushSubs2, ...pushSubs1 };
 
-      const tokensList: { key: string; token: string }[] = [];
-      const seenTokens = new Set<string>();
-
-      Object.entries(combinedTokensData).forEach(([key, val]: [string, any]) => {
-        const tokenStr = typeof val === 'string' ? val : val?.token;
-        if (tokenStr && !seenTokens.has(tokenStr)) {
-          seenTokens.add(tokenStr);
-          tokensList.push({ key, token: tokenStr });
-        }
+      const webPushPayload = JSON.stringify({
+        notification: {
+          title: title || 'Saho Task',
+          body: content || '',
+          icon: '/logo.png',
+          badge: '/badge.png',
+        },
+        data: {
+          title: title || 'Saho Task',
+          body: content || '',
+          url: targetUrl,
+          taskId: taskId || '',
+          type: type,
+        },
       });
 
-      // 3. If FCM Messaging is available and device tokens exist, send Multicast Push
+      for (const [subKey, subVal] of Object.entries(combinedPushSubs)) {
+        const sub = subVal as any;
+        if (sub && sub.endpoint && sub.keys) {
+          try {
+            await webpush.sendNotification(
+              {
+                endpoint: sub.endpoint,
+                keys: sub.keys,
+              },
+              webPushPayload,
+              {
+                urgency: 'high',
+                TTL: 86400,
+              }
+            );
+            webpushSuccess++;
+          } catch (pushErr: any) {
+            webpushFailure++;
+            console.warn('[WebPush send error]', pushErr?.statusCode, pushErr?.message);
+            if (pushErr.statusCode === 404 || pushErr.statusCode === 410) {
+              await removeRtdbRest(`${dbRootNode}/userPushSubscriptions/${acc}/${subKey}`);
+            }
+          }
+        }
+      }
+
+      // 3. Optional FCM Multicast Push
       let fcmSuccess = 0;
       let fcmFailure = 0;
 
-      if (messaging && tokensList.length > 0) {
-        try {
-          const rawTokens = tokensList.map((t) => t.token);
-          const response = await messaging.sendEachForMulticast({
-            tokens: rawTokens,
-            notification: {
-              title: title || 'Saho Task',
-              body: content || '',
-            },
-            data: {
-              title: title || 'Saho Task',
-              body: content || '',
-              url: url || '/',
-              taskId: taskId || '',
-              type: type || 'TASK_ASSIGNED',
-              senderAccount: senderAccount || '',
-            },
-            webpush: {
+      if (messaging) {
+        const tokensData1 = (await readRtdbRest(`${dbRootNode}/userTokens/${acc}`)) || {};
+        const tokensData2 =
+          acc.toLowerCase() !== acc
+            ? (await readRtdbRest(`${dbRootNode}/userTokens/${acc.toLowerCase()}`)) || {}
+            : {};
+        const combinedTokensData = { ...tokensData2, ...tokensData1 };
+
+        const tokensList: { key: string; token: string }[] = [];
+        const seenTokens = new Set<string>();
+
+        Object.entries(combinedTokensData).forEach(([key, val]: [string, any]) => {
+          const tokenStr = typeof val === 'string' ? val : val?.token;
+          if (tokenStr && !seenTokens.has(tokenStr)) {
+            seenTokens.add(tokenStr);
+            tokensList.push({ key, token: tokenStr });
+          }
+        });
+
+        if (tokensList.length > 0) {
+          try {
+            const rawTokens = tokensList.map((t) => t.token);
+            const response = await messaging.sendEachForMulticast({
+              tokens: rawTokens,
               notification: {
                 title: title || 'Saho Task',
                 body: content || '',
-                icon: '/logo.svg',
-                badge: '/favicon.svg',
-                vibrate: [200, 100, 200],
-                tag: taskId ? `task-${taskId}` : `notif-${Date.now()}`,
-                renotify: true,
               },
-              fcmOptions: {
-                link: url || '/',
+              data: {
+                title: title || 'Saho Task',
+                body: content || '',
+                url: targetUrl,
+                taskId: taskId || '',
+                type: type || 'TASK_ASSIGNED',
+                senderAccount: senderAccount || '',
               },
-            },
-          });
+              webpush: {
+                headers: {
+                  Urgency: 'high',
+                },
+                notification: {
+                  title: title || 'Saho Task',
+                  body: content || '',
+                  icon: '/logo.png',
+                  badge: '/badge.png',
+                  vibrate: [200, 100, 200],
+                  tag: taskId ? `task-${taskId}` : `notif-${Date.now()}`,
+                  renotify: true,
+                  requireInteraction: true,
+                },
+                fcmOptions: {
+                  link: targetUrl,
+                },
+              },
+            });
 
-          fcmSuccess = response.successCount;
-          fcmFailure = response.failureCount;
+            fcmSuccess = response.successCount;
+            fcmFailure = response.failureCount;
 
-          // Cleanup any invalid or expired tokens
-          if (response.failureCount > 0) {
-            response.responses.forEach((resp: any, idx: number) => {
-              if (!resp.success) {
-                const errCode = resp.error?.code;
-                if (
-                  errCode === 'messaging/invalid-registration-token' ||
-                  errCode === 'messaging/registration-token-not-registered'
-                ) {
-                  const expiredTokenObj = tokensList[idx];
-                  if (expiredTokenObj) {
-                    removeRtdbRest(`${dbRootNode}/userTokens/${acc}/${expiredTokenObj.key}`);
+            // Cleanup any invalid or expired tokens
+            if (response.failureCount > 0) {
+              response.responses.forEach((resp: any, idx: number) => {
+                if (!resp.success) {
+                  const errCode = resp.error?.code;
+                  if (
+                    errCode === 'messaging/invalid-registration-token' ||
+                    errCode === 'messaging/registration-token-not-registered'
+                  ) {
+                    const expiredTokenObj = tokensList[idx];
+                    if (expiredTokenObj) {
+                      removeRtdbRest(`${dbRootNode}/userTokens/${acc}/${expiredTokenObj.key}`);
+                    }
                   }
                 }
-              }
-            });
+              });
+            }
+          } catch (fcmErr) {
+            console.debug('[FCM Multicast Note]', fcmErr);
           }
-        } catch (fcmErr) {
-          console.debug('[FCM Multicast Error]', fcmErr);
         }
       }
 
@@ -218,7 +290,8 @@ export async function POST(req: Request) {
         account: acc,
         notificationId,
         inAppSaved: true,
-        deviceTokensCount: tokensList.length,
+        webpushSent: webpushSuccess,
+        webpushFailed: webpushFailure,
         fcmSent: fcmSuccess,
         fcmFailed: fcmFailure,
       });

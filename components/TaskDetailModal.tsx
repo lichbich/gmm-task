@@ -32,7 +32,6 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
-  Copy,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { parseNoteLine, formatNewNoteLine, formatEditedNoteLine } from '../lib/notesHelper';
@@ -80,7 +79,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     canReportTask,
     weeklyAwards,
     deleteTask,
-    duplicateTask,
     currentUser,
     users,
     confirmDialog,
@@ -340,7 +338,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[110] flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
+      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[120] flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
@@ -906,20 +904,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 Xóa Task
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (task) {
-                    duplicateTask(task.id);
-                    handleClose();
-                  }
-                }}
-                className="px-3.5 py-2 text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                title="Nhân bản tạo 1 task mới từ đầu việc này"
-              >
-                <Copy className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                Nhân Bản Task
               </button>
             </div>
           ) : (
