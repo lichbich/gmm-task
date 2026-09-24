@@ -1,11 +1,18 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization, isTaskUnworked } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
-import { database, ref, onValue, set, DB_ROOT_NODE } from '../lib/firebase';
+import { database, ref, onValue, set, update, remove, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
 import { ConfirmModal, ConfirmDialogOptions } from '../components/ConfirmModal';
+import { AppNotification } from '../types/notification';
+import {
+  registerDeviceForPushNotifications,
+  sendPushNotification,
+  playNotificationChime,
+  showLocalBrowserNotification,
+} from '../lib/notificationService';
 
 export function getCurrentISOWeekAndYear(d: Date = new Date()): { week: number; year: number } {
   const date = new Date(d.valueOf());
@@ -232,6 +239,14 @@ interface AppContextType {
   approveTaskAssignment: (taskId: string) => void;
   rejectTaskAssignment: (taskId: string) => void;
 
+  // Notification Center
+  notifications: AppNotification[];
+  unreadNotificationsCount: number;
+  markNotificationAsRead: (id: string) => void;
+  markAllNotificationsAsRead: () => void;
+  requestNotificationPermission: () => Promise<void>;
+  isPushEnabled: boolean;
+
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
@@ -298,6 +313,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authSession, setAuthSession] = useState<User | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [confirmState, setConfirmState] = useState<ConfirmDialogOptions | null>(null);
+
+  // Notification Center State
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [isPushEnabled, setIsPushEnabled] = useState(false);
 
   // Theme Management (Default: light, persisted in localStorage)
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
@@ -571,6 +590,109 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
   }, [users, authSession, isFirebaseConnected]);
+
+  // Real-time Notifications Listener & FCM Auto-Registration
+  useEffect(() => {
+    if (!isFirebaseConnected || !authSession) {
+      setNotifications([]);
+      return;
+    }
+
+    // Check if browser notification permission is already granted
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setIsPushEnabled(Notification.permission === 'granted');
+      if (Notification.permission === 'granted') {
+        registerDeviceForPushNotifications(authSession.account).catch(console.error);
+      }
+    }
+
+    const notifRef = ref(database, `${DB_ROOT_NODE}/notifications/${authSession.account}`);
+    let isInitial = true;
+
+    const unsubscribe = onValue(
+      notifRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const list = Object.values(data) as AppNotification[];
+          list.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+
+          // If a new unread notification arrives in real-time
+          if (!isInitial && list.length > 0) {
+            const latest = list[0];
+            const isRecent =
+              new Date(latest.createdAt).getTime() > Date.now() - 15000;
+            if (!latest.isRead && isRecent) {
+              playNotificationChime();
+              showLocalBrowserNotification(
+                latest.title,
+                latest.body,
+                latest.url,
+                latest.id
+              );
+            }
+          }
+
+          setNotifications(list);
+        } else {
+          setNotifications([]);
+        }
+        isInitial = false;
+      },
+      (err) => {
+        console.warn('Notifications listener warning:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [isFirebaseConnected, authSession]);
+
+  const unreadNotificationsCount = useMemo(() => {
+    return notifications.filter((n) => !n.isRead).length;
+  }, [notifications]);
+
+  const markNotificationAsRead = async (notifId: string) => {
+    if (!authSession) return;
+    const updated = notifications.map((n) =>
+      n.id === notifId ? { ...n, isRead: true } : n
+    );
+    setNotifications(updated);
+    if (isFirebaseConnected) {
+      update(
+        ref(database, `${DB_ROOT_NODE}/notifications/${authSession.account}/${notifId}`),
+        { isRead: true }
+      ).catch(console.error);
+    }
+  };
+
+  const markAllNotificationsAsRead = async () => {
+    if (!authSession) return;
+    const updated = notifications.map((n) => ({ ...n, isRead: true }));
+    setNotifications(updated);
+    if (isFirebaseConnected) {
+      const updatesObj: Record<string, any> = {};
+      notifications.forEach((n) => {
+        if (!n.isRead) {
+          updatesObj[
+            `${DB_ROOT_NODE}/notifications/${authSession.account}/${n.id}/isRead`
+          ] = true;
+        }
+      });
+      if (Object.keys(updatesObj).length > 0) {
+        update(ref(database), updatesObj).catch(console.error);
+      }
+    }
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!authSession) return;
+    const token = await registerDeviceForPushNotifications(authSession.account);
+    if (token) {
+      setIsPushEnabled(true);
+    }
+  };
 
   const seedFirebaseMockData = async () => {
     try {
@@ -1202,6 +1324,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = [...tasks, newTask];
     setTasks(updated);
     syncTasksToFirebase(updated);
+
+    // Push notification to assigned member
+    if (newTask.assigneeAccount) {
+      const isSelf =
+        newTask.assigneeAccount.toLowerCase() ===
+        (authSession?.account || '').toLowerCase();
+      sendPushNotification({
+        targetAccount: newTask.assigneeAccount,
+        title: isSelf
+          ? `📋 Bạn vừa tạo task mới: ${newTask.title}`
+          : `📋 Bạn có task mới từ @${authSession?.account || 'Leader'}`,
+        body: `[${newTask.role || 'Task'}] ${newTask.title}`,
+        taskId: newTask.id,
+        senderAccount: authSession?.account,
+        senderName: authSession?.name,
+        type: 'TASK_ASSIGNED',
+      });
+    }
   };
 
   const updateTask = (id: string, updates: Partial<Task>, options?: { skipLog?: boolean }) => {
@@ -1287,11 +1427,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     setTasks(updated);
     syncTasksToFirebase(updated);
+
+    // Push notification if assignee was changed or assigned
+    const currentTask = tasks.find((t) => t.id === id);
+    if (
+      updates.assigneeAccount &&
+      currentTask &&
+      updates.assigneeAccount !== currentTask.assigneeAccount
+    ) {
+      const isSelf =
+        updates.assigneeAccount.toLowerCase() ===
+        (authSession?.account || '').toLowerCase();
+      sendPushNotification({
+        targetAccount: updates.assigneeAccount,
+        title: isSelf
+          ? `🔄 Bạn vừa cập nhật phân công task: ${currentTask.title}`
+          : `🔄 Bạn được giao task từ @${authSession?.account || 'Leader'}`,
+        body: `[${currentTask.role || 'Task'}] ${currentTask.title}`,
+        taskId: id,
+        senderAccount: authSession?.account,
+        senderName: authSession?.name,
+        type: 'TASK_ASSIGNED',
+      });
+    }
   };
 
   const updateTaskNotes = (taskId: string, notes: string) => {
     updateTask(taskId, { notes });
     markNoteAsRead(taskId, notes);
+
+    const task = tasks.find((t) => t.id === taskId);
+    if (task?.assigneeAccount) {
+      const isSelf =
+        task.assigneeAccount.toLowerCase() ===
+        (authSession?.account || '').toLowerCase();
+      const lastLine = notes.split('\n').filter(Boolean).pop() || '';
+      const cleanLine = lastLine.replace(/^\[.*?\]\s*/, '').trim();
+      sendPushNotification({
+        targetAccount: task.assigneeAccount,
+        title: isSelf
+          ? `💬 Ghi chú mới trong task của bạn`
+          : `💬 @${authSession?.account || 'Thành viên'} vừa thảo luận trong task`,
+        body: `[${task.title}]: "${cleanLine.slice(0, 80)}"`,
+        taskId: taskId,
+        senderAccount: authSession?.account,
+        senderName: authSession?.name,
+        type: 'TASK_NOTE',
+      });
+    }
   };
 
   const duplicateTask = (taskId: string): Task | undefined => {
@@ -1472,6 +1655,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       weekNumber: task.requestedWeekNumber || selectedWeek + 1,
       updatedAt: new Date().toISOString(),
     });
+
+    if (task.assignmentRequestedBy) {
+      sendPushNotification({
+        targetAccount: task.assignmentRequestedBy,
+        title: `✅ Yêu cầu nhận task đã được duyệt!`,
+        body: `Leader đã duyệt cho bạn nhận task: ${task.title}`,
+        taskId: taskId,
+        senderAccount: authSession?.account,
+        senderName: authSession?.name,
+        type: 'TASK_APPROVED',
+      });
+    }
   };
 
   // Reject task assignment request (For Leader / Admin)
@@ -1779,6 +1974,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         requestTaskAssignment,
         approveTaskAssignment,
         rejectTaskAssignment,
+
+        notifications,
+        unreadNotificationsCount,
+        markNotificationAsRead,
+        markAllNotificationsAsRead,
+        requestNotificationPermission,
+        isPushEnabled,
 
         theme,
         toggleTheme,

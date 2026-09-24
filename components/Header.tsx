@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserProfileModal } from './UserProfileModal';
 import { GMMLogo } from './common/GMMLogo';
+import { NotificationBell } from './NotificationBell';
 
 import {
   LayoutGrid,
@@ -28,6 +29,7 @@ interface HeaderProps {
   setActiveMainSection: (section: MainSectionType) => void;
   activeTaskTab: string;
   setActiveTaskTab: (tab: string) => void;
+  onSelectTask?: (taskId: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,6 +37,7 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveMainSection,
   activeTaskTab,
   setActiveTaskTab,
+  onSelectTask,
 }) => {
   const { currentUser, users, logout, theme: currentTheme, toggleTheme } = useApp();
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -157,6 +160,9 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right Controls & Auth Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Notification Bell with Unread Popover & Push Toggle */}
+            <NotificationBell onSelectTask={onSelectTask} />
+
             {/* Theme Toggle Button (Sleek Circular Icon Button) */}
             <button
               onClick={toggleTheme}

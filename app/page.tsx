@@ -12,15 +12,17 @@ import { NextWeekDefineView } from '../components/NextWeekDefineView';
 import { UserManagementView } from '../components/UserManagementView';
 import { ResourceManagerView } from '../components/ResourceManagerView';
 import { TaskModal } from '../components/TaskModal';
+import { TaskDetailModal } from '../components/TaskDetailModal';
 import { LoginModal } from '../components/LoginModal';
 import { Task } from '../types/task';
 
 function MainApp() {
-  const { authSession } = useApp();
+  const { authSession, tasks } = useApp();
   const [activeMainSection, setActiveMainSection] = useState<MainSectionType>('tasks');
   const [activeTaskTab, setActiveTaskTab] = useState<string>('schedule');
 
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
+  const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState<boolean>(false);
   const [taskModalDefaultWeek, setTaskModalDefaultWeek] = useState<number | undefined>(undefined);
   const [taskModalDefaultAssignee, setTaskModalDefaultAssignee] = useState<string | undefined>(undefined);
@@ -30,6 +32,13 @@ function MainApp() {
     setTaskModalDefaultWeek(defaultWeek);
     setTaskModalDefaultAssignee(defaultAssignee);
     setIsTaskModalOpen(true);
+  };
+
+  const handleSelectTaskFromNotification = (taskId: string) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (target) {
+      setSelectedTaskForDetail(target);
+    }
   };
 
   return (
@@ -44,6 +53,7 @@ function MainApp() {
             setActiveMainSection={setActiveMainSection}
             activeTaskTab={activeTaskTab}
             setActiveTaskTab={setActiveTaskTab}
+            onSelectTask={handleSelectTaskFromNotification}
           />
 
           <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-20 sm:pb-24 md:pb-8">
@@ -94,6 +104,13 @@ function MainApp() {
               setTaskModalDefaultWeek(undefined);
               setTaskModalDefaultAssignee(undefined);
             }}
+          />
+
+          {/* Task Detail Modal (from notifications) */}
+          <TaskDetailModal
+            task={selectedTaskForDetail}
+            isOpen={!!selectedTaskForDetail}
+            onClose={() => setSelectedTaskForDetail(null)}
           />
         </>
       )}
