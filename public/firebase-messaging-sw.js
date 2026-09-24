@@ -10,6 +10,14 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// Support direct message dispatch from page context
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data;
+    event.waitUntil(self.registration.showNotification(title, options));
+  }
+});
+
 const firebaseConfig = {
   projectId: "docugen-676bf",
   messagingSenderId: "631881183468",
@@ -24,14 +32,14 @@ messaging.onBackgroundMessage((payload) => {
   
   const title = payload.notification?.title || payload.data?.title || 'Saho Task - Thông báo mới';
   const body = payload.notification?.body || payload.data?.body || 'Bạn có thông báo mới từ hệ thống task.';
-  const icon = payload.notification?.icon || payload.data?.icon || '/logo.svg';
+  const icon = payload.notification?.icon || payload.data?.icon || '/logo.png';
   const url = payload.data?.url || payload.fcmOptions?.link || '/';
   const tag = payload.data?.tag || payload.data?.taskId || 'saho-task-notification';
 
   const notificationOptions = {
     body: body,
     icon: icon,
-    badge: '/favicon.svg',
+    badge: '/badge.png',
     tag: tag,
     renotify: true,
     data: {

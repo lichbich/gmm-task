@@ -55,14 +55,14 @@ export async function showLocalBrowserNotification(
   url: string = '/',
   tag?: string
 ) {
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
+  if (typeof window === 'undefined') return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
   const notifTag = tag || `saho-${Date.now()}`;
   const options: any = {
     body,
-    icon: '/logo.svg',
-    badge: '/favicon.svg',
+    icon: '/logo.png',
+    badge: '/badge.png',
     tag: notifTag,
     renotify: true,
     requireInteraction: true,
@@ -75,21 +75,31 @@ export async function showLocalBrowserNotification(
   // 1. Mandatory on Android Chrome & Mobile browsers: Use ServiceWorkerRegistration.showNotification
   if ('serviceWorker' in navigator) {
     try {
-      let reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) {
-        reg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
-        await navigator.serviceWorker.ready;
-      }
-      if (reg && 'showNotification' in reg) {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && typeof reg.showNotification === 'function') {
         await reg.showNotification(title, options);
         return;
       }
     } catch (swErr) {
-      console.debug('[NotificationService] ServiceWorker showNotification error, falling back:', swErr);
+      console.warn('[NotificationService] ServiceWorker ready.showNotification error:', swErr);
+    }
+
+    // Try posting message to active controller as secondary trigger
+    try {
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'SHOW_NOTIFICATION',
+          title,
+          options,
+        });
+        return;
+      }
+    } catch (msgErr) {
+      console.warn('[NotificationService] ServiceWorker controller postMessage error:', msgErr);
     }
   }
 
-  // 2. Fallback for Desktop browsers
+  // 2. Fallback for Desktop browsers without ServiceWorker
   try {
     const notif = new Notification(title, options);
     notif.onclick = () => {
@@ -170,7 +180,7 @@ export async function registerDeviceForPushNotifications(account: string): Promi
  */
 export async function sendTestNotification(account: string) {
   playNotificationChime();
-  showLocalBrowserNotification(
+  await showLocalBrowserNotification(
     '🔔 Kiểm tra thông báo thành công!',
     'Hệ thống Saho Task đã kết nối thông báo đa thiết bị cho tài khoản của bạn.'
   );

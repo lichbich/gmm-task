@@ -34,8 +34,16 @@ function MainApp() {
     setIsTaskModalOpen(true);
   };
 
-  const handleSelectTaskFromNotification = (taskId: string) => {
-    const target = tasks.find((t) => t.id === taskId);
+  const handleSelectTaskFromNotification = (taskId: string, notif?: any) => {
+    let target = taskId ? tasks.find((t) => t.id === taskId) : undefined;
+    if (!target && notif) {
+      // Fallback search by title if taskId was missing or from older notification format
+      target = tasks.find(
+        (t) =>
+          (notif.body && t.title && notif.body.toLowerCase().includes(t.title.toLowerCase())) ||
+          (notif.title && t.title && notif.title.toLowerCase().includes(t.title.toLowerCase()))
+      );
+    }
     if (target) {
       setSelectedTaskForDetail(target);
     }

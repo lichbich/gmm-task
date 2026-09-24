@@ -29,7 +29,7 @@ interface HeaderProps {
   setActiveMainSection: (section: MainSectionType) => void;
   activeTaskTab: string;
   setActiveTaskTab: (tab: string) => void;
-  onSelectTask?: (taskId: string) => void;
+  onSelectTask?: (taskId: string, notification?: any) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({

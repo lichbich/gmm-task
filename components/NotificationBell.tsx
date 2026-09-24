@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 interface NotificationBellProps {
-  onSelectTask?: (taskId: string) => void;
+  onSelectTask?: (taskId: string, notification?: AppNotification) => void;
 }
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask }) => {
@@ -124,10 +124,10 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
     if (!n.isRead) {
       markNotificationAsRead(n.id);
     }
-    if (n.taskId && onSelectTask) {
-      onSelectTask(n.taskId);
-      handleClose();
+    if (onSelectTask) {
+      onSelectTask(n.taskId || '', n);
     }
+    handleClose();
   };
 
   const handleTestNotification = async (e: React.MouseEvent) => {

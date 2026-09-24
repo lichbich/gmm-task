@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import { Task, TaskActivityLog } from '../types/task';
 import {
@@ -96,6 +97,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [notesText, setNotesText] = useState('');
   const [quickComment, setQuickComment] = useState('');
   const [isSaved, setIsSaved] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
 
@@ -330,11 +336,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
+      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[110] flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
@@ -947,4 +953,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       </div>
     </div>
   );
+
+  return mounted ? createPortal(modalContent, document.body) : modalContent;
 };
