@@ -1098,7 +1098,7 @@ export const MilestonesView: React.FC = () => {
                 }}
                 options={roles.map((r) => ({
                   value: r.code,
-                  label: `Role ${r.code} (${r.name})`,
+                  label: `Role ${r.code}`,
                 }))}
                 size="sm"
                 buttonClassName="py-1.5 px-3 text-xs font-bold bg-white border-slate-300 text-indigo-700 shadow-2xs hover:border-indigo-400"

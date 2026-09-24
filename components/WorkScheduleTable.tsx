@@ -165,7 +165,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     { value: 'ALL', label: 'Tất cả Role' },
     ...roles.map((r) => ({
       value: r.code,
-      label: `${r.code} (${r.name})`,
+      label: r.name && r.name.toLowerCase() !== r.code.toLowerCase() ? `${r.code} (${r.name})` : r.code,
     })),
   ];
 
