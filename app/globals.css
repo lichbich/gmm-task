@@ -477,6 +477,33 @@ html.dark .bg-slate-100 {
   transform: scale(0.95) translateY(10px);
 }
 
+/* Bottom sheet slide-up and slide-down transitions (Mobile: slide up/down, Desktop: drop & scale) */
+.bottomsheet-transition {
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
+.bottomsheet-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.bottomsheet-closed {
+  opacity: 0;
+  transform: translateY(100%);
+}
+
+@media (min-width: 640px) {
+  .bottomsheet-open {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  .bottomsheet-closed {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+  }
+}
+
 /* ==========================================================================
    SMOOTH MOBILE BOTTOMSHEET & MODAL TRANSITIONS (APPLE CUBIC-BEZIER)
    ========================================================================== */
