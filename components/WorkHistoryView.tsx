@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 
 interface WorkHistoryViewProps {
-  onOpenTaskModal?: (task?: Task) => void;
+  onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
 }
 
 export const getWeekDateRangeStr = (weekNo: number, year: number = 2026): { startDate: string; endDate: string; label: string } => {
@@ -97,7 +97,7 @@ export const getWeekDeadline = (weekNo: number, year: number = 2026): Date => {
   return deadline;
 };
 
-export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
+export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModal }) => {
   const {
     tasks,
     weeklyArchives,
@@ -678,6 +678,14 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = () => {
           task={viewingDetailTask}
           isOpen={!!viewingDetailTask}
           onClose={() => setViewingDetailTask(null)}
+          onEditTask={(t) => {
+            setViewingDetailTask(null);
+            onOpenTaskModal?.(
+              t,
+              t.requestedWeekNumber || t.weekNumber,
+              t.assignmentRequestedBy || t.assigneeAccount
+            );
+          }}
         />
       )}
     </div>

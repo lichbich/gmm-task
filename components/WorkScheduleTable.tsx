@@ -79,10 +79,14 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
 
-  // Force default 'MY_TASKS' on component mount
+  const isSunday = new Date(simulatedTime || Date.now()).getDay() === 0;
+
+  // Force default 'MY_TASKS' on component mount or if not Sunday
   useEffect(() => {
-    setSubTab('MY_TASKS');
-  }, []);
+    if (!isSunday && subTab === 'DEFINE_NEXT_WEEK') {
+      setSubTab('MY_TASKS');
+    }
+  }, [isSunday, subTab]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -1003,22 +1007,24 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             <Globe className={`w-3.5 h-3.5 ${subTab === 'ALL_TASKS' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
             <span>Tất Cả Công Việc</span>
           </button>
-          <button
-            onClick={() => setSubTab('DEFINE_NEXT_WEEK')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${
-              subTab === 'DEFINE_NEXT_WEEK'
-                ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20'
-                : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-700/60'
-            }`}
-          >
-            <CalendarPlus className={`w-3.5 h-3.5 ${subTab === 'DEFINE_NEXT_WEEK' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-            <span className="sm:hidden">Define Tuần {selectedWeek + 1}</span>
-            <span className="hidden sm:inline">Define Tuần {selectedWeek + 1}</span>
-          </button>
+          {isSunday && (
+            <button
+              onClick={() => setSubTab('DEFINE_NEXT_WEEK')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${
+                subTab === 'DEFINE_NEXT_WEEK'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              <CalendarPlus className={`w-3.5 h-3.5 ${subTab === 'DEFINE_NEXT_WEEK' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
+              <span className="sm:hidden">Define Tuần {selectedWeek + 1}</span>
+              <span className="hidden sm:inline">Define Tuần {selectedWeek + 1}</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {subTab === 'DEFINE_NEXT_WEEK' ? (
+      {subTab === 'DEFINE_NEXT_WEEK' && isSunday ? (
         <NextWeekDefineView onOpenTaskModal={(t, w, a) => onOpenTaskModal?.(t, w, a)} />
       ) : (
         <>
@@ -1501,6 +1507,14 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         isOpen={!!viewingDetailTask}
         onClose={() => setViewingDetailTask(null)}
         onOpenReport={(t) => setReportingTask(t)}
+        onEditTask={(t) => {
+          setViewingDetailTask(null);
+          onOpenTaskModal?.(
+            t,
+            t.requestedWeekNumber || t.weekNumber,
+            t.assignmentRequestedBy || t.assigneeAccount
+          );
+        }}
       />
 
       {/* Weekly Report Modal */}

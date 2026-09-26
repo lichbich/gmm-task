@@ -1698,9 +1698,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncTasksToFirebase(updated);
   };
 
-  // Request task assignment from milestone (For Member)
+  // Request task assignment from milestone / ad-hoc tasks (For Member)
   const requestTaskAssignment = (taskId: string, memberAccount: string, targetWeek?: number) => {
-    const targetW = targetWeek || selectedWeek + 1;
+    const targetW = targetWeek !== undefined ? targetWeek : selectedWeek;
     updateTask(taskId, {
       assignmentRequestedBy: memberAccount,
       assignmentRequestStatus: 'PENDING',
@@ -1755,7 +1755,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateTask(taskId, {
       assigneeAccount: task.assignmentRequestedBy || task.assigneeAccount,
       assignmentRequestStatus: 'APPROVED',
-      weekNumber: task.requestedWeekNumber || selectedWeek + 1,
+      weekNumber: task.requestedWeekNumber || selectedWeek,
       updatedAt: new Date().toISOString(),
     });
 

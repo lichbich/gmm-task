@@ -94,7 +94,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDescription(task.description || '');
       setRole(task.role);
       setEstimatedEffort(task.estimatedEffort || 2);
-      setAssigneeAccount(task.assigneeAccount || '');
+      // Auto-select assignee: use existing assignee, or fallback to member requesting task, or defaultAssignee
+      const initialAssignee =
+        task.assigneeAccount ||
+        task.assignmentRequestedBy ||
+        (defaultAssignee !== undefined ? defaultAssignee : '');
+      setAssigneeAccount(initialAssignee);
       setMilestoneId(task.milestoneId || initialMilestoneId || '');
       setStatus(task.status || 'To do');
       setPriority(task.priority || 'Medium');
@@ -104,14 +109,20 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDescription('');
       setRole(defaultRole);
       setEstimatedEffort(2);
-      setAssigneeAccount(defaultAssignee !== undefined ? defaultAssignee : (currentUser?.role === 'Member' && currentUser?.account ? currentUser.account : ''));
+      setAssigneeAccount(
+        defaultAssignee !== undefined
+          ? defaultAssignee
+          : currentUser?.role === 'Member' && currentUser?.account
+          ? currentUser.account
+          : ''
+      );
       // If initialMilestoneId is explicitly passed, use it unconditionally; otherwise Members default to '' (ad-hoc)
       setMilestoneId(initialMilestoneId !== undefined ? initialMilestoneId : '');
       setStatus('To do');
       setPriority('Medium');
       setNotes('');
     }
-  }, [task, isOpen, milestones, users, defaultRole, initialMilestoneId, defaultAssignee]);
+  }, [task, isOpen, milestones, users, defaultRole, initialMilestoneId, defaultAssignee, currentUser]);
 
   if (!isRendered) return null;
 
@@ -120,8 +131,20 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   // Filter active team members who hold the specialization matching the task's role (excluding locked accounts)
   const eligibleAssignees = users.filter((u) => {
     const isLocked = u.disabled || u.status === 'disabled';
-    const isCurrentAssignee = task && task.assigneeAccount && u.account.toLowerCase() === task.assigneeAccount.toLowerCase();
-    if (isLocked && !isCurrentAssignee) return false;
+    const isCurrentAssignee =
+      task && task.assigneeAccount && u.account.toLowerCase() === task.assigneeAccount.toLowerCase();
+    const isRequester =
+      task &&
+      task.assignmentRequestedBy &&
+      u.account.toLowerCase() === task.assignmentRequestedBy.toLowerCase();
+    const isDefault =
+      defaultAssignee && u.account.toLowerCase() === defaultAssignee.toLowerCase();
+
+    if (isLocked && !isCurrentAssignee && !isRequester && !isDefault) return false;
+
+    // Always include requester or current assignee or defaultAssignee
+    if (isCurrentAssignee || isRequester || isDefault) return true;
+
     return u.specializations && u.specializations.includes(role);
   });
 
@@ -135,6 +158,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         : parseFloat(String(estimatedEffort).replace(',', '.')) || 0;
 
     if (task) {
+      const isAssigned = Boolean(assigneeAccount && assigneeAccount.trim() !== '');
+      const reqBy = task.assignmentRequestedBy;
+      const isApprovingRequested =
+        Boolean(reqBy && isAssigned && reqBy.toLowerCase() === assigneeAccount.toLowerCase());
+
       updateTask(task.id, {
         title,
         description,
@@ -145,6 +173,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         status,
         priority,
         notes,
+        ...(isApprovingRequested || (isAssigned && task.assignmentRequestedBy)
+          ? { assignmentRequestStatus: 'APPROVED' }
+          : {}),
+        ...(task.requestedWeekNumber
+          ? { weekNumber: task.requestedWeekNumber }
+          : {}),
       });
     } else {
       addTask({
@@ -221,6 +255,31 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         {/* Form with Scrollable Content Body and Fixed Footer */}
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
           <div className="p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4">
+            {/* Member Task Assignment Request Banner */}
+            {task?.assignmentRequestedBy && task.assignmentRequestStatus !== 'REJECTED' && (
+              <div className="p-3.5 bg-amber-50 border border-amber-200/90 rounded-2xl flex items-start gap-3 text-xs text-amber-900 shadow-2xs animate-in fade-in duration-150">
+                <div className="w-7 h-7 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-sm shrink-0 mt-0.5">
+                  ✋
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-amber-900 flex items-center gap-1.5 flex-wrap">
+                    <span>Yêu cầu nhận task từ thành viên:</span>
+                    <span className="bg-amber-200/90 text-amber-950 px-1.5 py-0.5 rounded-md font-mono font-black">
+                      @{task.assignmentRequestedBy}
+                    </span>
+                    {task.requestedWeekNumber && (
+                      <span className="text-[11px] text-amber-800 font-medium">
+                        (Tuần {task.requestedWeekNumber})
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
+                    Hệ thống đã tự động chọn <b>@{task.assignmentRequestedBy}</b> ở mục <b>Phân Công Thành Viên</b> bên dưới. Bạn có thể kiểm tra mô tả, thời lượng rồi bấm <b>"Duyệt & Phân Công Task"</b> để hoàn tất.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Milestone Selection (Synchronized with clicked milestone or ad-hoc) */}
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">
@@ -369,11 +428,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 onChange={setAssigneeAccount}
                 options={[
                   { value: '', label: '-- Để trống (Chưa phân công) --' },
-                  ...eligibleAssignees.map((u) => ({
-                    value: u.account,
-                    label: `${u.account} - ${u.name}`,
-                    subLabel: `${u.role} • [${u.specializations.join(', ')}]`,
-                  })),
+                  ...eligibleAssignees.map((u) => {
+                    const isRequester =
+                      task?.assignmentRequestedBy &&
+                      u.account.toLowerCase() === task.assignmentRequestedBy.toLowerCase();
+                    return {
+                      value: u.account,
+                      label: `${u.account} - ${u.name}${isRequester ? ' ✋ (Đang xin nhận task)' : ''}`,
+                      subLabel: `${u.role} • [${u.specializations.join(', ')}]`,
+                    };
+                  }),
                 ]}
                 className="w-full"
                 buttonClassName="py-2.5 px-3 text-xs bg-slate-50 border-slate-300/90"
@@ -466,10 +530,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95"
+                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
-                {task ? 'Cập Nhật Task' : 'Lưu & Phân Công'}
+                {task
+                  ? task.assignmentRequestedBy && (!task.assigneeAccount || task.assignmentRequestStatus === 'PENDING')
+                    ? 'Duyệt & Phân Công Task'
+                    : 'Cập Nhật Task'
+                  : 'Lưu & Phân Công'}
               </button>
             </div>
           </div>

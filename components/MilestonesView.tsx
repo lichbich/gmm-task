@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
   Calendar,
+  Clock,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 
@@ -140,6 +141,8 @@ export const MilestonesView: React.FC = () => {
     canEditTask,
     roles,
     users,
+    requestTaskAssignment,
+    selectedWeek,
   } = useApp();
 
   // Sub-tabs: Milestones vs Ad-hoc tasks (Default to ADHOC)
@@ -548,6 +551,11 @@ export const MilestonesView: React.FC = () => {
     const isOver = dragOverTaskId === t.id && !isDragging;
     const canToggle = canToggleTaskCheck(t);
     const isUnread = hasUnreadNote(t);
+    const isUnassigned = !t.assigneeAccount || t.assigneeAccount.trim() === '';
+    const isRequested = Boolean(t.assignmentRequestedBy && t.assignmentRequestStatus === 'PENDING');
+    const isMyPendingRequest = isRequested && Boolean(currentUser?.account && t.assignmentRequestedBy?.toLowerCase() === currentUser.account.toLowerCase());
+    const isOtherPendingRequest = isRequested && !isMyPendingRequest;
+    const isMember = currentUser?.role === 'Member';
 
     return (
       <React.Fragment key={t.id}>
@@ -692,16 +700,66 @@ export const MilestonesView: React.FC = () => {
                 </p>
               )}
 
-              <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
+              <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1 flex-wrap">
                 <span>Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong></span>
                 <span>•</span>
-                <span>Phân công: <strong className="text-slate-600">{t.assigneeAccount || 'Chưa gán'}</strong></span>
+                <span>
+                  Phân công:
+                  {isMyPendingRequest ? (
+                    <strong className="text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded text-[10px] ml-1 font-semibold">
+                      ✋ Bạn đã xin nhận (Tuần {t.requestedWeekNumber || selectedWeek})
+                    </strong>
+                  ) : isOtherPendingRequest ? (
+                    <strong className="text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded text-[10px] ml-1 font-semibold">
+                      ✋ @{t.assignmentRequestedBy} xin nhận
+                    </strong>
+                  ) : isUnassigned ? (
+                    <strong className="text-slate-400 italic ml-1 font-medium">Chưa gán</strong>
+                  ) : (
+                    <strong className="text-slate-600 ml-1">{t.assigneeAccount}</strong>
+                  )}
+                </span>
               </div>
             </div>
           </div>
 
           {/* Right Controls */}
           <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+            {/* Quick Request Button for Member on Unassigned Task */}
+            {isUnassigned && !isDone && isMember && (
+              isMyPendingRequest ? (
+                <span className="px-2.5 py-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg inline-flex items-center gap-1 shrink-0">
+                  <Clock className="w-3 h-3 text-amber-600" />
+                  <span>Chờ duyệt (Tuần {t.requestedWeekNumber || selectedWeek})</span>
+                </span>
+              ) : !isRequested ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!currentUser?.account) return;
+                    confirmDialog({
+                      title: 'Yêu cầu nhận task',
+                      message: `Bạn có muốn gửi yêu cầu nhận task "${t.title}" để thực hiện trong Tuần ${selectedWeek} không?`,
+                      confirmText: 'Gửi yêu cầu',
+                      type: 'info',
+                      onConfirm: () => {
+                        requestTaskAssignment(t.id, currentUser.account, selectedWeek);
+                      },
+                    });
+                  }}
+                  className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold rounded-lg shadow-2xs transition active:scale-95 inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                  title={`Gửi yêu cầu nhận task này cho Tuần ${selectedWeek}`}
+                >
+                  <span>✋ Xin nhận task</span>
+                </button>
+              ) : (
+                <span className="px-2 py-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg shrink-0">
+                  @{t.assignmentRequestedBy} xin nhận
+                </span>
+              )
+            )}
+
             {!milestoneId && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
               <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
                 <span className="text-[10px] text-slate-500 font-medium pl-1 hidden lg:inline">
@@ -912,14 +970,55 @@ export const MilestonesView: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 gap-2">
-            <div className="text-[11px] text-slate-500">
-              👤 <strong className="text-slate-700">{t.assigneeAccount || 'Chưa gán'}</strong>
-              <span className="mx-1.5">•</span>
-              Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong>
+          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 gap-2 flex-wrap">
+            <div className="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+              <span>👤</span>
+              {isMyPendingRequest ? (
+                <span className="text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                  ✋ Bạn đã xin nhận
+                </span>
+              ) : isOtherPendingRequest ? (
+                <span className="text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                  ✋ @{t.assignmentRequestedBy} xin nhận
+                </span>
+              ) : isUnassigned ? (
+                <strong className="text-slate-400 italic font-medium">Chưa gán</strong>
+              ) : (
+                <strong className="text-slate-700">{t.assigneeAccount}</strong>
+              )}
+              <span className="mx-1">•</span>
+              <span>Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong></span>
             </div>
 
             <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              {/* Member quick request on mobile */}
+              {isUnassigned && !isDone && isMember && (
+                isMyPendingRequest ? (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-md shrink-0">
+                    Chờ duyệt
+                  </span>
+                ) : !isRequested ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!currentUser?.account) return;
+                      confirmDialog({
+                        title: 'Yêu cầu nhận task',
+                        message: `Bạn có muốn gửi yêu cầu nhận task "${t.title}" để thực hiện trong Tuần ${selectedWeek} không?`,
+                        confirmText: 'Gửi yêu cầu',
+                        type: 'info',
+                        onConfirm: () => {
+                          requestTaskAssignment(t.id, currentUser.account, selectedWeek);
+                        },
+                      });
+                    }}
+                    className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold rounded-lg shadow-2xs transition active:scale-95 inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                  >
+                    <span>✋ Xin nhận</span>
+                  </button>
+                ) : null
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1773,6 +1872,13 @@ export const MilestonesView: React.FC = () => {
         task={viewingDetailTask}
         isOpen={!!viewingDetailTask}
         onClose={() => setViewingDetailTask(null)}
+        onEditTask={(t) => {
+          setViewingDetailTask(null);
+          setEditingTask(t);
+          setTargetMilestoneId(t.milestoneId || '');
+          setModalInitialRole(t.role);
+          setIsTaskModalOpen(true);
+        }}
       />
 
       {/* Task Creation & Edit Modal with Strict Synchronization */}

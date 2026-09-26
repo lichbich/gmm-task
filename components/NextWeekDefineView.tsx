@@ -53,6 +53,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     approveTaskAssignment,
     rejectTaskAssignment,
     confirmDialog,
+    simulatedTime,
   } = useApp();
 
   const nextWeek = selectedWeek + 1;
@@ -300,6 +301,26 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       addTask(continuationTask);
     }
   };
+
+  const isSunday = new Date(simulatedTime || Date.now()).getDay() === 0;
+
+  if (!isSunday) {
+    return (
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 sm:p-12 text-center space-y-4 shadow-sm">
+        <div className="w-16 h-16 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 rounded-2xl mx-auto flex items-center justify-center shadow-xs">
+          <CalendarPlus className="w-8 h-8" />
+        </div>
+        <div className="space-y-2 max-w-md mx-auto">
+          <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100">
+            Define Kế Hoạch Tuần Tới Chỉ Mở Vào Ngày Chủ Nhật
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            Để tránh việc tạo task và gửi request nhầm, chức năng Define Tuần Tới (Tuần {nextWeek}) chỉ được mở vào ngày Chủ Nhật hàng tuần. Các ngày trong tuần vui lòng tập trung vào các công việc của tuần hiện tại.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1092,6 +1113,14 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
           task={viewingDetailTask}
           isOpen={!!viewingDetailTask}
           onClose={() => setViewingDetailTask(null)}
+          onEditTask={(t) => {
+            setViewingDetailTask(null);
+            onOpenTaskModal(
+              t,
+              t.requestedWeekNumber || t.weekNumber,
+              t.assignmentRequestedBy || t.assigneeAccount
+            );
+          }}
         />
       )}
     </div>

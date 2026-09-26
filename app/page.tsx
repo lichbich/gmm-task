@@ -63,10 +63,35 @@ function MainApp() {
       }
 
       if (target) {
-        setSelectedTaskForDetail(target);
+        const isLeaderOrAdmin =
+          authSession?.role === 'Leader' ||
+          authSession?.role === 'Admin' ||
+          authSession?.role === 'Advisor';
+
+        const notifText = `${notif?.title || ''} ${notif?.body || ''}`.toLowerCase();
+        const isRequestNotif =
+          notifText.includes('yêu cầu nhận task') ||
+          notifText.includes('gửi yêu cầu') ||
+          notifText.includes('xin nhận task');
+
+        const hasPendingRequest =
+          Boolean(target.assignmentRequestedBy) && target.assignmentRequestStatus !== 'REJECTED';
+
+        // When a Leader / Admin clicks a member's task request notification, open TaskModal directly
+        // with the requester auto-selected so they can review and assign in 1 click!
+        if (isLeaderOrAdmin && (isRequestNotif || hasPendingRequest)) {
+          setSelectedTaskForDetail(null);
+          handleOpenTaskModal(
+            target,
+            target.requestedWeekNumber || target.weekNumber,
+            target.assignmentRequestedBy || target.assigneeAccount
+          );
+        } else {
+          setSelectedTaskForDetail(target);
+        }
       }
     },
-    [tasks, weeklyArchives]
+    [tasks, weeklyArchives, authSession]
   );
 
   // Auto-handle notification click target from URL or ServiceWorker message
@@ -164,11 +189,19 @@ function MainApp() {
             }}
           />
 
-          {/* Task Detail Modal (from notifications) */}
+          {/* Task Detail Modal (from notifications / details) */}
           <TaskDetailModal
             task={selectedTaskForDetail}
             isOpen={!!selectedTaskForDetail}
             onClose={() => setSelectedTaskForDetail(null)}
+            onEditTask={(taskToEdit) => {
+              setSelectedTaskForDetail(null);
+              handleOpenTaskModal(
+                taskToEdit,
+                taskToEdit.requestedWeekNumber || taskToEdit.weekNumber,
+                taskToEdit.assignmentRequestedBy || taskToEdit.assigneeAccount
+              );
+            }}
           />
         </>
       )}

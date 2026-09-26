@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 interface KanbanBoardProps {
-  onOpenTaskModal?: (task?: Task) => void;
+  onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => {
@@ -589,6 +589,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
         isOpen={!!viewingDetailTask}
         onClose={() => setViewingDetailTask(null)}
         onOpenReport={(t) => setReportingTask(t)}
+        onEditTask={(t) => {
+          setViewingDetailTask(null);
+          onOpenTaskModal?.(
+            t,
+            t.requestedWeekNumber || t.weekNumber,
+            t.assignmentRequestedBy || t.assigneeAccount
+          );
+        }}
       />
 
       <WeeklyReportModal

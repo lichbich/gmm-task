@@ -46,6 +46,7 @@ interface TaskDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenReport?: (task: Task) => void;
+  onEditTask?: (task: Task) => void;
 }
 
 const formatDateTime = (isoOrStr?: string): string => {
@@ -69,6 +70,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   isOpen,
   onClose,
   onOpenReport,
+  onEditTask,
 }) => {
   const {
     tasks,
@@ -86,6 +88,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     weeklyArchives,
     selectedWeek,
     selectedYear,
+    requestTaskAssignment,
   } = useApp();
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
@@ -183,6 +186,18 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const award = weeklyAwards.find((w) => w.account === task.assigneeAccount);
   const isTopEffort = isWeekFinalized && (award?.isTopEffort || false);
   const isLate = isWeekFinalized && task.isSubmittedLate;
+
+  const isLeaderOrAdmin =
+    currentUser?.role === 'Leader' ||
+    currentUser?.role === 'Advisor' ||
+    currentUser?.role === 'Admin';
+  const isMember = currentUser?.role === 'Member';
+  const isUnassigned = !task.assigneeAccount || task.assigneeAccount.trim() === '';
+  const isRequested = Boolean(task.assignmentRequestedBy && task.assignmentRequestStatus === 'PENDING');
+  const isMyPendingRequest =
+    isRequested &&
+    Boolean(currentUser?.account && task.assignmentRequestedBy?.toLowerCase() === currentUser.account.toLowerCase());
+  const isOtherPendingRequest = isRequested && !isMyPendingRequest;
 
   // Metadata fallbacks
   const creatorDisplay = task.createdBy || 'QuynhNV (Leader)';
@@ -416,6 +431,100 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
         {/* Scrollable Body with custom-scrollbar */}
         <div className="p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4 min-h-0 bg-white dark:bg-slate-900">
+          {/* 1. Leader View: Pending Task Assignment Request Banner */}
+          {isLeaderOrAdmin && isRequested && (
+            <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-sm shrink-0">
+                  ✋
+                </div>
+                <div className="min-w-0">
+                  <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                    <span>Thành viên</span>
+                    <span className="font-mono bg-amber-200/80 dark:bg-amber-900 text-amber-950 dark:text-amber-100 px-1.5 py-0.5 rounded-md font-black">
+                      @{task.assignmentRequestedBy}
+                    </span>
+                    <span>vừa gửi yêu cầu nhận task này{task.requestedWeekNumber ? ` (Tuần ${task.requestedWeekNumber})` : ''}</span>
+                  </div>
+                  <div className="text-[11px] text-amber-700 dark:text-amber-300 truncate">
+                    Chuyển sang cửa sổ chỉnh sửa để kiểm tra chi tiết và duyệt phân công cho thành viên.
+                  </div>
+                </div>
+              </div>
+
+              {onEditTask && isEditable && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleClose();
+                    setTimeout(() => {
+                      onEditTask(task);
+                    }, 150);
+                  }}
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Phân công ngay</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 2. Member View: Own Pending Request Notice */}
+          {isMember && isMyPendingRequest && (
+            <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
+              <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-sm shrink-0">
+                ⏳
+              </div>
+              <div className="min-w-0">
+                <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                  <span>Bạn đã gửi yêu cầu nhận task này cho Tuần {task.requestedWeekNumber || selectedWeek}</span>
+                </div>
+                <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                  Yêu cầu đang chờ Leader kiểm tra và duyệt phân công.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. Member View: Unassigned Task Request Invitation Banner */}
+          {isMember && isUnassigned && task.status !== 'Done' && !isRequested && (
+            <div className="p-3.5 bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200/90 dark:border-indigo-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 animate-in fade-in duration-150">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 border border-indigo-300 dark:border-indigo-700 flex items-center justify-center text-sm shrink-0">
+                  ✋
+                </div>
+                <div className="min-w-0">
+                  <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                    <span>Task chưa có người phụ trách</span>
+                  </div>
+                  <div className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                    Bạn có thể gửi yêu cầu nhận task này để làm trong <b>Tuần {selectedWeek}</b>.
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!currentUser?.account) return;
+                  confirmDialog({
+                    title: 'Yêu cầu nhận task',
+                    message: `Bạn có muốn gửi yêu cầu nhận task "${task.title}" cho Tuần ${selectedWeek} không?`,
+                    confirmText: 'Gửi yêu cầu',
+                    type: 'info',
+                    onConfirm: () => {
+                      requestTaskAssignment(task.id, currentUser.account, selectedWeek);
+                    },
+                  });
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>✋ Xin nhận task (Tuần {selectedWeek})</span>
+              </button>
+            </div>
+          )}
+
           {/* Creator & Creation Date Info Banner */}
           <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 text-xs text-slate-600 dark:text-slate-300">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -913,10 +1022,47 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={handleClose}
-              className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-xl transition active:scale-95 shadow-2xs"
+              className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-xl transition active:scale-95 shadow-2xs cursor-pointer"
             >
               Đóng
             </button>
+
+            {isMember && isUnassigned && task.status !== 'Done' && !isRequested && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!currentUser?.account) return;
+                  confirmDialog({
+                    title: 'Yêu cầu nhận task',
+                    message: `Bạn có muốn gửi yêu cầu nhận task "${task.title}" cho Tuần ${selectedWeek} không?`,
+                    confirmText: 'Gửi yêu cầu',
+                    type: 'info',
+                    onConfirm: () => {
+                      requestTaskAssignment(task.id, currentUser.account, selectedWeek);
+                    },
+                  });
+                }}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              >
+                <span>✋ Xin Nhận Task (Tuần {selectedWeek})</span>
+              </button>
+            )}
+
+            {onEditTask && isEditable && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleClose();
+                  setTimeout(() => {
+                    onEditTask(task);
+                  }, 150);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Chỉnh Sửa / Phân Công</span>
+              </button>
+            )}
 
             {isMyTaskToReport && onOpenReport && (
               <button
@@ -926,7 +1072,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     onOpenReport(task);
                   }, 200);
                 }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 active:scale-95"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
               >
                 <Clock className="w-3.5 h-3.5" />
                 Nộp Báo Cáo Tiến Độ
