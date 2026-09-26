@@ -498,7 +498,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                             <Square className="w-3.5 h-3.5 text-slate-400" />
                           )}
                           <span>
-                            {r.code} ({r.name})
+                            {r.name && r.name.trim().toLowerCase() !== r.code.trim().toLowerCase() ? `${r.code} (${r.name})` : r.code}
                           </span>
                         </button>
                       );

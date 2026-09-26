@@ -18,7 +18,7 @@ const getDbRootNode = (): string => {
   if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_FIREBASE_DB_NODE) {
     return process.env.NEXT_PUBLIC_FIREBASE_DB_NODE;
   }
-  return 'gmm-task';
+  return 'gmm-task-test';
 };
 
 export const DB_ROOT_NODE = getDbRootNode();

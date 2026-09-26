@@ -359,14 +359,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 {allowedRoles.length === 1 ? (
                   <div
                     className="w-full bg-slate-50 border border-slate-300/90 rounded-xl px-3 py-2 text-slate-800 text-xs font-semibold flex items-center justify-between gap-2 h-[38px] shadow-2xs"
-                    title={`${role}${roles.find((ro) => ro.code === role)?.name ? ` - ${roles.find((ro) => ro.code === role)?.name}` : ''} (Cố định theo chuyên môn Leader)`}
+                    title={`${role}${roles.find((ro) => ro.code === role)?.name && roles.find((ro) => ro.code === role)?.name.trim().toLowerCase() !== role.trim().toLowerCase() ? ` - ${roles.find((ro) => ro.code === role)?.name}` : ''} (Cố định theo chuyên môn Leader)`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
                       <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0"></span>
                       <span className="font-bold text-indigo-700 shrink-0">
                         {role}
                       </span>
-                      {roles.find((ro) => ro.code === role)?.name && (
+                      {roles.find((ro) => ro.code === role)?.name && roles.find((ro) => ro.code === role)?.name.trim().toLowerCase() !== role.trim().toLowerCase() && (
                         <span className="text-[11px] text-slate-500 font-normal truncate hidden sm:inline">
                           • {roles.find((ro) => ro.code === role)?.name}
                         </span>
@@ -385,9 +385,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     }}
                     options={allowedRoles.map((r) => {
                       const matched = roles.find((ro) => ro.code === r);
+                      const displayLabel =
+                        matched?.name && matched.name.trim().toLowerCase() !== r.trim().toLowerCase()
+                          ? `${r} - ${matched.name}`
+                          : r;
                       return {
                         value: r,
-                        label: matched ? `${r} - ${matched.name}` : r,
+                        label: displayLabel,
                       };
                     })}
                     className="w-full"

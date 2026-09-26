@@ -454,7 +454,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                               className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-xs rounded-lg shadow-2xs flex items-center gap-1"
                             >
                               <Layers className="w-3 h-3 text-indigo-500" />
-                              {spec} {matched ? `(${matched.name})` : ''}
+                              {spec} {matched && matched.name && matched.name.trim().toLowerCase() !== spec.trim().toLowerCase() ? `(${matched.name})` : ''}
                             </span>
                           );
                         })}
