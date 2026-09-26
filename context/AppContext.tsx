@@ -1708,16 +1708,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString(),
     });
 
-    // Notify Leaders and Admins about the assignment request
+    // Notify Leaders of the matching team and Admins about the assignment request
     const task = tasks.find((t) => t.id === taskId);
-    const leadersAndAdmins = users.filter(
-      (u) =>
-        (u.role === 'Leader' || u.role === 'Admin') &&
-        u.account.toLowerCase() !== memberAccount.toLowerCase()
-    );
-    leadersAndAdmins.forEach((leader) => {
+    const taskRole = (task?.role || '').toLowerCase().trim();
+
+    // Check if leader specializes in the task's role
+    const isLeaderOfRole = (u: any): boolean => {
+      if (u.role !== 'Leader' && u.role !== 'Advisor') return false;
+      if (!taskRole) return true; // Fallback if task has no specific role
+      const specs = (u.specializations || []).map((s: string) => s.toLowerCase().trim());
+      return specs.some(
+        (s: string) => s === taskRole || s.includes(taskRole) || taskRole.includes(s)
+      );
+    };
+
+    const targetUsers = users.filter((u) => {
+      if (u.disabled || u.status === 'disabled') return false;
+      if (u.account.toLowerCase() === memberAccount.toLowerCase()) return false;
+
+      // 1. Admin always receives notification
+      if (u.role === 'Admin') return true;
+
+      // 2. Leader / Advisor only if they belong to the same team/role as the task
+      if (isLeaderOfRole(u)) return true;
+
+      return false;
+    });
+
+    targetUsers.forEach((targetUser) => {
       sendPushNotification({
-        targetAccount: leader.account,
+        targetAccount: targetUser.account,
         title: `✋ @${memberAccount} vừa gửi yêu cầu nhận task`,
         body: `Task: ${task?.title || 'Đầu việc mới'} (Tuần ${targetW})`,
         taskId: taskId,
