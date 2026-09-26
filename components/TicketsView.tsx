@@ -14,6 +14,7 @@ import {
   Flame,
   CheckCircle2,
   Clock,
+  Activity,
   Lock,
   MessageSquare,
   ArrowRight,
@@ -333,11 +334,11 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
           </div>
         </div>
 
-        {/* Card 2: Inbox (Gửi đến Team tôi) */}
+        {/* Card 2: Inbox (Yêu Cầu Đến) */}
         <div className="bg-white dark:bg-slate-900 p-3 sm:p-3.5 rounded-2xl border border-purple-200 dark:border-purple-900/50 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider">
-              Gửi đến Team tôi
+              Yêu Cầu Đến
             </span>
             <Inbox className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
           </div>
@@ -365,7 +366,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
             <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
               Đang giải quyết
             </span>
-            <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+            <Activity className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div className="text-lg sm:text-xl font-black text-indigo-700 dark:text-indigo-300 mt-1">
             {stats.inProgress}
@@ -415,7 +416,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
               }`}
             >
               <Inbox className="w-3.5 h-3.5" />
-              <span>Gửi đến team tôi ({stats.inbox})</span>
+              <span>Yêu cầu đến ({stats.inbox})</span>
             </button>
 
             <button
@@ -428,7 +429,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
               }`}
             >
               <Send className="w-3.5 h-3.5" />
-              <span>Team tôi tạo ({stats.outbox})</span>
+              <span>Đã gửi ({stats.outbox})</span>
             </button>
 
             <button
@@ -441,7 +442,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
               }`}
             >
               <UserCheck className="w-3.5 h-3.5" />
-              <span>Tôi phụ trách ({stats.mine})</span>
+              <span>Của tôi ({stats.mine})</span>
             </button>
           </div>
 
