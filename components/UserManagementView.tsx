@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserRole, Specialization, User, RoleItem, validateRoleQuota } from '../types/task';
 import {
   Users,
   Plus,
   Shield,
+  ShieldCheck,
   Edit2,
   Trash2,
   CheckSquare,
@@ -285,9 +286,17 @@ export const UserManagementView: React.FC = () => {
   } = useApp();
 
   // SUB-TAB & SEARCH STATE
+  const isAdmin = currentUser?.role === 'Admin';
   const [activeSubTab, setActiveSubTab] = useState<'USERS' | 'ROLES'>('USERS');
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const isMouseDownOnBatchBackdrop = useRef(false);
+
+  // Non-admin roles should only see the USERS list
+  useEffect(() => {
+    if (!isAdmin && activeSubTab !== 'USERS') {
+      setActiveSubTab('USERS');
+    }
+  }, [isAdmin, activeSubTab]);
 
   // SORT STATE FOR USER TABLE
   const [sortField, setSortField] = useState<'account' | 'name' | 'role' | 'level' | null>(null);
@@ -976,20 +985,38 @@ export const UserManagementView: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                <Users className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
-                <span className="sm:hidden">Quản Trị Hệ Thống</span>
-                <span className="hidden sm:inline">Quản Trị Hệ Thống & Phân Quyền</span>
+                {isAdmin ? (
+                  <>
+                    <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
+                    <span className="sm:hidden">Quản Trị Hệ Thống</span>
+                    <span className="hidden sm:inline">Quản Trị Hệ Thống & Phân Quyền</span>
+                  </>
+                ) : (
+                  <>
+                    <Users className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
+                    <span className="sm:hidden">Danh Sách Thành Viên</span>
+                    <span className="hidden sm:inline">Danh Sách Thành Viên & Nhân Sự</span>
+                  </>
+                )}
               </h2>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-300">
-                Admin Only
-              </span>
+              {isAdmin ? (
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-300">
+                  Admin Only
+                </span>
+              ) : (
+                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                  {users.filter((u) => !u.disabled && u.status !== 'disabled').length} thành viên
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Admin tạo/sửa/xóa thành viên, phân quyền và quản lý danh mục các Role/Chuyên môn trong toàn hệ thống.
+              {isAdmin
+                ? 'Admin tạo/sửa/xóa thành viên, phân quyền và quản lý danh mục các Role/Chuyên môn trong toàn hệ thống.'
+                : 'Xem danh sách thành viên, vai trò (role), level và kỹ năng chuyên môn của các nhân sự trong dự án.'}
             </p>
           </div>
 
-          {currentUser?.role === 'Admin' && (
+          {isAdmin && (
             <div className="shrink-0 flex items-center gap-2 flex-wrap">
               {activeSubTab === 'USERS' ? (
                 <>
@@ -1036,39 +1063,41 @@ export const UserManagementView: React.FC = () => {
           )}
         </div>
 
-        {/* Navigation Sub-Tabs Switcher */}
-        <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 w-full sm:w-fit gap-1">
-          <button
-            onClick={() => {
-              setActiveSubTab('USERS');
-              setIsRoleFormOpen(false);
-            }}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
-              activeSubTab === 'USERS'
-                ? 'bg-white text-purple-700 shadow-sm shadow-slate-200'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5 text-purple-600" />
-            <span className="sm:hidden">Tài Khoản ({users.length})</span>
-            <span className="hidden sm:inline">Tài Khoản Thành Viên ({users.length})</span>
-          </button>
-          <button
-            onClick={() => {
-              setActiveSubTab('ROLES');
-              setIsUserFormOpen(false);
-            }}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
-              activeSubTab === 'ROLES'
-                ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5 text-indigo-600" />
-            <span className="sm:hidden">Role & Chuyên Môn ({roles.length})</span>
-            <span className="hidden sm:inline">Danh Mục Role & Chuyên Môn ({roles.length})</span>
-          </button>
-        </div>
+        {/* Navigation Sub-Tabs Switcher (Admin Only) */}
+        {isAdmin && (
+          <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 w-full sm:w-fit gap-1">
+            <button
+              onClick={() => {
+                setActiveSubTab('USERS');
+                setIsRoleFormOpen(false);
+              }}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
+                activeSubTab === 'USERS'
+                  ? 'bg-white text-purple-700 shadow-sm shadow-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 text-purple-600" />
+              <span className="sm:hidden">Tài Khoản ({users.length})</span>
+              <span className="hidden sm:inline">Tài Khoản Thành Viên ({users.length})</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveSubTab('ROLES');
+                setIsUserFormOpen(false);
+              }}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
+                activeSubTab === 'ROLES'
+                  ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="sm:hidden">Role & Chuyên Môn ({roles.length})</span>
+              <span className="hidden sm:inline">Danh Mục Role & Chuyên Môn ({roles.length})</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -1553,12 +1582,14 @@ export const UserManagementView: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
               <div>
                 <h3 className="text-base font-bold text-slate-800">
-                  Danh Sách Nhân Viên ({users.filter((u) => !u.disabled && u.status !== 'disabled').length} nhân sự hoạt động)
+                  {isAdmin
+                    ? `Danh Sách Nhân Viên (${users.filter((u) => !u.disabled && u.status !== 'disabled').length} nhân sự hoạt động)`
+                    : `Danh Sách Nhân Sự Dự Án (${users.filter((u) => !u.disabled && u.status !== 'disabled').length} thành viên)`}
                 </h3>
               </div>
 
               <div className="flex items-center gap-2">
-                {users.some((u) => u.disabled || u.status === 'disabled') && (
+                {isAdmin && users.some((u) => u.disabled || u.status === 'disabled') && (
                   <button
                     onClick={() => setShowDisabledUsers(!showDisabledUsers)}
                     className={`text-xs px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 font-semibold cursor-pointer ${
@@ -1688,13 +1719,14 @@ export const UserManagementView: React.FC = () => {
                     </th>
 
                     <th className="py-3 px-3">TECHNOLOGY</th>
-                    <th className="py-3 px-3 text-right">THAO TÁC</th>
+                    {isAdmin && <th className="py-3 px-3 text-right">THAO TÁC</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
                   {users
                     .filter((u) => {
-                      if (!showDisabledUsers && (u.disabled || u.status === 'disabled')) return false;
+                      if (!isAdmin && (u.disabled || u.status === 'disabled')) return false;
+                      if (isAdmin && !showDisabledUsers && (u.disabled || u.status === 'disabled')) return false;
 
                       if (!userSearchQuery.trim()) return true;
                       const q = userSearchQuery.toLowerCase().trim();
@@ -1819,13 +1851,13 @@ export const UserManagementView: React.FC = () => {
                             </span>
                           </td>
                           <td className="py-3 px-3 text-[11px] text-slate-600 font-semibold">{u.technologies || '—'}</td>
-                          <td className="py-3 px-3 text-right">
-                            {currentUser?.role === 'Admin' && (
+                          {isAdmin && (
+                            <td className="py-3 px-3 text-right">
                               <div className="flex items-center justify-end gap-1">
                                 {!isDisabled && (
                                   <button
                                     onClick={() => handleResetPassword(u)}
-                                    className="p-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-600 rounded-lg transition"
+                                    className="p-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-600 rounded-lg transition cursor-pointer"
                                     title="Đặt lại mật khẩu (Tạo mật khẩu tạm mới)"
                                   >
                                     <KeyRound className="w-3.5 h-3.5" />
@@ -1834,7 +1866,7 @@ export const UserManagementView: React.FC = () => {
                                 {isDisabled ? (
                                   <button
                                     onClick={() => handleRestoreUser(u)}
-                                    className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-lg transition"
+                                    className="p-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-lg transition cursor-pointer"
                                     title="Kích hoạt / Khôi phục tài khoản"
                                   >
                                     <RotateCcw className="w-3.5 h-3.5" />
@@ -1842,15 +1874,15 @@ export const UserManagementView: React.FC = () => {
                                 ) : (
                                   <button
                                     onClick={() => handleDeleteUser(u)}
-                                    className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-500 rounded-lg transition"
+                                    className="p-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-500 rounded-lg transition cursor-pointer"
                                     title="Vô hiệu hóa tài khoản"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 )}
                               </div>
-                            )}
-                          </td>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -1862,7 +1894,8 @@ export const UserManagementView: React.FC = () => {
             <div className="md:hidden p-3 space-y-3">
               {users
                 .filter((u) => {
-                  if (!showDisabledUsers && (u.disabled || u.status === 'disabled')) return false;
+                  if (!isAdmin && (u.disabled || u.status === 'disabled')) return false;
+                  if (isAdmin && !showDisabledUsers && (u.disabled || u.status === 'disabled')) return false;
 
                   if (!userSearchQuery.trim()) return true;
                   const q = userSearchQuery.toLowerCase().trim();
@@ -1949,9 +1982,9 @@ export const UserManagementView: React.FC = () => {
                             onClick={() => setSelectedUserForDetail(u)}
                             className="px-2.5 py-1 bg-purple-50 text-purple-700 hover:bg-purple-100 text-[11px] font-bold rounded-lg transition active:scale-95 cursor-pointer"
                           >
-                            Chi tiết
+                            {isAdmin ? 'Quản lý' : 'Chi tiết'}
                           </button>
-                          {currentUser?.role === 'Admin' && (
+                          {isAdmin && (
                             <>
                               {!isDisabled && (
                                 <button

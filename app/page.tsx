@@ -5,6 +5,7 @@ import { AppProvider, useApp } from '../context/AppContext';
 import { Header, MainSectionType } from '../components/Header';
 import { WorkScheduleTable } from '../components/WorkScheduleTable';
 import { MilestonesView } from '../components/MilestonesView';
+import { TicketsView } from '../components/TicketsView';
 import { KanbanBoard } from '../components/KanbanBoard';
 import { AwardLeaderboard } from '../components/AwardLeaderboard';
 import { WorkHistoryView } from '../components/WorkHistoryView';
@@ -23,6 +24,7 @@ function MainApp() {
 
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
+  const [selectedTicketIdForView, setSelectedTicketIdForView] = useState<string | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState<boolean>(false);
   const [taskModalDefaultWeek, setTaskModalDefaultWeek] = useState<number | undefined>(undefined);
   const [taskModalDefaultAssignee, setTaskModalDefaultAssignee] = useState<string | undefined>(undefined);
@@ -35,8 +37,22 @@ function MainApp() {
   };
 
   const handleSelectTaskFromNotification = useCallback(
-    (taskId: string, notif?: any) => {
-      const cleanId = taskId ? String(taskId).trim() : '';
+    (targetId: string, notif?: any) => {
+      const cleanId = targetId ? String(targetId).trim() : '';
+
+      // Check if this is a Ticket notification
+      const isTicket =
+        Boolean(notif?.ticketId) ||
+        cleanId.startsWith('ticket-') ||
+        cleanId.startsWith('REQ-') ||
+        notif?.type?.startsWith('TICKET_');
+
+      if (isTicket) {
+        setActiveMainSection('tasks');
+        setActiveTaskTab('tickets');
+        setSelectedTicketIdForView(notif?.ticketId || cleanId);
+        return;
+      }
 
       // 1. Search in current tasks
       let target = cleanId
@@ -101,7 +117,21 @@ function MainApp() {
     // 1. Check URL parameters (e.g. from system notification tap on Android/Desktop)
     const params = new URLSearchParams(window.location.search);
     const openTaskId = params.get('openTaskId') || params.get('taskId');
-    if (openTaskId && tasks.length > 0) {
+    const openTicketId = params.get('openTicketId') || params.get('ticketId');
+    const tab = params.get('tab');
+
+    if (openTicketId) {
+      setActiveMainSection('tasks');
+      setActiveTaskTab('tickets');
+      setSelectedTicketIdForView(openTicketId);
+      const url = new URL(window.location.href);
+      url.searchParams.delete('openTicketId');
+      url.searchParams.delete('ticketId');
+      window.history.replaceState({}, '', url.pathname + (url.search || ''));
+    } else if (tab === 'tickets') {
+      setActiveMainSection('tasks');
+      setActiveTaskTab('tickets');
+    } else if (openTaskId && tasks.length > 0) {
       handleSelectTaskFromNotification(openTaskId);
       const url = new URL(window.location.href);
       url.searchParams.delete('openTaskId');
@@ -111,8 +141,14 @@ function MainApp() {
 
     // 2. Listen to message from Service Worker (when a notification is clicked while tab is already open)
     const handleSwMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'OPEN_TASK_NOTIFICATION' && event.data.taskId) {
-        handleSelectTaskFromNotification(event.data.taskId);
+      if (event.data?.type === 'OPEN_TASK_NOTIFICATION') {
+        if (event.data.ticketId) {
+          setActiveMainSection('tasks');
+          setActiveTaskTab('tickets');
+          setSelectedTicketIdForView(event.data.ticketId);
+        } else if (event.data.taskId) {
+          handleSelectTaskFromNotification(event.data.taskId);
+        }
       }
     };
 
@@ -147,6 +183,9 @@ function MainApp() {
                   <WorkScheduleTable onOpenTaskModal={handleOpenTaskModal} />
                 )}
                 {activeTaskTab === 'milestones' && <MilestonesView />}
+                {activeTaskTab === 'tickets' && (
+                  <TicketsView initialSelectedTicketId={selectedTicketIdForView} />
+                )}
                 {activeTaskTab === 'nextweek' && (
                   <NextWeekDefineView onOpenTaskModal={handleOpenTaskModal} />
                 )}

@@ -100,6 +100,7 @@ export async function POST(req: Request) {
       body: content,
       url,
       taskId,
+      ticketId,
       senderAccount,
       senderName,
       type = 'TASK_ASSIGNED',
@@ -118,7 +119,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'No target account provided' }, { status: 400 });
     }
 
-    const targetUrl = url || (taskId ? `/?openTaskId=${taskId}` : '/');
+    const targetUrl = url || (ticketId ? `/?tab=tickets&openTicketId=${ticketId}` : taskId ? `/?openTaskId=${taskId}` : '/');
     const results: any[] = [];
     const adminApp = getSafeAdminApp();
     const messaging = adminApp ? getMessaging(adminApp) : null;
@@ -133,6 +134,7 @@ export async function POST(req: Request) {
         title: title || 'Thông báo mới',
         body: content || '',
         taskId: taskId || null,
+        ticketId: ticketId || null,
         type: type,
         isRead: false,
         createdAt: new Date().toISOString(),

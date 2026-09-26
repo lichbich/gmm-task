@@ -9,6 +9,7 @@ import { NotificationBell } from './NotificationBell';
 import {
   LayoutGrid,
   ListOrdered,
+  Ticket,
   Trophy,
   Users,
   Kanban,
@@ -39,9 +40,28 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTaskTab,
   onSelectTask,
 }) => {
-  const { currentUser, users, logout, theme: currentTheme, toggleTheme } = useApp();
+  const { currentUser, users, logout, theme: currentTheme, toggleTheme, tickets } = useApp();
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [showHeader, setShowHeader] = useState(true);
+
+  // Count open tickets for current user's team / user
+  const openTicketsCount = currentUser && tickets
+    ? tickets.filter((t) => {
+        if (t.status !== 'Open') return false;
+        const userAccount = (currentUser.account || '').toLowerCase();
+        // Do not count tickets created by the user themselves
+        if (t.fromAccount.toLowerCase() === userAccount) return false;
+
+        const isToMyTeam = currentUser.specializations?.some((s) => {
+          const a = s.trim().toLowerCase();
+          const b = t.toRole.trim().toLowerCase();
+          return a === b || (a === 'design' && b === 'designer') || (a === 'designer' && b === 'design');
+        });
+        const isAssignedToMe = Boolean(t.assignedTo && t.assignedTo.toLowerCase() === userAccount);
+
+        return isToMyTeam || isAssignedToMe;
+      }).length
+    : 0;
 
   useEffect(() => {
     let prevScrollY = window.scrollY;
@@ -144,21 +164,29 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="lg:hidden">Resource</span>
             </button>
 
-            {/* TAB 3: QUẢN LÝ USER (ADMIN ONLY) */}
-            {currentUser?.role === 'Admin' && (
-              <button
-                onClick={() => setActiveMainSection('users')}
-                className={`flex items-center gap-1.5 px-2.5 lg:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer whitespace-nowrap ${
-                  activeMainSection === 'users'
+            {/* TAB 3: QUẢN LÝ USER (ADMIN) HOẶC DANH SÁCH THÀNH VIÊN */}
+            <button
+              onClick={() => setActiveMainSection('users')}
+              className={`flex items-center gap-1.5 px-2.5 lg:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer whitespace-nowrap ${
+                activeMainSection === 'users'
+                  ? currentUser?.role === 'Admin'
                     ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 border border-purple-500 font-extrabold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
-                }`}
-              >
+                    : 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-500 font-extrabold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
+              }`}
+            >
+              {currentUser?.role === 'Admin' ? (
                 <ShieldCheck className={`w-3.5 h-3.5 shrink-0 ${activeMainSection === 'users' ? 'text-white' : 'text-purple-400'}`} />
-                <span className="hidden lg:inline">Quản Lý User (Admin)</span>
-                <span className="lg:hidden">User (Admin)</span>
-              </button>
-            )}
+              ) : (
+                <Users className={`w-3.5 h-3.5 shrink-0 ${activeMainSection === 'users' ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+              )}
+              <span className="hidden lg:inline">
+                {currentUser?.role === 'Admin' ? 'Quản Lý User (Admin)' : 'Danh Sách Thành Viên'}
+              </span>
+              <span className="lg:hidden">
+                {currentUser?.role === 'Admin' ? 'User (Admin)' : 'Thành Viên'}
+              </span>
+            </button>
           </div>
 
           {/* Right Controls & Auth Profile */}
@@ -240,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* MOBILE VIEW MAIN TABS SWITCHER (SLIPPY SEGMENTED BAR) */}
         <div className="md:hidden py-1.5 border-t border-slate-100 dark:border-slate-800">
-          <div className={`grid ${currentUser?.role === 'Admin' ? 'grid-cols-3' : 'grid-cols-2'} gap-1 bg-slate-100 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200/80 dark:border-slate-800`}>
+          <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200/80 dark:border-slate-800">
             <button
               onClick={() => setActiveMainSection('tasks')}
               className={`flex items-center justify-center gap-1 sm:gap-1.5 text-xs font-bold py-1.5 px-1 rounded-lg transition-all truncate ${
@@ -263,19 +291,23 @@ export const Header: React.FC<HeaderProps> = ({
               <FolderGit2 className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Resource</span>
             </button>
-            {currentUser?.role === 'Admin' && (
-              <button
-                onClick={() => setActiveMainSection('users')}
-                className={`flex items-center justify-center gap-1 sm:gap-1.5 text-xs font-bold py-1.5 px-1 rounded-lg transition-all truncate ${
-                  activeMainSection === 'users'
+            <button
+              onClick={() => setActiveMainSection('users')}
+              className={`flex items-center justify-center gap-1 sm:gap-1.5 text-xs font-bold py-1.5 px-1 rounded-lg transition-all truncate ${
+                activeMainSection === 'users'
+                  ? currentUser?.role === 'Admin'
                     ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
+                    : 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              {currentUser?.role === 'Admin' ? (
                 <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">User (Admin)</span>
-              </button>
-            )}
+              ) : (
+                <Users className="w-3.5 h-3.5 shrink-0" />
+              )}
+              <span className="truncate">{currentUser?.role === 'Admin' ? 'User (Admin)' : 'Thành Viên'}</span>
+            </button>
           </div>
         </div>
 
@@ -304,6 +336,26 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <ListOrdered className="w-4 h-4" />
               <span>Milestones & Break Tasks {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') && `(${currentUser.role})`}</span>
+            </button>
+
+            {/* TAB: REQUEST (CROSS-ROLE REQUESTS) - RIGHT NEXT TO MILESTONES */}
+            <button
+              onClick={() => setActiveTaskTab('tickets')}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer shrink-0 ${
+                activeTaskTab === 'tickets'
+                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-t-2 border-indigo-500 shadow-2xs font-bold'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-50/80 dark:hover:bg-slate-800/60'
+              }`}
+            >
+              <div className="relative flex items-center">
+                <Ticket className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                {openTicketsCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2 min-w-3.5 h-3.5 px-0.5 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-pulse">
+                    {openTicketsCount}
+                  </span>
+                )}
+              </div>
+              <span>Request</span>
             </button>
 
             <button
@@ -352,7 +404,7 @@ export const Header: React.FC<HeaderProps> = ({
         aria-label="Mobile Navigation"
         className="md:hidden fixed bottom-3 inset-x-3 z-40 max-w-md mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-800 shadow-[0_10px_25px_-5px_rgba(0,0,0,0.12),0_8px_10px_-6px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] rounded-2xl p-1.5 mb-[env(safe-area-inset-bottom)]"
       >
-        <div className="grid grid-cols-5 items-center gap-0.5 sm:gap-1">
+        <div className="grid grid-cols-6 items-center gap-0.5">
           {/* 1. Schedule / Task Table */}
           <button
             onClick={() => setActiveTaskTab('schedule')}
@@ -364,7 +416,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <LayoutGrid className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'schedule' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
             <span
-              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+              className={`text-[9px] sm:text-[10px] leading-tight mt-0.5 whitespace-nowrap ${
                 activeTaskTab === 'schedule' ? 'font-bold text-white' : 'font-medium'
               }`}
             >
@@ -383,7 +435,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <ListOrdered className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'milestones' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
             <span
-              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+              className={`text-[9px] sm:text-[10px] leading-tight mt-0.5 whitespace-nowrap ${
                 activeTaskTab === 'milestones' ? 'font-bold text-white' : 'font-medium'
               }`}
             >
@@ -391,7 +443,33 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </button>
 
-          {/* 3. Kanban */}
+          {/* 3. Tickets */}
+          <button
+            onClick={() => setActiveTaskTab('tickets')}
+            className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeTaskTab === 'tickets'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/60 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <div className="relative flex items-center justify-center">
+              <Ticket className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'tickets' ? 'scale-105 text-white' : 'text-purple-500 group-active:scale-90'}`} />
+              {openTicketsCount > 0 && (
+                <span className="absolute -top-1 -right-1.5 min-w-3 h-3 px-0.5 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center animate-pulse">
+                  {openTicketsCount}
+                </span>
+              )}
+            </div>
+            <span
+              className={`text-[9px] sm:text-[10px] leading-tight mt-0.5 whitespace-nowrap ${
+                activeTaskTab === 'tickets' ? 'font-bold text-white' : 'font-medium'
+              }`}
+            >
+              Request
+            </span>
+          </button>
+
+          {/* 4. Kanban */}
           <button
             onClick={() => setActiveTaskTab('kanban')}
             className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
@@ -402,7 +480,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Kanban className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'kanban' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
             <span
-              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+              className={`text-[9px] sm:text-[10px] leading-tight mt-0.5 whitespace-nowrap ${
                 activeTaskTab === 'kanban' ? 'font-bold text-white' : 'font-medium'
               }`}
             >
@@ -410,7 +488,7 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </button>
 
-          {/* 4. Awards */}
+          {/* 5. Awards */}
           <button
             onClick={() => setActiveTaskTab('awards')}
             className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
@@ -425,7 +503,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             />
             <span
-              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+              className={`text-[9px] sm:text-[10px] leading-tight mt-0.5 whitespace-nowrap ${
                 activeTaskTab === 'awards' ? 'font-bold text-white' : 'font-medium'
               }`}
             >
@@ -433,7 +511,7 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </button>
 
-          {/* 5. History */}
+          {/* 6. History */}
           <button
             onClick={() => setActiveTaskTab('history')}
             className={`group flex flex-col items-center justify-center py-1.5 px-0.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer ${
@@ -444,7 +522,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <History className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform duration-200 ${activeTaskTab === 'history' ? 'scale-105 text-white' : 'group-active:scale-90'}`} />
             <span
-              className={`text-[9.5px] sm:text-[11px] leading-tight mt-0.5 whitespace-nowrap ${
+              className={`text-[9px] sm:text-[10px] leading-tight mt-0.5 whitespace-nowrap ${
                 activeTaskTab === 'history' ? 'font-bold text-white' : 'font-medium'
               }`}
             >

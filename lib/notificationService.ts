@@ -257,6 +257,7 @@ export async function sendPushNotification({
   body,
   url,
   taskId,
+  ticketId,
   senderAccount,
   senderName,
   type = 'TASK_ASSIGNED',
@@ -266,6 +267,7 @@ export async function sendPushNotification({
   body: string;
   url?: string;
   taskId?: string;
+  ticketId?: string;
   senderAccount?: string;
   senderName?: string;
   type?: NotificationType;
@@ -277,7 +279,7 @@ export async function sendPushNotification({
     return;
   }
 
-  const targetUrl = url || (taskId ? `/?openTaskId=${taskId}` : '/');
+  const targetUrl = url || (ticketId ? `/?tab=tickets&openTicketId=${ticketId}` : taskId ? `/?openTaskId=${taskId}` : '/');
   const notificationId = `notif-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const notifPayload: AppNotification = {
     id: notificationId,
@@ -287,6 +289,7 @@ export async function sendPushNotification({
     title: title || 'Thông báo mới',
     body: body || '',
     taskId: taskId || undefined,
+    ticketId: ticketId || undefined,
     type: type || 'TASK_ASSIGNED',
     isRead: false,
     createdAt: new Date().toISOString(),
@@ -316,6 +319,7 @@ export async function sendPushNotification({
         body,
         url: targetUrl,
         taskId,
+        ticketId,
         senderAccount,
         senderName,
         type,

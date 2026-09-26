@@ -4,6 +4,11 @@ export type NotificationType =
   | 'TASK_NOTE'
   | 'TASK_APPROVED'
   | 'TASK_COMPLETED'
+  | 'TICKET_CREATED'
+  | 'TICKET_ASSIGNED'
+  | 'TICKET_COMMENT'
+  | 'TICKET_RESOLVED'
+  | 'TICKET_CLOSED'
   | 'GENERAL';
 
 export interface AppNotification {
@@ -14,6 +19,7 @@ export interface AppNotification {
   title: string;
   body: string;
   taskId?: string;
+  ticketId?: string;
   type: NotificationType;
   isRead: boolean;
   createdAt: string;
@@ -25,3 +31,4 @@ export interface UserDeviceToken {
   deviceInfo?: string;
   updatedAt: string;
 }
+

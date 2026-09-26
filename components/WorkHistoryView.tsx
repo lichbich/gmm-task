@@ -1,10 +1,9 @@
-'use client';
-
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked } from '../types/task';
+import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
+import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
 import {
   History,
@@ -26,6 +25,7 @@ import {
   ArrowRight,
   Sparkles,
   Info,
+  Ticket as TicketIcon,
 } from 'lucide-react';
 
 interface WorkHistoryViewProps {
@@ -109,13 +109,37 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     roles,
     milestones,
     hasUnreadNote,
+    tickets,
   } = useApp();
 
   const [selectedArchiveId, setSelectedArchiveId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
+
+  const getLinkedTicket = (t: Task): Ticket | undefined => {
+    if (t.ticketId) {
+      const found = tickets.find((tk) => tk.id === t.ticketId);
+      if (found) return found;
+    }
+    return tickets.find(
+      (tk) =>
+        (tk.createdTaskId && tk.createdTaskId === t.id) ||
+        (tk.code && t.title && (t.title.includes(`[${tk.code}]`) || t.title.includes(tk.code))) ||
+        (t.ticketId && tk.id === t.ticketId)
+    );
+  };
+
+  const handleTaskClick = (t: Task) => {
+    const linkedTicket = getLinkedTicket(t);
+    if (linkedTicket) {
+      setViewingTicket(linkedTicket);
+    } else {
+      setViewingDetailTask(t);
+    }
+  };
 
   // If archives exist and no selection, pick the latest archive
   const activeArchive =
@@ -421,11 +445,26 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                   <div className="space-y-1">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <span
-                                        onClick={() => setViewingDetailTask(t)}
+                                        onClick={() => handleTaskClick(t)}
                                         className="font-bold text-slate-800 hover:text-indigo-600 transition cursor-pointer leading-snug"
                                       >
                                         {t.title}
                                       </span>
+
+                                      {(() => {
+                                        const linkedTicket = getLinkedTicket(t);
+                                        const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                                        if (!isTicketTask) return null;
+                                        return (
+                                          <span
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 font-bold text-[10px] shrink-0 shadow-2xs"
+                                            title="Ticket yêu cầu liên team"
+                                          >
+                                            <TicketIcon className="w-3 h-3 text-purple-600 shrink-0" />
+                                            Ticket yêu cầu
+                                          </span>
+                                        );
+                                      })()}
 
                                       {/* High Priority Badge */}
                                       {t.priority === 'High' && (
@@ -581,14 +620,28 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                           return (
                             <div
                               key={t.id}
-                              onClick={() => setViewingDetailTask(t)}
+                              onClick={() => handleTaskClick(t)}
                               className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2 shadow-2xs cursor-pointer"
                             >
                               <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="text-[10px] font-mono text-slate-400 font-bold">
                                     #{t.id.replace('tsk-', '')}
                                   </span>
+                                  {(() => {
+                                    const linkedTicket = getLinkedTicket(t);
+                                    const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                                    if (!isTicketTask) return null;
+                                    return (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-[9px]"
+                                        title="Ticket yêu cầu liên team"
+                                      >
+                                        <TicketIcon className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                                        Ticket yêu cầu
+                                      </span>
+                                    );
+                                  })()}
                                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
                                     {t.role}
                                   </span>
@@ -669,7 +722,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
         task={discussingTask}
         isOpen={!!discussingTask}
         onClose={() => setDiscussingTask(null)}
-        onOpenFullDetail={(t) => setViewingDetailTask(t)}
+        onOpenFullDetail={(t) => handleTaskClick(t)}
       />
 
       {/* Task Detail View Modal */}
@@ -688,6 +741,13 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
           }}
         />
       )}
+
+      {/* Ticket Detail Modal */}
+      <TicketDetailModal
+        ticket={viewingTicket}
+        isOpen={!!viewingTicket}
+        onClose={() => setViewingTicket(null)}
+      />
     </div>
   );
 };

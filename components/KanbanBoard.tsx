@@ -2,10 +2,11 @@
 
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus } from '../types/task';
+import { Task, TaskStatus, Ticket } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
+import { TicketDetailModal } from './TicketDetailModal';
 import {
   AlertTriangle,
   Award,
@@ -19,6 +20,7 @@ import {
   GripVertical,
   FileText,
   Flame,
+  Ticket as TicketIcon,
 } from 'lucide-react';
 
 interface KanbanBoardProps {
@@ -38,6 +40,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
     selectedWeek,
     selectedYear,
     weeklyArchives,
+    tickets,
   } = useApp();
 
   const currentWeekTasks = React.useMemo(() => {
@@ -48,8 +51,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
   const [mobileActiveStatus, setMobileActiveStatus] = useState<TaskStatus>('To do');
+
+  const getLinkedTicket = (t: Task): Ticket | undefined => {
+    if (t.ticketId) {
+      const found = tickets.find((tk) => tk.id === t.ticketId);
+      if (found) return found;
+    }
+    return tickets.find(
+      (tk) =>
+        (tk.createdTaskId && tk.createdTaskId === t.id) ||
+        (tk.code && t.title && (t.title.includes(`[${tk.code}]`) || t.title.includes(tk.code))) ||
+        (t.ticketId && tk.id === t.ticketId)
+    );
+  };
+
+  const handleTaskClick = (t: Task) => {
+    const linkedTicket = getLinkedTicket(t);
+    if (linkedTicket) {
+      setViewingTicket(linkedTicket);
+    } else {
+      setViewingDetailTask(t);
+    }
+  };
 
   // Drag and drop tracking refs and states
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -215,7 +241,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
         }}
         onClick={() => {
           if (isDraggingActiveRef.current) return;
-          setViewingDetailTask(t);
+          handleTaskClick(t);
         }}
         className={`bg-white dark:bg-slate-900 border rounded-xl p-3.5 shadow-2xs space-y-2.5 transition-colors cursor-pointer group relative select-none ${
           isBeingDragged
@@ -237,6 +263,21 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
             >
               {t.role}
             </span>
+
+            {(() => {
+              const linkedTicket = getLinkedTicket(t);
+              const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+              if (!isTicketTask) return null;
+              return (
+                <span
+                  className="inline-flex items-center gap-1 text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/60 border border-purple-200/80 dark:border-purple-800 px-1.5 py-0.5 rounded shrink-0 shadow-2xs"
+                  title="Nhiệm vụ được tạo từ Ticket yêu cầu liên team"
+                >
+                  <TicketIcon className="w-2.5 h-2.5 text-purple-500 shrink-0" />
+                  Ticket yêu cầu
+                </span>
+              );
+            })()}
 
             {milestone ? (
               <span
@@ -286,10 +327,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
           </h4>
 
           {t.description && (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-1 flex items-center gap-1">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-1 min-w-0">
               <FileText className="w-3 h-3 text-slate-400 shrink-0" />
-              {t.description.replace(/\[[ xX]\]/g, '').replace(/[-*#]/g, '').trim()}
-            </p>
+              <span className="truncate block flex-1">
+                {t.description.replace(/\[[ xX]\]/g, '').replace(/[-*#\r\n]+/g, ' ').trim()}
+              </span>
+            </div>
           )}
         </div>
 
@@ -581,7 +624,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
         task={discussingTask}
         isOpen={!!discussingTask}
         onClose={() => setDiscussingTask(null)}
-        onOpenFullDetail={(t) => setViewingDetailTask(t)}
+        onOpenFullDetail={(t) => handleTaskClick(t)}
       />
 
       <TaskDetailModal
@@ -597,6 +640,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
             t.assignmentRequestedBy || t.assigneeAccount
           );
         }}
+      />
+
+      <TicketDetailModal
+        ticket={viewingTicket}
+        isOpen={!!viewingTicket}
+        onClose={() => setViewingTicket(null)}
       />
 
       <WeeklyReportModal

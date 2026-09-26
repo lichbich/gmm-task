@@ -16,6 +16,7 @@ import {
   Check,
   ChevronRight,
   X,
+  Ticket,
 } from 'lucide-react';
 
 interface NotificationBellProps {
@@ -128,6 +129,21 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
+      case 'TICKET_CREATED':
+      case 'TICKET_ASSIGNED':
+      case 'TICKET_RESOLVED':
+      case 'TICKET_CLOSED':
+        return (
+          <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 flex items-center justify-center text-purple-600 dark:text-purple-400 shrink-0 shadow-2xs">
+            <Ticket className="w-4 h-4" />
+          </div>
+        );
+      case 'TICKET_COMMENT':
+        return (
+          <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0 shadow-2xs">
+            <MessageSquare className="w-4 h-4" />
+          </div>
+        );
       case 'TASK_ASSIGNED':
         return (
           <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
@@ -181,7 +197,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
       markNotificationAsRead(n.id);
     }
     if (onSelectTask) {
-      onSelectTask(n.taskId || '', n);
+      onSelectTask(n.taskId || n.ticketId || '', n);
     }
     handleClose();
   };

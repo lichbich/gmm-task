@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization, isTaskUnworked } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, update, remove, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
@@ -247,6 +247,17 @@ interface AppContextType {
   requestNotificationPermission: () => Promise<void>;
   isPushEnabled: boolean;
 
+  // Cross-Role Request Tickets System
+  tickets: Ticket[];
+  createTicket: (ticket: Omit<Ticket, 'id' | 'code' | 'createdAt' | 'comments'>) => Promise<Ticket>;
+  updateTicket: (id: string, updates: Partial<Ticket>) => Promise<void>;
+  deleteTicket: (id: string) => Promise<void>;
+  assignTicket: (ticketId: string, assigneeAccount: string) => Promise<void>;
+  resolveTicket: (ticketId: string, resolutionNote: string) => Promise<void>;
+  closeTicket: (ticketId: string) => Promise<void>;
+  reopenTicket: (ticketId: string) => Promise<void>;
+  addTicketComment: (ticketId: string, content: string, attachments?: string[]) => Promise<void>;
+
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
@@ -313,6 +324,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authSession, setAuthSession] = useState<User | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [confirmState, setConfirmState] = useState<ConfirmDialogOptions | null>(null);
+
+  // Cross-Role Request Tickets State
+  const [tickets, setTickets] = useState<Ticket[]>([]);
 
   // Notification Center State
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -530,6 +544,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             set(ref(database, `${DB_ROOT_NODE}/resources`), resObj).catch(console.error);
             setResources(INITIAL_PROJECT_RESOURCES as ProjectResource[]);
           }
+          if (data.tickets) {
+            const ticketList = Object.values(data.tickets) as Ticket[];
+            const formattedTickets = ticketList.map((t: any) => ({
+              ...t,
+              attachments: Array.isArray(t.attachments)
+                ? t.attachments
+                : t.attachments && typeof t.attachments === 'object'
+                ? Object.values(t.attachments)
+                : [],
+              comments: Array.isArray(t.comments)
+                ? t.comments
+                : t.comments && typeof t.comments === 'object'
+                ? Object.values(t.comments)
+                : [],
+            }));
+            setTickets(
+              formattedTickets.sort(
+                (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+              )
+            );
+          } else {
+            setTickets([]);
+          }
         } else {
           seedFirebaseMockData();
         }
@@ -542,6 +579,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error('Error connecting to Firebase RTDB', e);
     }
   }, []);
+
+  // Auto-sync assigned tickets to Tasks list if not yet present in tasks state
+  useEffect(() => {
+    if (!isFirebaseConnected || tickets.length === 0 || tasks.length === 0) return;
+
+    let hasNewTasks = false;
+    const newTasksToAdd: Task[] = [];
+    const ticketUpdates: Record<string, Partial<Ticket>> = {};
+
+    tickets.forEach((ticket) => {
+      if (ticket.assignedTo && ticket.assignedTo.trim()) {
+        const existingTask = tasks.find(
+          (t) =>
+            (ticket.createdTaskId && t.id === ticket.createdTaskId) ||
+            (t.ticketId && t.ticketId === ticket.id)
+        );
+
+        if (!existingTask && !newTasksToAdd.some((t) => t.ticketId === ticket.id)) {
+          const isMatchSpecHelper = (specA?: string, specB?: string) => {
+            if (!specA || !specB) return false;
+            const a = specA.trim().toLowerCase();
+            const b = specB.trim().toLowerCase();
+            return a === b || (a === 'design' && b === 'designer') || (a === 'designer' && b === 'design');
+          };
+
+          const targetMilestone =
+            milestones.find((m) => m.id === ticket.relatedMilestoneId) ||
+            milestones.find((m) => isMatchSpecHelper(m.role, ticket.toRole)) ||
+            milestones[0];
+
+          const milestoneId = targetMilestone ? targetMilestone.id : 'ms-default';
+          const milestoneTasks = [...tasks, ...newTasksToAdd].filter((t) => t.milestoneId === milestoneId);
+          const taskPriority: 'High' | 'Medium' | 'Low' =
+            ticket.priority === 'Urgent' || ticket.priority === 'High'
+              ? 'High'
+              : ticket.priority === 'Low'
+              ? 'Low'
+              : 'Medium';
+
+          const newTaskId = `tsk-req-${ticket.id}`;
+          const taskTitle = `[${ticket.code}] ${ticket.title}`;
+          const taskDesc = `${ticket.description}${
+            ticket.attachments && ticket.attachments.length > 0
+              ? '\n\n📎 Link tài liệu đính kèm:\n' + ticket.attachments.join('\n')
+              : ''
+          }`;
+
+          const newTask: Task = {
+            id: newTaskId,
+            title: taskTitle,
+            description: taskDesc,
+            role: ticket.toRole,
+            priority: taskPriority,
+            estimatedEffort: 2,
+            actualEffort: 0,
+            status: ticket.status === 'Resolved' || ticket.status === 'Closed' ? 'Done' : 'In Progress',
+            assigneeAccount: ticket.assignedTo,
+            milestoneId,
+            orderInMilestone: milestoneTasks.length + 1,
+            completionPercentage: ticket.status === 'Resolved' || ticket.status === 'Closed' ? 100 : 0,
+            weekNumber: selectedWeek,
+            year: selectedYear,
+            ticketId: ticket.id,
+            createdBy: `${ticket.fromName} (Request Ticket ${ticket.code})`,
+            createdAt: ticket.createdAt,
+            updatedBy: 'Hệ thống tự động đồng bộ',
+            updatedAt: new Date().toISOString(),
+          };
+
+          newTasksToAdd.push(newTask);
+          ticketUpdates[ticket.id] = {
+            createdTaskId: newTaskId,
+            createdTaskTitle: taskTitle,
+          };
+          hasNewTasks = true;
+        }
+      }
+    });
+
+    if (hasNewTasks) {
+      const combined = [...tasks, ...newTasksToAdd];
+      setTasks(combined);
+      syncTasksToFirebase(combined);
+      Object.entries(ticketUpdates).forEach(([tid, up]) => {
+        updateTicket(tid, up);
+      });
+    }
+  }, [isFirebaseConnected, tickets, tasks, milestones, selectedWeek, selectedYear]);
 
   // Real-time Multi-Device Session Invalidation:
   // When Admin resets a user's password, disables a user, or updates credentials in Firebase Realtime Database,
@@ -2012,6 +2137,429 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return calculateWeeklyAwardsForWeek(selectedWeek, selectedYear, isFinalized);
   };
 
+  // Ticket Management Operations
+  const createTicket = async (
+    ticketData: Omit<Ticket, 'id' | 'code' | 'createdAt' | 'comments'>
+  ): Promise<Ticket> => {
+    const newId = `ticket-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const nextNum = tickets.length + 1;
+    const code = `REQ-${String(nextNum).padStart(3, '0')}`;
+    const now = new Date().toISOString();
+
+    const newTicket: Ticket = {
+      ...ticketData,
+      id: newId,
+      code,
+      comments: [],
+      createdAt: now,
+      updatedAt: now,
+      attachments: ticketData.attachments || [],
+    };
+
+    const cleanTicket = JSON.parse(
+      JSON.stringify(newTicket, (_, v) => (v === undefined ? null : v))
+    );
+    await set(ref(database, `${DB_ROOT_NODE}/tickets/${newId}`), cleanTicket);
+
+    const isMatchRole = (spec: string, targetRole: string) => {
+      if (!spec || !targetRole) return false;
+      const s = spec.trim().toLowerCase();
+      const t = targetRole.trim().toLowerCase();
+      if (s === t) return true;
+      if ((s === 'design' && t === 'designer') || (s === 'designer' && t === 'design')) return true;
+      if (s.includes(t) || t.includes(s)) return true;
+      return false;
+    };
+
+    // Targeted notification: Send to Admin, Leader & Advisor of toRole (excluding ticket creator)
+    const targetUsers = users.filter((u) => {
+      if (u.disabled || u.status === 'disabled') return false;
+      if (u.account.toLowerCase() === newTicket.fromAccount.toLowerCase()) return false;
+      if (u.role === 'Admin') return true;
+      const isLeaderOrAdvisor = u.role === 'Leader' || u.role === 'Advisor';
+      const userSpecs = [
+        ...(u.specializations || []),
+        ...((u as any).specialization ? [(u as any).specialization] : []),
+      ];
+      const matchesSpec = userSpecs.some((s) => isMatchRole(s, newTicket.toRole));
+      return isLeaderOrAdvisor && matchesSpec;
+    });
+
+    // Fallback: If no specific Leader/Advisor for that role was matched, notify all Leaders/Advisors
+    const finalTargets =
+      targetUsers.length > 0
+        ? targetUsers
+        : users.filter(
+            (u) =>
+              !u.disabled &&
+              u.status !== 'disabled' &&
+              u.account.toLowerCase() !== newTicket.fromAccount.toLowerCase() &&
+              (u.role === 'Leader' || u.role === 'Advisor' || u.role === 'Admin')
+          );
+
+    finalTargets.forEach((user) => {
+      sendPushNotification({
+        targetAccount: user.account,
+        title: `🎫 [${newTicket.code}] Yêu cầu mới từ team ${newTicket.fromRole} ➜ ${newTicket.toRole}`,
+        body: `${newTicket.fromName}: "${newTicket.title}"`,
+        ticketId: newTicket.id,
+        senderAccount: newTicket.fromAccount,
+        senderName: newTicket.fromName,
+        type: 'TICKET_CREATED',
+      }).catch(console.error);
+    });
+
+    return newTicket;
+  };
+
+  const updateTicket = async (id: string, updates: Partial<Ticket>): Promise<void> => {
+    const currentTicket = tickets.find((t) => t.id === id);
+    if (!currentTicket) return;
+
+    const now = new Date().toISOString();
+    const updatedTicket: Ticket = {
+      ...currentTicket,
+      ...updates,
+      updatedAt: now,
+    };
+
+    const cleanTicket = JSON.parse(
+      JSON.stringify(updatedTicket, (_, v) => (v === undefined ? null : v))
+    );
+    await set(ref(database, `${DB_ROOT_NODE}/tickets/${id}`), cleanTicket);
+
+    // Synchronize updates with linked task if any
+    const linkedTaskIndex = tasks.findIndex(
+      (t) => (currentTicket.createdTaskId && t.id === currentTicket.createdTaskId) || (t.ticketId && t.ticketId === id)
+    );
+    if (linkedTaskIndex !== -1) {
+      const existingTask = tasks[linkedTaskIndex];
+      const taskUpdates: Partial<Task> = {};
+      if (updates.title) {
+        taskUpdates.title = `[${currentTicket.code}] ${updates.title}`;
+      }
+      if (updates.description !== undefined) {
+        taskUpdates.description = updates.description;
+      }
+      if (updates.priority) {
+        taskUpdates.priority = updates.priority === 'Urgent' ? 'High' : updates.priority === 'High' ? 'High' : updates.priority === 'Medium' ? 'Medium' : 'Low';
+      }
+      if (Object.keys(taskUpdates).length > 0) {
+        const updatedTask = { ...existingTask, ...taskUpdates, updatedAt: now };
+        const newTasks = [...tasks];
+        newTasks[linkedTaskIndex] = updatedTask;
+        setTasks(newTasks);
+        await set(ref(database, `${DB_ROOT_NODE}/tasks/${existingTask.id}`), updatedTask);
+      }
+    }
+  };
+
+  const deleteTicket = async (id: string): Promise<void> => {
+    await remove(ref(database, `${DB_ROOT_NODE}/tickets/${id}`));
+  };
+
+  const assignTicket = async (ticketId: string, assigneeAccount: string): Promise<void> => {
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const assignee = assigneeAccount
+      ? users.find((u) => u.account.toLowerCase() === assigneeAccount.toLowerCase())
+      : undefined;
+    const now = new Date().toISOString();
+
+    let createdTaskId = ticket.createdTaskId;
+    let createdTaskTitle = ticket.createdTaskTitle;
+
+    // Automatically create or update Task in the assignee's task list
+    if (assigneeAccount) {
+      const existingTaskIndex = tasks.findIndex(
+        (t) => (ticket.createdTaskId && t.id === ticket.createdTaskId) || (t.ticketId && t.ticketId === ticket.id)
+      );
+
+      if (existingTaskIndex !== -1) {
+        const existingTask = tasks[existingTaskIndex];
+        const updatedTask: Task = {
+          ...existingTask,
+          assigneeAccount,
+          role: ticket.toRole,
+          status: existingTask.status === 'Done' ? 'Done' : 'In Progress',
+          updatedBy: `${authSession?.name || 'Leader'} (@${authSession?.account || 'Leader'})`,
+          updatedAt: now,
+        };
+        const newTasks = [...tasks];
+        newTasks[existingTaskIndex] = updatedTask;
+        setTasks(newTasks);
+        syncTasksToFirebase(newTasks);
+        createdTaskId = updatedTask.id;
+        createdTaskTitle = updatedTask.title;
+      } else {
+        const taskTitle = `[${ticket.code}] ${ticket.title}`;
+        const taskDesc = `${ticket.description}${
+          ticket.attachments && ticket.attachments.length > 0
+            ? '\n\n📎 Link tài liệu đính kèm:\n' + ticket.attachments.join('\n')
+            : ''
+        }`;
+
+        const isMatchSpecHelper = (specA?: string, specB?: string) => {
+          if (!specA || !specB) return false;
+          const a = specA.trim().toLowerCase();
+          const b = specB.trim().toLowerCase();
+          return a === b || (a === 'design' && b === 'designer') || (a === 'designer' && b === 'design');
+        };
+
+        const targetMilestone =
+          milestones.find((m) => m.id === ticket.relatedMilestoneId) ||
+          milestones.find((m) => isMatchSpecHelper(m.role, ticket.toRole)) ||
+          milestones[0];
+
+        const milestoneId = targetMilestone ? targetMilestone.id : 'ms-default';
+        const milestoneTasks = tasks.filter((t) => t.milestoneId === milestoneId);
+        const taskPriority: 'High' | 'Medium' | 'Low' =
+          ticket.priority === 'Urgent' || ticket.priority === 'High'
+            ? 'High'
+            : ticket.priority === 'Low'
+            ? 'Low'
+            : 'Medium';
+
+        const newTaskId = `tsk-req-${Date.now()}`;
+        const authorDisplay = `${authSession?.name || 'Leader'} (@${authSession?.account || 'Leader'})`;
+
+        const initialLog: TaskActivityLog = {
+          id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          timestamp: now,
+          authorName: authSession?.name || 'Leader',
+          authorAccount: authSession?.account || 'Leader',
+          authorRole: authSession?.role || 'Leader',
+          actionType: 'CREATE',
+          summary: `Tự động tạo task từ Request Ticket [${ticket.code}] do ${ticket.fromName} (Team ${ticket.fromRole}) gửi sang`,
+        };
+
+        const newTask: Task = {
+          id: newTaskId,
+          title: taskTitle,
+          description: taskDesc,
+          role: ticket.toRole,
+          priority: taskPriority,
+          estimatedEffort: 2,
+          actualEffort: 0,
+          status: 'In Progress',
+          assigneeAccount,
+          milestoneId,
+          orderInMilestone: milestoneTasks.length + 1,
+          completionPercentage: 0,
+          weekNumber: selectedWeek,
+          year: selectedYear,
+          ticketId: ticket.id,
+          createdBy: `${authSession?.name || 'Leader'} (Request Ticket ${ticket.code})`,
+          createdAt: now,
+          updatedBy: authorDisplay,
+          updatedAt: now,
+          activityLogs: [initialLog],
+        };
+
+        const updatedTasks = [...tasks, newTask];
+        setTasks(updatedTasks);
+        syncTasksToFirebase(updatedTasks);
+        createdTaskId = newTaskId;
+        createdTaskTitle = taskTitle;
+      }
+    } else {
+      const existingTaskIndex = tasks.findIndex(
+        (t) => (ticket.createdTaskId && t.id === ticket.createdTaskId) || (t.ticketId && t.ticketId === ticket.id)
+      );
+      if (existingTaskIndex !== -1) {
+        const newTasks = [...tasks];
+        newTasks[existingTaskIndex] = {
+          ...newTasks[existingTaskIndex],
+          assigneeAccount: '',
+          status: 'To do',
+          updatedAt: now,
+        };
+        setTasks(newTasks);
+        syncTasksToFirebase(newTasks);
+      }
+    }
+
+    const updates: Partial<Ticket> = {
+      assignedTo: assigneeAccount || '',
+      assignedToName: assignee?.name || '',
+      createdTaskId: createdTaskId || '',
+      createdTaskTitle: createdTaskTitle || '',
+      status: assigneeAccount && ticket.status === 'Open' ? 'In Progress' : ticket.status,
+      updatedAt: now,
+    };
+
+    await updateTicket(ticketId, updates);
+
+    if (assignee && assignee.account.toLowerCase() !== authSession?.account.toLowerCase()) {
+      sendPushNotification({
+        targetAccount: assignee.account,
+        title: `📋 Phân công xử lý request [${ticket.code}]`,
+        body: `${authSession?.name || 'Leader'} đã giao task cho bạn: "${ticket.title}" (Tuần ${selectedWeek})`,
+        ticketId: ticket.id,
+        taskId: createdTaskId,
+        senderAccount: authSession?.account || 'Leader',
+        senderName: authSession?.name || 'Leader',
+        type: 'TICKET_ASSIGNED',
+      }).catch(console.error);
+    }
+  };
+
+  const resolveTicket = async (ticketId: string, resolutionNote: string): Promise<void> => {
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const now = new Date().toISOString();
+    const updates: Partial<Ticket> = {
+      status: 'Resolved',
+      resolutionNote,
+      resolvedBy: authSession?.account,
+      resolvedByName: authSession?.name,
+      resolvedAt: now,
+      updatedAt: now,
+    };
+
+    await updateTicket(ticketId, updates);
+
+    // Also mark linked task as Done if exists
+    const linkedTaskIndex = tasks.findIndex(
+      (t) => (ticket.createdTaskId && t.id === ticket.createdTaskId) || (t.ticketId && t.ticketId === ticket.id)
+    );
+    if (linkedTaskIndex !== -1) {
+      const linkedTask = tasks[linkedTaskIndex];
+      const updatedTask: Task = {
+        ...linkedTask,
+        status: 'Done',
+        completionPercentage: 100,
+        notes: resolutionNote || linkedTask.notes,
+        lastSubmittedAt: now,
+        updatedAt: now,
+      };
+      const newTasks = [...tasks];
+      newTasks[linkedTaskIndex] = updatedTask;
+      setTasks(newTasks);
+      syncTasksToFirebase(newTasks);
+    }
+
+    if (ticket.fromAccount.toLowerCase() !== authSession?.account.toLowerCase()) {
+      sendPushNotification({
+        targetAccount: ticket.fromAccount,
+        title: `✅ [${ticket.code}] Request của bạn đã được giải quyết!`,
+        body: `${authSession?.name || 'Team ' + ticket.toRole}: "${resolutionNote.slice(0, 100)}"`,
+        ticketId: ticket.id,
+        senderAccount: authSession?.account,
+        senderName: authSession?.name,
+        type: 'TICKET_RESOLVED',
+      }).catch(console.error);
+    }
+  };
+
+  const closeTicket = async (ticketId: string): Promise<void> => {
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const now = new Date().toISOString();
+    const updates: Partial<Ticket> = {
+      status: 'Closed',
+      closedAt: now,
+      updatedAt: now,
+    };
+
+    await updateTicket(ticketId, updates);
+
+    if (ticket.fromAccount.toLowerCase() !== authSession?.account.toLowerCase()) {
+      sendPushNotification({
+        targetAccount: ticket.fromAccount,
+        title: `🔒 [${ticket.code}] Request đã hoàn tất và đóng`,
+        body: `Ticket "${ticket.title}" đã được đóng bởi ${authSession?.name}.`,
+        ticketId: ticket.id,
+        senderAccount: authSession?.account,
+        senderName: authSession?.name,
+        type: 'TICKET_CLOSED',
+      }).catch(console.error);
+    }
+  };
+
+  const reopenTicket = async (ticketId: string): Promise<void> => {
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket) return;
+
+    const now = new Date().toISOString();
+    const updates: Partial<Ticket> = {
+      status: 'In Progress',
+      closedAt: undefined,
+      resolvedAt: undefined,
+      updatedAt: now,
+    };
+
+    await updateTicket(ticketId, updates);
+  };
+
+  const addTicketComment = async (
+    ticketId: string,
+    content: string,
+    attachments?: string[]
+  ): Promise<void> => {
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket || !authSession) return;
+
+    const now = new Date().toISOString();
+    const newComment: TicketComment = {
+      id: `comm-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      ticketId,
+      authorAccount: authSession.account,
+      authorName: authSession.name,
+      authorRole: authSession.role,
+      authorSpecialization: authSession.specializations?.[0] || 'Member',
+      content,
+      createdAt: now,
+      attachments: attachments || [],
+    };
+
+    const updatedComments = [...(ticket.comments || []), newComment];
+    const cleanTicket = JSON.parse(
+      JSON.stringify(
+        {
+          ...ticket,
+          comments: updatedComments,
+          updatedAt: now,
+        },
+        (_, v) => (v === undefined ? null : v)
+      )
+    );
+
+    await set(ref(database, `${DB_ROOT_NODE}/tickets/${ticketId}`), cleanTicket);
+
+    // Notify stakeholders (creator, assignee, and relevant Leaders/Advisors)
+    const recipientAccounts = new Set<string>();
+    if (ticket.fromAccount) recipientAccounts.add(ticket.fromAccount);
+    if (ticket.assignedTo) recipientAccounts.add(ticket.assignedTo);
+    users.forEach((u) => {
+      if (u.disabled || u.status === 'disabled') return;
+      if (u.role === 'Admin') recipientAccounts.add(u.account);
+      if (
+        (u.role === 'Leader' || u.role === 'Advisor') &&
+        (u.specializations?.includes(ticket.toRole) || u.specializations?.includes(ticket.fromRole))
+      ) {
+        recipientAccounts.add(u.account);
+      }
+    });
+
+    recipientAccounts.delete(authSession.account);
+
+    recipientAccounts.forEach((acc) => {
+      sendPushNotification({
+        targetAccount: acc,
+        title: `💬 [${ticket.code}] Phản hồi mới từ ${authSession.name}`,
+        body: `"${content.slice(0, 100)}"`,
+        ticketId: ticket.id,
+        senderAccount: authSession.account,
+        senderName: authSession.name,
+        type: 'TICKET_COMMENT',
+      }).catch(console.error);
+    });
+  };
+
   const setSimulatedTime = (time: string) => setSimulatedTimeState(time);
   const resetSimulatedTime = () => setSimulatedTimeState(new Date().toISOString().slice(0, 16));
 
@@ -2077,6 +2625,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         requestTaskAssignment,
         approveTaskAssignment,
         rejectTaskAssignment,
+
+        // Cross-Role Request Tickets
+        tickets,
+        createTicket,
+        updateTicket,
+        deleteTicket,
+        assignTicket,
+        resolveTicket,
+        closeTicket,
+        reopenTicket,
+        addTicketComment,
 
         notifications,
         unreadNotificationsCount,

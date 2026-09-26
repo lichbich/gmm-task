@@ -1,11 +1,10 @@
-'use client';
-
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Milestone, Task, TaskStatus, Specialization } from '../types/task';
+import { Milestone, Task, TaskStatus, Specialization, Ticket } from '../types/task';
 import { TaskModal } from './TaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
+import { TicketDetailModal } from './TicketDetailModal';
 import {
   ListOrdered,
   Plus,
@@ -27,6 +26,7 @@ import {
   ChevronUp,
   Calendar,
   Clock,
+  Ticket as TicketIcon,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 
@@ -203,7 +203,32 @@ export const MilestonesView: React.FC = () => {
   const [targetMilestoneId, setTargetMilestoneId] = useState<string>('');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
+
+  const { tickets } = useApp();
+
+  const getLinkedTicket = (t: Task): Ticket | undefined => {
+    if (t.ticketId) {
+      const found = tickets.find((tk) => tk.id === t.ticketId);
+      if (found) return found;
+    }
+    return tickets.find(
+      (tk) =>
+        (tk.createdTaskId && tk.createdTaskId === t.id) ||
+        (tk.code && t.title && (t.title.includes(`[${tk.code}]`) || t.title.includes(tk.code))) ||
+        (t.ticketId && tk.id === t.ticketId)
+    );
+  };
+
+  const handleTaskClick = (t: Task) => {
+    const linkedTicket = getLinkedTicket(t);
+    if (linkedTicket) {
+      setViewingTicket(linkedTicket);
+    } else {
+      setViewingDetailTask(t);
+    }
+  };
 
   // Drag and drop state for milestone tasks
   const [draggedMilestoneTaskId, setDraggedMilestoneTaskId] = useState<string | null>(null);
@@ -594,7 +619,7 @@ export const MilestonesView: React.FC = () => {
             setDraggedMilestoneTaskId(null);
             setDragOverTaskId(null);
           }}
-          onClick={() => setViewingDetailTask(t)}
+          onClick={() => handleTaskClick(t)}
           className={`p-3.5 transition-all hidden md:flex items-center justify-between gap-4 text-xs cursor-pointer group select-none ${
             isDone ? 'bg-emerald-50/30 hover:bg-emerald-50/70' : 'hover:bg-slate-50/90 bg-white'
           } ${
@@ -670,6 +695,20 @@ export const MilestonesView: React.FC = () => {
                 >
                   {t.title}
                 </span>
+                {(() => {
+                  const linkedTicket = getLinkedTicket(t);
+                  const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                  if (!isTicketTask) return null;
+                  return (
+                    <span
+                      className="text-[9px] px-1.5 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-bold shrink-0 inline-flex items-center gap-1 shadow-2xs"
+                      title="Nhiệm vụ được tạo từ Ticket yêu cầu liên team"
+                    >
+                      <TicketIcon className="w-2.5 h-2.5 text-purple-500" />
+                      Ticket yêu cầu
+                    </span>
+                  );
+                })()}
                 {t.priority === 'High' && (
                   <span
                     className="text-[9px] px-1.5 py-0.5 rounded border bg-red-100 text-red-700 border-red-200 font-bold shrink-0 inline-flex items-center gap-0.5 shadow-2xs"
@@ -864,7 +903,7 @@ export const MilestonesView: React.FC = () => {
 
         {/* MOBILE CARD VIEW */}
         <div
-          onClick={() => setViewingDetailTask(t)}
+          onClick={() => handleTaskClick(t)}
           className={`md:hidden p-3.5 transition-all space-y-2.5 cursor-pointer ${
             isDone ? 'bg-emerald-50/40 border-l-4 border-emerald-400' : 'bg-white'
           }`}
@@ -917,6 +956,20 @@ export const MilestonesView: React.FC = () => {
               <span className="text-[10px] px-2 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-bold">
                 {t.role}
               </span>
+              {(() => {
+                const linkedTicket = getLinkedTicket(t);
+                const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                if (!isTicketTask) return null;
+                return (
+                  <span
+                    className="text-[10px] px-2 py-0.5 rounded border bg-purple-100 text-purple-700 border-purple-300 font-bold inline-flex items-center gap-1"
+                    title="Ticket yêu cầu liên team"
+                  >
+                    <TicketIcon className="w-3 h-3 text-purple-600" />
+                    Ticket yêu cầu
+                  </span>
+                );
+              })()}
               {t.priority === 'High' && (
                 <span className="text-[10px] px-2 py-0.5 rounded border bg-red-100 text-red-700 border-red-200 font-bold inline-flex items-center gap-1">
                   <Flame className="w-3 h-3 text-red-500 fill-red-500" />
@@ -943,8 +996,8 @@ export const MilestonesView: React.FC = () => {
           </h4>
 
           {t.description && (
-            <p className="text-[11px] text-slate-500 line-clamp-2 italic">
-              {t.description}
+            <p className="text-[11px] text-slate-500 line-clamp-1 italic truncate">
+              {t.description.replace(/[-*#\r\n]+/g, ' ').trim()}
             </p>
           )}
 
@@ -1864,7 +1917,7 @@ export const MilestonesView: React.FC = () => {
         task={discussingTask}
         isOpen={!!discussingTask}
         onClose={() => setDiscussingTask(null)}
-        onOpenFullDetail={(t) => setViewingDetailTask(t)}
+        onOpenFullDetail={(t) => handleTaskClick(t)}
       />
 
       {/* Task Detail & Collaborative Notes Discussion Modal */}
@@ -1879,6 +1932,13 @@ export const MilestonesView: React.FC = () => {
           setModalInitialRole(t.role);
           setIsTaskModalOpen(true);
         }}
+      />
+
+      {/* Cross-team Ticket Detail Modal */}
+      <TicketDetailModal
+        ticket={viewingTicket}
+        isOpen={!!viewingTicket}
+        onClose={() => setViewingTicket(null)}
       />
 
       {/* Task Creation & Edit Modal with Strict Synchronization */}

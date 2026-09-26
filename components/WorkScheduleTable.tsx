@@ -1,11 +1,10 @@
-'use client';
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, Specialization, Milestone } from '../types/task';
+import { Task, TaskStatus, Specialization, Milestone, Ticket } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
+import { TicketDetailModal } from './TicketDetailModal';
 import {
   Search,
   Plus,
@@ -27,6 +26,7 @@ import {
   SlidersHorizontal,
   RotateCcw,
   X,
+  Ticket as TicketIcon,
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
@@ -54,6 +54,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     selectedYear,
     simulatedTime,
     weeklyArchives,
+    tickets,
   } = useApp();
 
   // Sub-tabs state: ALWAYS DEFAULT to 'MY_TASKS' when accessing
@@ -77,7 +78,37 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
+
+  const getLinkedTicket = useCallback(
+    (t: Task): Ticket | undefined => {
+      if (t.ticketId) {
+        const found = tickets.find((tk) => tk.id === t.ticketId);
+        if (found) return found;
+      }
+      return tickets.find(
+        (tk) =>
+          (tk.createdTaskId && tk.createdTaskId === t.id) ||
+          (tk.code && t.title && (t.title.includes(`[${tk.code}]`) || t.title.includes(tk.code))) ||
+          (t.ticketId && tk.id === t.ticketId)
+      );
+    },
+    [tickets]
+  );
+
+  const handleTaskClick = (t: Task) => {
+    if (t.notes) markNoteAsRead(t.id, t.notes);
+
+    // Check if task originates from a Ticket
+    const linkedTicket = getLinkedTicket(t);
+
+    if (linkedTicket) {
+      setViewingTicket(linkedTicket);
+    } else {
+      setViewingDetailTask(t);
+    }
+  };
 
   const isSunday = new Date(simulatedTime || Date.now()).getDay() === 0;
 
@@ -425,13 +456,14 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     const isLate = isSubmittedLate || isUnsubmittedLate;
     const isAssignedToMe = canReportTask(t);
     const hasAlert = isLate || isTopEffort;
+    const linkedTicket = getLinkedTicket(t);
+    const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
 
     return (
       <tr
         key={t.id}
         onClick={() => {
-          if (t.notes) markNoteAsRead(t.id, t.notes);
-          setViewingDetailTask(t);
+          handleTaskClick(t);
         }}
         className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/70 transition cursor-pointer group ${
           isLate
@@ -453,6 +485,15 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               <span className="line-clamp-2 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
                 {t.title}
               </span>
+              {isTicketTask && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold text-[10px] shrink-0 shadow-2xs"
+                  title="Nhiệm vụ được tạo từ Ticket yêu cầu liên team"
+                >
+                  <TicketIcon className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                  Ticket yêu cầu
+                </span>
+              )}
               {t.priority === 'High' && (
                 <span
                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-950/80 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 font-bold text-[10px] shrink-0 shadow-2xs"
@@ -741,6 +782,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
     const unread = hasUnreadNote(t);
     const milestone = milestones.find((m) => m.id === t.milestoneId);
+    const linkedTicket = getLinkedTicket(t);
+    const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
 
     return (
       <div
@@ -759,6 +802,12 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
               #{displayIdx}
             </span>
+            {isTicketTask && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/70 border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 font-bold text-[10px]">
+                <TicketIcon className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                Ticket yêu cầu
+              </span>
+            )}
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getRoleStyle(t.role)}`}>
               {t.role}
             </span>
@@ -786,7 +835,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         {/* Task Title (Clickable) */}
         <div>
           <button
-            onClick={() => setViewingDetailTask(t)}
+            onClick={() => handleTaskClick(t)}
             className="text-left font-bold text-slate-800 dark:text-slate-100 text-sm hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors block w-full leading-snug cursor-pointer"
           >
             {t.title}
@@ -1498,7 +1547,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         task={discussingTask}
         isOpen={!!discussingTask}
         onClose={() => setDiscussingTask(null)}
-        onOpenFullDetail={(t) => setViewingDetailTask(t)}
+        onOpenFullDetail={(t) => handleTaskClick(t)}
       />
 
       {/* Task Detail Modal with Notes */}
@@ -1515,6 +1564,13 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             t.assignmentRequestedBy || t.assigneeAccount
           );
         }}
+      />
+
+      {/* Ticket Detail Modal */}
+      <TicketDetailModal
+        ticket={viewingTicket}
+        isOpen={!!viewingTicket}
+        onClose={() => setViewingTicket(null)}
       />
 
       {/* Weekly Report Modal */}

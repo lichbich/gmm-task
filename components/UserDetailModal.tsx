@@ -267,7 +267,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
             <UserIcon className="w-4 h-4 text-purple-600" />
-            Chi Tiết & Quản Lý Thông Tin Nhân Viên
+            {isAdmin ? 'Chi Tiết & Quản Lý Thông Tin Nhân Viên' : 'Thông Tin Chi Tiết Thành Viên'}
           </div>
           <button
             onClick={handleClose}
@@ -433,7 +433,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
             <div className="border border-purple-200/80 rounded-2xl p-4 bg-purple-50/30 space-y-4 shadow-2xs">
               <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-100 pb-2">
                 <Shield className="w-4 h-4 text-purple-600" />
-                Quản Lý Phân Quyền & Vai Trò Chuyên Môn (Admin Only)
+                {isAdmin ? 'Quản Lý Phân Quyền & Vai Trò Chuyên Môn (Admin Only)' : 'Phân Quyền & Vị Trí Chuyên Môn'}
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -584,12 +584,14 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                     <span className="font-semibold text-slate-800 truncate block">{userEmail || user.email || '—'}</span>
                   </div>
 
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
-                      <FileText className="w-3 h-3 text-slate-400" /> Số Căn Cước (CCCD)
-                    </span>
-                    <span className="font-mono font-bold text-slate-800">{userCccd || user.cccd || '—'}</span>
-                  </div>
+                  {(isAdmin || currentUser?.account?.toLowerCase() === user.account.toLowerCase()) && (
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                        <FileText className="w-3 h-3 text-slate-400" /> Số Căn Cước (CCCD)
+                      </span>
+                      <span className="font-mono font-bold text-slate-800">{userCccd || user.cccd || '—'}</span>
+                    </div>
+                  )}
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
@@ -598,14 +600,16 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                     <span className="font-mono font-bold text-slate-800">{userBirthDate || user.birthDate || '—'}</span>
                   </div>
 
-                  <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
-                      <CreditCard className="w-3 h-3 text-slate-400" /> Tài Khoản Ngân Hàng (Tk Bank)
-                    </span>
-                    <span className="font-mono font-bold text-slate-800 text-[11px] block">
-                      {userBankAccount || user.bankAccount || '—'}
-                    </span>
-                  </div>
+                  {(isAdmin || currentUser?.account?.toLowerCase() === user.account.toLowerCase()) && (
+                    <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
+                        <CreditCard className="w-3 h-3 text-slate-400" /> Tài Khoản Ngân Hàng (Tk Bank)
+                      </span>
+                      <span className="font-mono font-bold text-slate-800 text-[11px] block">
+                        {userBankAccount || user.bankAccount || '—'}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="sm:col-span-2 bg-indigo-50/60 p-2.5 rounded-xl border border-indigo-100 space-y-0.5">
                     <span className="text-[10px] text-indigo-500 uppercase font-bold tracking-wider block flex items-center gap-1">

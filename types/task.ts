@@ -209,6 +209,7 @@ export interface Task {
   requestedWeekNumber?: number; // Mốc tuần yêu cầu phân công
   parentTaskId?: string; // ID của task gốc khi rolled over sang tuần mới
   activityLogs?: TaskActivityLog[]; // Nhật ký lịch sử các lần cập nhật task
+  ticketId?: string; // ID của request ticket liên kết nếu task được sinh ra từ ticket
 }
 
 export interface WeeklyAwardSummary {
@@ -267,3 +268,50 @@ export interface ProjectResource {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export type TicketPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+export type TicketStatus = 'Open' | 'In Progress' | 'Resolved' | 'Closed' | 'Rejected';
+
+export interface TicketComment {
+  id: string;
+  ticketId: string;
+  authorAccount: string;
+  authorName: string;
+  authorRole?: UserRole;
+  authorSpecialization?: string;
+  content: string;
+  createdAt: string;
+  attachments?: string[];
+}
+
+export interface Ticket {
+  id: string;
+  code: string; // e.g. "REQ-001"
+  title: string;
+  description: string;
+  fromRole: Specialization; // Role / Team gửi request (e.g. "Design", "FE", "BE")
+  fromAccount: string; // Staff Code người tạo
+  fromName: string; // Tên người tạo
+  fromUserRole?: UserRole; // 'Admin', 'Leader', 'Advisor', 'Member'
+  toRole: Specialization; // Role / Team tiếp nhận xử lý (e.g. "BA", "BE", "Design")
+  assignedTo?: string; // Staff Code người trong team toRole được phân công
+  assignedToName?: string; // Tên người được phân công
+  createdTaskId?: string; // ID của task tương ứng đã tạo trong danh sách task của người được phân công
+  createdTaskTitle?: string;
+  priority: TicketPriority;
+  status: TicketStatus;
+  relatedTaskId?: string; // Liên kết task liên quan nếu có
+  relatedTaskTitle?: string;
+  relatedMilestoneId?: string; // Liên kết milestone liên quan nếu có
+  relatedMilestoneTitle?: string;
+  attachments?: string[]; // Danh sách link tài liệu, thiết kế, figma đính kèm
+  resolutionNote?: string; // Ghi chú giải pháp hoặc kết quả xử lý
+  resolvedBy?: string;
+  resolvedByName?: string;
+  resolvedAt?: string;
+  closedAt?: string;
+  comments?: TicketComment[];
+  createdAt: string;
+  updatedAt?: string;
+}
+

@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Milestone, User as UserType, isTaskUnworked } from '../types/task';
+import { Task, Milestone, User as UserType, isTaskUnworked, Ticket } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
+import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
 import { getWeekDateRangeStr } from './WorkHistoryView';
 import {
@@ -31,6 +32,7 @@ import {
   X,
   MessageSquare,
   ChevronDown,
+  Ticket as TicketIcon,
 } from 'lucide-react';
 
 interface NextWeekDefineViewProps {
@@ -54,6 +56,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     rejectTaskAssignment,
     confirmDialog,
     simulatedTime,
+    tickets,
   } = useApp();
 
   const nextWeek = selectedWeek + 1;
@@ -62,7 +65,30 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
+  const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [expandedMembers, setExpandedMembers] = useState<Record<string, boolean>>({});
+
+  const getLinkedTicket = (t: Task): Ticket | undefined => {
+    if (t.ticketId) {
+      const found = tickets.find((tk) => tk.id === t.ticketId);
+      if (found) return found;
+    }
+    return tickets.find(
+      (tk) =>
+        (tk.createdTaskId && tk.createdTaskId === t.id) ||
+        (tk.code && t.title && (t.title.includes(`[${tk.code}]`) || t.title.includes(tk.code))) ||
+        (t.ticketId && tk.id === t.ticketId)
+    );
+  };
+
+  const handleTaskClick = (t: Task) => {
+    const linkedTicket = getLinkedTicket(t);
+    if (linkedTicket) {
+      setViewingTicket(linkedTicket);
+    } else {
+      setViewingDetailTask(t);
+    }
+  };
 
   const toggleMemberExpanded = (account: string) => {
     setExpandedMembers((prev) => ({
@@ -676,13 +702,29 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                 </div>
 
                                 {/* Task Title */}
-                                <h5
-                                  onClick={() => setViewingDetailTask(t)}
-                                  className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition"
-                                  title="Bấm để xem chi tiết task"
-                                >
-                                  {t.title}
-                                </h5>
+                                <div className="space-y-1">
+                                  <h5
+                                    onClick={() => handleTaskClick(t)}
+                                    className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition"
+                                    title="Bấm để xem chi tiết task"
+                                  >
+                                    {t.title}
+                                  </h5>
+                                  {(() => {
+                                    const linkedTicket = getLinkedTicket(t);
+                                    const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                                    if (!isTicketTask) return null;
+                                    return (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 font-bold text-[10px] shadow-2xs"
+                                        title="Ticket yêu cầu liên team"
+                                      >
+                                        <TicketIcon className="w-3 h-3 text-purple-600 shrink-0" />
+                                        Ticket yêu cầu
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
 
                                 {/* Milestone (if any) */}
                                 {milestone && (
@@ -850,11 +892,26 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                               <div className="space-y-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span
-                                    onClick={() => setViewingDetailTask(t)}
+                                    onClick={() => handleTaskClick(t)}
                                     className="font-bold text-slate-800 hover:text-indigo-600 transition cursor-pointer leading-snug"
                                   >
                                     {t.title}
                                   </span>
+
+                                  {(() => {
+                                    const linkedTicket = getLinkedTicket(t);
+                                    const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                                    if (!isTicketTask) return null;
+                                    return (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 font-bold text-[10px] shadow-2xs"
+                                        title="Ticket yêu cầu liên team"
+                                      >
+                                        <TicketIcon className="w-3 h-3 text-purple-600 shrink-0" />
+                                        Ticket yêu cầu
+                                      </span>
+                                    );
+                                  })()}
 
                                   {t.priority === 'High' && (
                                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 border border-red-200 text-red-700 font-bold text-[10px] shrink-0">
@@ -961,13 +1018,27 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                       return (
                         <div
                           key={`mobile-task-${t.id}`}
-                          onClick={() => setViewingDetailTask(t)}
+                          onClick={() => handleTaskClick(t)}
                           className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5 shadow-2xs cursor-pointer"
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
                               #{t.id.replace('tsk-', '')}
                             </span>
+                            {(() => {
+                              const linkedTicket = getLinkedTicket(t);
+                              const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                              if (!isTicketTask) return null;
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-[10px]"
+                                  title="Ticket yêu cầu liên team"
+                                >
+                                  <TicketIcon className="w-3 h-3 text-purple-600" />
+                                  Ticket yêu cầu
+                                </span>
+                              );
+                            })()}
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
                               Kế hoạch Tuần {nextWeek}
                             </span>
@@ -1123,6 +1194,13 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
           }}
         />
       )}
+
+      {/* Ticket Detail Modal */}
+      <TicketDetailModal
+        ticket={viewingTicket}
+        isOpen={!!viewingTicket}
+        onClose={() => setViewingTicket(null)}
+      />
     </div>
   );
 };
