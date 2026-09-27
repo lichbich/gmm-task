@@ -2045,18 +2045,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: new Date().toISOString(),
     });
 
-    // Notify Leaders of the matching team and Admins about the assignment request
-    const task = tasks.find((t) => t.id === taskId);
-    const taskRole = (task?.role || '').toLowerCase().trim();
+    // Helper to normalize role names to standard tokens (prevent substring false positives)
+    const normalizeRoleToken = (role?: string): string => {
+      if (!role) return '';
+      const r = role.toLowerCase().trim();
+      if (r === 'designer' || r === 'design' || r.includes('thiết kế')) return 'design';
+      if (r === 'fe' || r === 'frontend' || r.includes('front-end') || r.includes('giao diện')) return 'fe';
+      if (r === 'be' || r === 'backend' || r.includes('back-end') || r.includes('máy chủ')) return 'be';
+      if (r === 'ba' || r.includes('business analyst') || r.includes('nghiệp vụ')) return 'ba';
+      if (r === 'devops' || r.includes('hạ tầng') || r.includes('cloud')) return 'devops';
+      if (r === 'ai' || r.includes('trí tuệ') || r.includes('machine learning')) return 'ai';
+      if (r === 'po' || r.includes('product owner')) return 'po';
+      if (r === 'qa' || r.includes('kiểm thử') || r.includes('tester')) return 'qa';
+      if (r === 'sa' || r.includes('kiến trúc')) return 'sa';
+      return r;
+    };
 
-    // Check if leader specializes in the task's role
+    // Determine the exact target role of this task
+    const task = tasks.find((t) => t.id === taskId);
+    let targetRole = normalizeRoleToken(task?.role);
+    if (!targetRole && task?.milestoneId) {
+      const parentMilestone = milestones.find((m) => m.id === task.milestoneId);
+      if (parentMilestone?.role && parentMilestone.role !== 'ALL') {
+        targetRole = normalizeRoleToken(parentMilestone.role);
+      }
+    }
+    if (!targetRole && task?.title) {
+      const prefixMatch = task.title.trim().match(/^(FE|BE|BA|Design|Designer|DevOps|AI|PO|QA|SA)\b/i);
+      if (prefixMatch) {
+        targetRole = normalizeRoleToken(prefixMatch[1]);
+      }
+    }
+
+    // Check if leader/advisor belongs strictly to this task's role
     const isLeaderOfRole = (u: any): boolean => {
       if (u.role !== 'Leader' && u.role !== 'Advisor') return false;
-      if (!taskRole) return true; // Fallback if task has no specific role
-      const specs = (u.specializations || []).map((s: string) => s.toLowerCase().trim());
-      return specs.some(
-        (s: string) => s === taskRole || s.includes(taskRole) || taskRole.includes(s)
-      );
+      if (!targetRole) return false; // If role is undetermined, do NOT broadcast to all leaders
+
+      const specs = [
+        ...(u.specializations || []),
+        ...(u.specialization ? [u.specialization] : []),
+      ].map((s: string) => normalizeRoleToken(s)).filter(Boolean);
+
+      return specs.includes(targetRole);
     };
 
     const targetUsers = users.filter((u) => {
