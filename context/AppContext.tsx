@@ -840,62 +840,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    const notifRef = ref(database, `${DB_ROOT_NODE}/notifications/${authSession.account}`);
+    const userAcc = authSession.account;
+    const lowerAcc = userAcc.toLowerCase();
     let isInitial = true;
 
-    const unsubscribe = onValue(
-      notifRef,
-      (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const rawList = Object.values(data) as AppNotification[];
-          // Deduplicate notifications (by id, and ignore exact duplicate titles within 3 seconds)
-          const seenIds = new Set<string>();
-          const seenSignatures = new Set<string>();
-          const list: AppNotification[] = [];
+    let rawNotifs1: Record<string, AppNotification> = {};
+    let rawNotifs2: Record<string, AppNotification> = {};
 
-          rawList.forEach((n) => {
-            if (!n || !n.id) return;
-            if (seenIds.has(n.id)) return;
-            seenIds.add(n.id);
+    const processAndSetNotifications = () => {
+      const merged = { ...rawNotifs1, ...rawNotifs2 };
+      const rawList = Object.values(merged) as AppNotification[];
+      const seenIds = new Set<string>();
+      const seenSignatures = new Set<string>();
+      const list: AppNotification[] = [];
 
-            // Deduplicate same event created within 3s window (e.g. from previous tests)
-            const timeWindow = Math.floor(new Date(n.createdAt).getTime() / 3000);
-            const signature = `${n.targetAccount}_${n.title}_${n.body}_${n.taskId || ''}_${timeWindow}`;
-            if (seenSignatures.has(signature)) return;
-            seenSignatures.add(signature);
+      rawList.forEach((n) => {
+        if (!n || !n.id) return;
+        if (seenIds.has(n.id)) return;
+        seenIds.add(n.id);
 
-            list.push(n);
-          });
+        const timeWindow = Math.floor(new Date(n.createdAt).getTime() / 3000);
+        const signature = `${(n.targetAccount || '').toLowerCase()}_${n.title}_${n.body}_${n.taskId || ''}_${timeWindow}`;
+        if (seenSignatures.has(signature)) return;
+        seenSignatures.add(signature);
 
-          list.sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        list.push(n);
+      });
+
+      list.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      // If a new unread notification arrives in real-time
+      if (!isInitial && list.length > 0) {
+        const latest = list[0];
+        const isRecent =
+          new Date(latest.createdAt).getTime() > Date.now() - 15000;
+        const isSelf =
+          latest.senderAccount &&
+          authSession?.account &&
+          latest.senderAccount.trim().toLowerCase() === authSession.account.trim().toLowerCase();
+        if (!latest.isRead && isRecent && !isSelf) {
+          playNotificationChime();
+          showLocalBrowserNotification(
+            latest.title,
+            latest.body,
+            latest.url || (latest.taskId ? `/?openTaskId=${latest.taskId}` : '/'),
+            latest.taskId ? `task-${latest.taskId}` : latest.id
           );
-
-          // If a new unread notification arrives in real-time
-          if (!isInitial && list.length > 0) {
-            const latest = list[0];
-            const isRecent =
-              new Date(latest.createdAt).getTime() > Date.now() - 15000;
-            const isSelf =
-              latest.senderAccount &&
-              authSession?.account &&
-              latest.senderAccount.trim().toLowerCase() === authSession.account.trim().toLowerCase();
-            if (!latest.isRead && isRecent && !isSelf) {
-              playNotificationChime();
-              showLocalBrowserNotification(
-                latest.title,
-                latest.body,
-                latest.url || (latest.taskId ? `/?openTaskId=${latest.taskId}` : '/'),
-                latest.taskId ? `task-${latest.taskId}` : latest.id
-              );
-            }
-          }
-
-          setNotifications(list);
-        } else {
-          setNotifications([]);
         }
+      }
+
+      setNotifications(list);
+    };
+
+    const notifRef1 = ref(database, `${DB_ROOT_NODE}/notifications/${userAcc}`);
+    const unsubscribe1 = onValue(
+      notifRef1,
+      (snapshot) => {
+        rawNotifs1 = snapshot.val() || {};
+        processAndSetNotifications();
         isInitial = false;
       },
       (err) => {
@@ -903,7 +907,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     );
 
-    return () => unsubscribe();
+    let unsubscribe2 = () => {};
+    if (lowerAcc !== userAcc) {
+      const notifRef2 = ref(database, `${DB_ROOT_NODE}/notifications/${lowerAcc}`);
+      unsubscribe2 = onValue(
+        notifRef2,
+        (snapshot) => {
+          rawNotifs2 = snapshot.val() || {};
+          processAndSetNotifications();
+        },
+        (err) => {
+          console.warn('Notifications lower listener warning:', err);
+        }
+      );
+    }
+
+    return () => {
+      unsubscribe1();
+      unsubscribe2();
+    };
   }, [isFirebaseConnected, authSession]);
 
   const unreadNotificationsCount = useMemo(() => {
@@ -921,6 +943,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ref(database, `${DB_ROOT_NODE}/notifications/${authSession.account}/${notifId}`),
         { isRead: true }
       ).catch(console.error);
+
+      if (authSession.account.toLowerCase() !== authSession.account) {
+        update(
+          ref(database, `${DB_ROOT_NODE}/notifications/${authSession.account.toLowerCase()}/${notifId}`),
+          { isRead: true }
+        ).catch(console.error);
+      }
     }
   };
 
@@ -935,6 +964,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatesObj[
             `${DB_ROOT_NODE}/notifications/${authSession.account}/${n.id}/isRead`
           ] = true;
+          if (authSession.account.toLowerCase() !== authSession.account) {
+            updatesObj[
+              `${DB_ROOT_NODE}/notifications/${authSession.account.toLowerCase()}/${n.id}/isRead`
+            ] = true;
+          }
         }
       });
       if (Object.keys(updatesObj).length > 0) {
@@ -2029,10 +2063,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (u.disabled || u.status === 'disabled') return false;
       if (u.account.toLowerCase() === memberAccount.toLowerCase()) return false;
 
-      // 1. Admin always receives notification
-      if (u.role === 'Admin') return true;
-
-      // 2. Leader / Advisor only if they belong to the same team/role as the task
+      // Only Leader / Advisor of the matching team/role receive assignment requests (Admin is excluded to avoid clutter)
       if (isLeaderOfRole(u)) return true;
 
       return false;

@@ -196,13 +196,38 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     [tasks]
   );
 
-  const roleOptions: DropdownOption[] = [
-    { value: 'ALL', label: 'Tất cả Role' },
-    ...roles.map((r) => ({
-      value: r.code,
-      label: r.name && r.name.toLowerCase() !== r.code.toLowerCase() ? `${r.code} (${r.name})` : r.code,
-    })),
-  ];
+// Preferred role display order: BA -> Designer/Design -> FE -> BE -> DevOps -> AI -> PO
+const PREFERRED_ROLE_ORDER = ['BA', 'Designer', 'Design', 'FE', 'BE', 'DevOps', 'AI', 'PO'];
+
+const getRoleOrderRank = (roleCode?: string): number => {
+  if (!roleCode) return 999;
+  const normalized = roleCode.trim().toLowerCase();
+  if (normalized === 'ba') return 1;
+  if (normalized === 'designer' || normalized === 'design') return 2;
+  if (normalized === 'fe') return 3;
+  if (normalized === 'be') return 4;
+  if (normalized === 'devops') return 5;
+  if (normalized === 'ai') return 6;
+  if (normalized === 'po') return 7;
+  return 100;
+};
+
+  const roleOptions: DropdownOption[] = useMemo(() => {
+    const sortedRoles = [...roles].sort((a, b) => {
+      const rankA = getRoleOrderRank(a.code);
+      const rankB = getRoleOrderRank(b.code);
+      if (rankA !== rankB) return rankA - rankB;
+      return (a.order || 0) - (b.order || 0);
+    });
+
+    return [
+      { value: 'ALL', label: 'Tất cả Role' },
+      ...sortedRoles.map((r) => ({
+        value: r.code,
+        label: r.name && r.name.toLowerCase() !== r.code.toLowerCase() ? `${r.code} (${r.name})` : r.code,
+      })),
+    ];
+  }, [roles]);
 
   const accountOptions: DropdownOption[] = useMemo(
     () => [
@@ -293,11 +318,25 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       .sort(sortByPriority);
   }, [tasks, selectedWeek, selectedYear, subTab, currentUser, searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus, milestones]);
 
-  const ROLE_ORDER: Specialization[] = roles.map((r) => r.code);
+  const ROLE_ORDER: Specialization[] = useMemo(() => {
+    const sortedRoles = [...roles].sort((a, b) => {
+      const rankA = getRoleOrderRank(a.code);
+      const rankB = getRoleOrderRank(b.code);
+      if (rankA !== rankB) return rankA - rankB;
+      return (a.order || 0) - (b.order || 0);
+    });
+    const codes = sortedRoles.map((r) => r.code);
+    PREFERRED_ROLE_ORDER.forEach((pRole) => {
+      if (!codes.some((c) => c.toLowerCase() === pRole.toLowerCase())) {
+        codes.push(pRole);
+      }
+    });
+    return codes;
+  }, [roles]);
 
   const getRoleConfig = (roleCode: string) => {
-    const rObj = roles.find((r) => r.code === roleCode);
-    const color = rObj?.color || 'indigo';
+    const rObj = roles.find((r) => r.code.toLowerCase() === roleCode.toLowerCase());
+    const color = rObj?.color || (roleCode.toLowerCase() === 'designer' || roleCode.toLowerCase() === 'design' ? 'amber' : roleCode.toLowerCase() === 'devops' ? 'cyan' : roleCode.toLowerCase() === 'ai' ? 'slate' : roleCode.toLowerCase() === 'po' ? 'purple' : 'indigo');
 
     // Rút gọn tên chuyên môn cho mobile (bỏ phần chú thích tiếng Việt dài dòng)
     let cleanMobileName = rObj ? rObj.name : roleCode;
@@ -305,7 +344,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       .replace(/\s*\([^)]*(Nghiệp vụ|Thiết kế|Kiểm thử|Lập trình|Vận hành|Hạ tầng|Phân tích|FE|BE)[^)]*\)/gi, '')
       .trim();
 
-    const desktopLabel = rObj ? `${rObj.code} (${rObj.name})` : `${roleCode} Team`;
+    const desktopLabel = rObj ? `${rObj.code} (${rObj.name})` : `${roleCode} (${roleCode})`;
     const mobileLabel = cleanMobileName || roleCode;
 
     const colorClasses: Record<string, { bg: string; text: string; badgeBg: string; border: string }> = {
@@ -374,7 +413,17 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     ROLE_ORDER.forEach((r) => roleMap.set(r, []));
 
     filteredTasks.forEach((t) => {
-      const list = roleMap.get(t.role);
+      let targetKey = t.role;
+      if (!roleMap.has(targetKey)) {
+        for (const k of roleMap.keys()) {
+          if (k.toLowerCase() === (t.role || '').toLowerCase()) {
+            targetKey = k;
+            break;
+          }
+        }
+      }
+
+      const list = roleMap.get(targetKey);
       if (list) {
         list.push(t);
       } else {
@@ -390,8 +439,14 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       }
     });
 
+    groups.sort((a, b) => {
+      const rankA = getRoleOrderRank(a.role);
+      const rankB = getRoleOrderRank(b.role);
+      return rankA - rankB;
+    });
+
     return groups;
-  }, [filteredTasks]);
+  }, [filteredTasks, ROLE_ORDER]);
 
   const totalEstimatedEffort =
     Math.round(filteredTasks.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0) * 100) / 100;
@@ -413,12 +468,19 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     switch (role) {
       case 'BA':
         return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800/80';
+      case 'Designer':
       case 'Design':
         return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800/80';
       case 'FE':
         return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800/80';
       case 'BE':
         return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/80';
+      case 'DevOps':
+        return 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/80 dark:text-cyan-300 dark:border-cyan-800/80';
+      case 'AI':
+        return 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+      case 'PO':
+        return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800/80';
       case 'QA':
         return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/80 dark:text-rose-300 dark:border-rose-800/80';
       default:
