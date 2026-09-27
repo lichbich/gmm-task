@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp, formatToLocalISOString } from '../context/AppContext';
 import { Clock, AlertTriangle, CheckCircle, RotateCcw, X } from 'lucide-react';
 
 interface TimeSimulatorProps {
@@ -24,7 +24,7 @@ export const TimeSimulator: React.FC<TimeSimulatorProps> = ({ isOpen, onClose })
     const now = new Date();
     if (type === 'RESET') {
       resetSimulatedTime();
-      setTempTime(now.toISOString().slice(0, 16));
+      setTempTime(formatToLocalISOString(now));
       return;
     }
 
@@ -42,7 +42,7 @@ export const TimeSimulator: React.FC<TimeSimulatorProps> = ({ isOpen, onClose })
       sunday.setHours(22, 15, 0, 0);
     }
 
-    const isoStr = sunday.toISOString().slice(0, 16);
+    const isoStr = formatToLocalISOString(sunday);
     setTempTime(isoStr);
     setSimulatedTime(isoStr);
   };

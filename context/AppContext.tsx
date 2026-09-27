@@ -29,7 +29,18 @@ export function getCurrentISOWeekAndYear(d: Date = new Date()): { week: number; 
   return { week: sheetWeekNumber, year: date.getFullYear() };
 }
 
+export const formatToLocalISOString = (date: Date = new Date()): string => {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 export function getWeekSundayNoon(weekNo: number, year: number = 2026): Date {
+
   const isoWeekNo = weekNo > 50 ? weekNo - 55 : weekNo;
 
   const jan4 = new Date(year, 0, 4);
@@ -495,7 +506,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const [simulatedTime, setSimulatedTimeState] = useState<string>(
-    new Date().toISOString().slice(0, 16)
+    formatToLocalISOString(new Date())
   );
 
   const initialWeekYear = getCurrentISOWeekAndYear();
@@ -2734,7 +2745,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const setSimulatedTime = (time: string) => setSimulatedTimeState(time);
-  const resetSimulatedTime = () => setSimulatedTimeState(new Date().toISOString().slice(0, 16));
+  const resetSimulatedTime = () => setSimulatedTimeState(formatToLocalISOString(new Date()));
 
   const resetToDefaultData = () => {
     seedFirebaseMockData();
