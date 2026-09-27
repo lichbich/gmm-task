@@ -117,7 +117,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   useEffect(() => {
     if (task) {
       setNotesText(task.notes || '');
-      setDescText(task.description || '');
+      if (!isEditingDesc) {
+        setDescText(task.description || '');
+      }
       setQuickComment('');
       setIsSaved(false);
       setEditingNoteIndex(null);

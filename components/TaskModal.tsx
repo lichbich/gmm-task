@@ -89,11 +89,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [notes, setNotes] = useState<string>('');
 
   useEffect(() => {
+    if (!isOpen) return;
+
     if (task) {
-      setTitle(task.title);
+      setTitle(task.title || '');
       setDescription(task.description || '');
-      setRole(task.role);
-      setEstimatedEffort(task.estimatedEffort || 2);
+      setRole(task.role || defaultRole);
+      setEstimatedEffort(task.estimatedEffort !== undefined ? task.estimatedEffort : 2);
       // Auto-select assignee: use existing assignee, or fallback to member requesting task, or defaultAssignee
       const initialAssignee =
         task.assigneeAccount ||
@@ -122,7 +124,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setPriority('Medium');
       setNotes('');
     }
-  }, [task, isOpen, milestones, users, defaultRole, initialMilestoneId, defaultAssignee, currentUser]);
+  }, [isOpen, task?.id]);
 
   if (!isRendered) return null;
 

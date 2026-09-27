@@ -266,6 +266,56 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_AUTH = 'gmm_task_auth_session_v2';
+const LOCAL_STORAGE_TASKS_CACHE = 'saho_tasks_cache_backup_v2';
+const LOCAL_STORAGE_DELETED_TASKS = 'saho_deleted_task_ids_v2';
+
+export const getLocalDeletedTaskIds = (): Set<string> => {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_DELETED_TASKS);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch (e) {
+    console.error('Failed to parse deleted task IDs', e);
+  }
+  return new Set();
+};
+
+export const addDeletedTaskId = (id: string) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const current = getLocalDeletedTaskIds();
+    current.add(id);
+    localStorage.setItem(LOCAL_STORAGE_DELETED_TASKS, JSON.stringify(Array.from(current)));
+  } catch (e) {
+    console.error('Failed to save deleted task ID', e);
+  }
+};
+
+export const getLocalTasksCache = (): Task[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_TASKS_CACHE);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length > 0) return arr;
+    }
+  } catch (e) {
+    console.error('Failed to parse local tasks cache', e);
+  }
+  return [];
+};
+
+export const saveLocalTasksCache = (taskList: Task[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_STORAGE_TASKS_CACHE, JSON.stringify(taskList));
+  } catch (e) {
+    console.error('Failed to save local tasks cache', e);
+  }
+};
 
 export const renumberMilestonesByRole = (rawMilestones: Milestone[]): { renumbered: Milestone[]; changed: boolean } => {
   let changed = false;
@@ -319,7 +369,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [roles, setRoles] = useState<RoleItem[]>(DEFAULT_ROLES);
   const [resources, setResources] = useState<ProjectResource[]>(INITIAL_PROJECT_RESOURCES as ProjectResource[]);
   const [milestones, setMilestones] = useState<Milestone[]>(INITIAL_MILESTONES);
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    const cached = getLocalTasksCache();
+    return cached.length > 0 ? cached : INITIAL_TASKS;
+  });
   const [weeklyArchives, setWeeklyArchives] = useState<WeeklyHistoryArchive[]>([]);
   const [authSession, setAuthSession] = useState<User | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
@@ -491,38 +544,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } else {
             setMilestones([]);
           }
-          if (data.tasks) {
-            const taskList = Object.values(data.tasks) as Task[];
-            let hasLegacy = false;
-            const formattedTasks = taskList.map((t: any) => {
-              const weekNo =
-                typeof t.weekNumber === 'number' && t.weekNumber <= 53 && (!t.year || t.year === 2026)
-                  ? t.weekNumber + 55
-                  : t.weekNumber;
-              if (weekNo !== t.weekNumber) {
-                hasLegacy = true;
-              }
-              return {
-                ...t,
-                weekNumber: weekNo,
-                activityLogs: Array.isArray(t.activityLogs)
-                  ? t.activityLogs
-                  : t.activityLogs && typeof t.activityLogs === 'object'
-                  ? Object.values(t.activityLogs)
-                  : [],
-              };
-            });
-            setTasks(formattedTasks);
-            if (hasLegacy) {
-              const obj: Record<string, Task> = {};
-              formattedTasks.forEach((t) => {
-                obj[t.id] = JSON.parse(JSON.stringify(t, (_, v) => (v === undefined ? null : v)));
-              });
-              set(ref(database, `${DB_ROOT_NODE}/tasks`), obj).catch(console.error);
+
+          // 1. Process explicit deletion tombstones from Firebase
+          const remoteDeletedTasks: Record<string, any> = data.deletedTasks || {};
+          const localDeletedSet = getLocalDeletedTaskIds();
+          Object.keys(remoteDeletedTasks).forEach((id) => localDeletedSet.add(id));
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(LOCAL_STORAGE_DELETED_TASKS, JSON.stringify(Array.from(localDeletedSet)));
+          }
+
+          // 2. Process remote tasks from Firebase
+          const rawRemoteTasks: Task[] = data.tasks ? (Object.values(data.tasks) as Task[]) : [];
+          let hasLegacy = false;
+          const formattedRemoteTasks: Task[] = rawRemoteTasks.map((t: any) => {
+            const weekNo =
+              typeof t.weekNumber === 'number' && t.weekNumber <= 53 && (!t.year || t.year === 2026)
+                ? t.weekNumber + 55
+                : t.weekNumber;
+            if (weekNo !== t.weekNumber) {
+              hasLegacy = true;
             }
-          } else {
+            return {
+              ...t,
+              weekNumber: weekNo,
+              activityLogs: Array.isArray(t.activityLogs)
+                ? t.activityLogs
+                : t.activityLogs && typeof t.activityLogs === 'object'
+                ? Object.values(t.activityLogs)
+                : [],
+            };
+          });
+
+          // 3. TASK INTEGRITY & ANTI-DATA-LOSS SHIELD:
+          // Check if any task in local cache is missing from remote DB WITHOUT an explicit deletion record
+          const localCached = getLocalTasksCache();
+          const remoteMap = new Map<string, Task>();
+          formattedRemoteTasks.forEach((t) => remoteMap.set(t.id, t));
+
+          const mergedTasks: Task[] = [...formattedRemoteTasks];
+          let restoredCount = 0;
+
+          localCached.forEach((cachedTask) => {
+            if (!remoteMap.has(cachedTask.id) && !localDeletedSet.has(cachedTask.id)) {
+              console.warn(
+                `🛡️ [DATA INTEGRITY SHIELD] Task "${cachedTask.title}" (${cachedTask.id}) was missing from database without deletion record. Auto-restoring to Firebase...`
+              );
+              mergedTasks.push(cachedTask);
+              restoredCount++;
+              // Restore to Firebase RTDB immediately
+              set(ref(database, `${DB_ROOT_NODE}/tasks/${cachedTask.id}`), sanitizeForFirebase(cachedTask)).catch(console.error);
+            }
+          });
+
+          if (mergedTasks.length > 0) {
+            setTasks(mergedTasks);
+            saveLocalTasksCache(mergedTasks);
+          } else if (rawRemoteTasks.length === 0 && localCached.length === 0) {
             setTasks([]);
           }
+
+          if (hasLegacy) {
+            const obj: Record<string, Task> = {};
+            formattedRemoteTasks.forEach((t) => {
+              obj[t.id] = sanitizeForFirebase(t);
+            });
+            update(ref(database, `${DB_ROOT_NODE}/tasks`), obj).catch(console.error);
+          }
+
           if (data.weeklyArchives) {
             const archivesList = Object.values(data.weeklyArchives) as WeeklyHistoryArchive[];
             setWeeklyArchives(archivesList);
@@ -661,7 +749,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (hasNewTasks) {
       const combined = [...tasks, ...newTasksToAdd];
       setTasks(combined);
-      syncTasksToFirebase(combined);
+      saveLocalTasksCache(combined);
+      newTasksToAdd.forEach((t) => {
+        saveTaskToFirebase(t).catch(console.error);
+      });
       Object.entries(ticketUpdates).forEach(([tid, up]) => {
         updateTicket(tid, up);
       });
@@ -1034,10 +1125,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await set(ref(database, `${DB_ROOT_NODE}/milestones`), obj);
   };
 
+  const saveTaskToFirebase = async (task: Task) => {
+    const clean = sanitizeForFirebase(task);
+    await set(ref(database, `${DB_ROOT_NODE}/tasks/${task.id}`), clean);
+  };
+
+  const updateTaskInFirebase = async (taskId: string, updates: Partial<Task>) => {
+    const clean = sanitizeForFirebase(updates);
+    await update(ref(database, `${DB_ROOT_NODE}/tasks/${taskId}`), clean);
+  };
+
+  const deleteTaskFromFirebase = async (taskId: string, deletedBy?: string) => {
+    const author = deletedBy || authSession?.account || 'user';
+    const tombstone = {
+      id: taskId,
+      deletedAt: new Date().toISOString(),
+      deletedBy: author,
+    };
+    addDeletedTaskId(taskId);
+    await set(ref(database, `${DB_ROOT_NODE}/deletedTasks/${taskId}`), tombstone);
+    await remove(ref(database, `${DB_ROOT_NODE}/tasks/${taskId}`));
+  };
+
+  const deleteMultipleTasksFromFirebase = async (taskIds: string[], deletedBy?: string) => {
+    if (!taskIds || taskIds.length === 0) return;
+    const author = deletedBy || authSession?.account || 'user';
+    const nowIso = new Date().toISOString();
+    const updatesObj: Record<string, any> = {};
+    taskIds.forEach((id) => {
+      updatesObj[`${DB_ROOT_NODE}/tasks/${id}`] = null;
+      updatesObj[`${DB_ROOT_NODE}/deletedTasks/${id}`] = {
+        id,
+        deletedAt: nowIso,
+        deletedBy: author,
+      };
+      addDeletedTaskId(id);
+    });
+    await update(ref(database), updatesObj);
+  };
+
   const syncTasksToFirebase = async (newTs: Task[]) => {
-    const obj: Record<string, Task> = {};
-    newTs.forEach((t) => { obj[t.id] = sanitizeForFirebase(t); });
-    await set(ref(database, `${DB_ROOT_NODE}/tasks`), obj);
+    if (!newTs || newTs.length === 0) return;
+    const updatesObj: Record<string, any> = {};
+    newTs.forEach((t) => {
+      updatesObj[`${DB_ROOT_NODE}/tasks/${t.id}`] = sanitizeForFirebase(t);
+    });
+    await update(ref(database), updatesObj);
   };
 
   const syncArchivesToFirebase = async (archives: WeeklyHistoryArchive[]) => {
@@ -1303,7 +1436,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return t;
     });
     setTasks(updatedTasks);
-    syncTasksToFirebase(updatedTasks);
+    saveLocalTasksCache(updatedTasks);
+    const affectedTasks = updatedTasks.filter((t) => t.assigneeAccount === '' && tasks.find(ot => ot.id === t.id)?.assigneeAccount !== '');
+    if (affectedTasks.length > 0) {
+      syncTasksToFirebase(affectedTasks).catch(console.error);
+    }
 
     // If deleting currently logged in user, log out
     if (authSession?.id === id) {
@@ -1364,7 +1501,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Update tasks' role
       const updatedTasks = tasks.map((t) => (t.role === oldCode ? { ...t, role: newCode } : t));
       setTasks(updatedTasks);
-      syncTasksToFirebase(updatedTasks);
+      saveLocalTasksCache(updatedTasks);
+      const affectedTasks = updatedTasks.filter((t) => t.role === newCode);
+      if (affectedTasks.length > 0) {
+        syncTasksToFirebase(affectedTasks).catch(console.error);
+      }
     }
   };
 
@@ -1449,12 +1590,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteMilestone = (id: string) => {
     const updatedMs = milestones.filter((m) => m.id !== id);
+    const tasksToDelete = tasks.filter((t) => t.milestoneId === id);
+    const taskIdsToDelete = tasksToDelete.map((t) => t.id);
     const updatedTs = tasks.filter((t) => t.milestoneId !== id);
     const { renumbered } = renumberMilestonesByRole(updatedMs);
     setMilestones(renumbered);
     setTasks(updatedTs);
+    saveLocalTasksCache(updatedTs);
     syncMilestonesToFirebase(renumbered);
-    syncTasksToFirebase(updatedTs);
+    deleteMultipleTasksFromFirebase(taskIdsToDelete, authSession?.account).catch(console.error);
   };
 
   // Task Management
@@ -1493,7 +1637,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     const updated = [...tasks, newTask];
     setTasks(updated);
-    syncTasksToFirebase(updated);
+    saveLocalTasksCache(updated);
+    saveTaskToFirebase(newTask).catch(console.error);
 
     // Push notification to assigned member (only if assigned to someone else)
     if (newTask.assigneeAccount) {
@@ -1521,16 +1666,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const authorRole = authSession?.role || 'Member';
     const updaterDisplay = `${authorName} (@${authorAccount})`;
 
+    let targetTaskUpdated: Task | null = null;
+
     const updated = tasks.map((t) => {
       if (t.id !== id) return t;
 
       if (options?.skipLog) {
-        return {
+        targetTaskUpdated = {
           ...t,
           ...updates,
           updatedAt: nowIso,
           updatedBy: updaterDisplay,
         };
+        return targetTaskUpdated;
       }
 
       const changes: string[] = [];
@@ -1587,16 +1735,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const existingLogs = Array.isArray(t.activityLogs) ? t.activityLogs : [];
 
-      return {
+      targetTaskUpdated = {
         ...t,
         ...updates,
         updatedAt: nowIso,
         updatedBy: updaterDisplay,
         activityLogs: [logEntry, ...existingLogs],
       };
+      return targetTaskUpdated;
     });
+
     setTasks(updated);
-    syncTasksToFirebase(updated);
+    saveLocalTasksCache(updated);
+    if (targetTaskUpdated) {
+      saveTaskToFirebase(targetTaskUpdated).catch(console.error);
+    }
 
     // Push notification if assignee was changed or assigned
     const currentTask = tasks.find((t) => t.id === id);
@@ -1716,14 +1869,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setTasks(updated);
-    syncTasksToFirebase(updated);
+    saveLocalTasksCache(updated);
+    saveTaskToFirebase(newTask).catch(console.error);
     return newTask;
   };
 
   const deleteTask = (id: string) => {
     const updated = tasks.filter((t) => t.id !== id);
     setTasks(updated);
-    syncTasksToFirebase(updated);
+    saveLocalTasksCache(updated);
+    deleteTaskFromFirebase(id, authSession?.account).catch(console.error);
   };
 
   const deleteTasks = (ids: string[]) => {
@@ -1731,20 +1886,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const idSet = new Set(ids);
     const updated = tasks.filter((t) => !idSet.has(t.id));
     setTasks(updated);
-    syncTasksToFirebase(updated);
+    saveLocalTasksCache(updated);
+    deleteMultipleTasksFromFirebase(ids, authSession?.account).catch(console.error);
   };
 
   const reorderTasksInMilestone = (milestoneId: string, orderedTaskIds: string[]) => {
+    const affectedTasks: Task[] = [];
     const updated = tasks.map((task) => {
       if (task.milestoneId !== milestoneId) return task;
       const newIndex = orderedTaskIds.indexOf(task.id);
       if (newIndex !== -1) {
-        return { ...task, orderInMilestone: newIndex + 1 };
+        const u = { ...task, orderInMilestone: newIndex + 1 };
+        affectedTasks.push(u);
+        return u;
       }
       return task;
     });
     setTasks(updated);
-    syncTasksToFirebase(updated);
+    saveLocalTasksCache(updated);
+    syncTasksToFirebase(affectedTasks).catch(console.error);
   };
 
   // Submit Task Report
@@ -1772,6 +1932,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const authorAccount = authSession?.account || 'member';
     const authorRole = authSession?.role || 'Member';
     const updaterDisplay = `${authorName} (@${authorAccount})`;
+
+    let updatedReportTask: Task | null = null;
 
     const updated = tasks.map((t) => {
       if (t.id !== taskId) return t;
@@ -1806,7 +1968,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const existingLogs = Array.isArray(t.activityLogs) ? t.activityLogs : [];
 
-      return {
+      updatedReportTask = {
         ...t,
         actualEffort,
         completionPercentage,
@@ -1818,9 +1980,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedBy: updaterDisplay,
         activityLogs: [logEntry, ...existingLogs],
       };
+      return updatedReportTask;
     });
+
     setTasks(updated);
-    syncTasksToFirebase(updated);
+    saveLocalTasksCache(updated);
+    if (updatedReportTask) {
+      saveTaskToFirebase(updatedReportTask).catch(console.error);
+    }
   };
 
   // Request task assignment from milestone / ad-hoc tasks (For Member)
@@ -1991,7 +2158,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setTasks(newTasksList);
-    syncTasksToFirebase(newTasksList);
+    saveLocalTasksCache(newTasksList);
+    syncTasksToFirebase(newTasksList).catch(console.error);
 
     setSelectedWeek(nextWeek);
   };
@@ -2289,7 +2457,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const newTasks = [...tasks];
         newTasks[existingTaskIndex] = updatedTask;
         setTasks(newTasks);
-        syncTasksToFirebase(newTasks);
+        saveLocalTasksCache(newTasks);
+        saveTaskToFirebase(updatedTask).catch(console.error);
         createdTaskId = updatedTask.id;
         createdTaskTitle = updatedTask.title;
       } else {
@@ -2359,7 +2528,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const updatedTasks = [...tasks, newTask];
         setTasks(updatedTasks);
-        syncTasksToFirebase(updatedTasks);
+        saveLocalTasksCache(updatedTasks);
+        saveTaskToFirebase(newTask).catch(console.error);
         createdTaskId = newTaskId;
         createdTaskTitle = taskTitle;
       }
@@ -2368,15 +2538,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (t) => (ticket.createdTaskId && t.id === ticket.createdTaskId) || (t.ticketId && t.ticketId === ticket.id)
       );
       if (existingTaskIndex !== -1) {
-        const newTasks = [...tasks];
-        newTasks[existingTaskIndex] = {
-          ...newTasks[existingTaskIndex],
+        const updatedTask: Task = {
+          ...tasks[existingTaskIndex],
           assigneeAccount: '',
           status: 'To do',
           updatedAt: now,
         };
+        const newTasks = [...tasks];
+        newTasks[existingTaskIndex] = updatedTask;
         setTasks(newTasks);
-        syncTasksToFirebase(newTasks);
+        saveLocalTasksCache(newTasks);
+        saveTaskToFirebase(updatedTask).catch(console.error);
       }
     }
 
@@ -2438,7 +2610,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newTasks = [...tasks];
       newTasks[linkedTaskIndex] = updatedTask;
       setTasks(newTasks);
-      syncTasksToFirebase(newTasks);
+      saveLocalTasksCache(newTasks);
+      saveTaskToFirebase(updatedTask).catch(console.error);
     }
 
     if (ticket.fromAccount.toLowerCase() !== authSession?.account.toLowerCase()) {

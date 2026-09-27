@@ -27,13 +27,12 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   const [notes, setNotes] = useState<string>('');
 
   useEffect(() => {
-    if (task) {
-      setActualEffort(task.actualEffort !== undefined ? task.actualEffort : 0);
-      setCompletionPercentage(task.completionPercentage || 0);
-      setStatus(task.status || 'In Progress');
-      setNotes(task.notes || '');
-    }
-  }, [task]);
+    if (!isOpen || !task) return;
+    setActualEffort(task.actualEffort !== undefined ? task.actualEffort : 0);
+    setCompletionPercentage(task.completionPercentage || 0);
+    setStatus(task.status || 'In Progress');
+    setNotes(task.notes || '');
+  }, [isOpen, task?.id]);
 
   if (!isRendered || !task) return null;
 

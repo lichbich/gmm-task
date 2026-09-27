@@ -97,21 +97,20 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   // Sync state when user prop changes or modal opens
   useEffect(() => {
-    if (user) {
-      setUserRole(user.role || 'Member');
-      setSelectedSpecs(user.specializations && user.specializations.length > 0 ? user.specializations : ['BA']);
-      setUserName(user.name || '');
-      setUserPhone(user.phone || '');
-      setUserEmail(user.email || '');
-      setUserCccd(user.cccd || '');
-      setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
-      setUserBankAccount(user.bankAccount || '');
-      setUserTechnologies(user.technologies || '');
-      setIsEditingProfile(false);
-      setErrorMsg('');
-      setSuccessMsg('');
-    }
-  }, [user, isOpen]);
+    if (!isOpen || !user) return;
+    setUserRole(user.role || 'Member');
+    setSelectedSpecs(user.specializations && user.specializations.length > 0 ? user.specializations : ['BA']);
+    setUserName(user.name || '');
+    setUserPhone(user.phone || '');
+    setUserEmail(user.email || '');
+    setUserCccd(user.cccd || '');
+    setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
+    setUserBankAccount(user.bankAccount || '');
+    setUserTechnologies(user.technologies || '');
+    setIsEditingProfile(false);
+    setErrorMsg('');
+    setSuccessMsg('');
+  }, [isOpen, user?.id]);
 
   if (!isRendered || !user) return null;
 
