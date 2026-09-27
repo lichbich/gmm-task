@@ -2745,22 +2745,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     await set(ref(database, `${DB_ROOT_NODE}/tickets/${ticketId}`), cleanTicket);
 
-    // Notify stakeholders (creator, assignee, and relevant Leaders/Advisors)
+    // Notify only participants of this specific request exchange (creator, assignee, and previous commenters)
     const recipientAccounts = new Set<string>();
     if (ticket.fromAccount) recipientAccounts.add(ticket.fromAccount);
     if (ticket.assignedTo) recipientAccounts.add(ticket.assignedTo);
-    users.forEach((u) => {
-      if (u.disabled || u.status === 'disabled') return;
-      if (u.role === 'Admin') recipientAccounts.add(u.account);
-      if (
-        (u.role === 'Leader' || u.role === 'Advisor') &&
-        (u.specializations?.includes(ticket.toRole) || u.specializations?.includes(ticket.fromRole))
-      ) {
-        recipientAccounts.add(u.account);
+    if (Array.isArray(ticket.comments)) {
+      ticket.comments.forEach((c) => {
+        if (c.authorAccount) recipientAccounts.add(c.authorAccount);
+      });
+    }
+
+    // Exclude the current commenter
+    recipientAccounts.forEach((acc) => {
+      if (acc.toLowerCase().trim() === authSession.account.toLowerCase().trim()) {
+        recipientAccounts.delete(acc);
       }
     });
-
-    recipientAccounts.delete(authSession.account);
 
     recipientAccounts.forEach((acc) => {
       sendPushNotification({
