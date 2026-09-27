@@ -299,15 +299,12 @@ export async function sendPushNotification({
   // 1. Direct Realtime DB write via Client SDK (Instant sub-100ms sync to all active sessions)
   try {
     set(ref(database, `${DB_ROOT_NODE}/notifications/${targetAccount}/${notificationId}`), notifPayload).catch(console.error);
-
-    if (targetAccount.toLowerCase() !== targetAccount) {
-      set(ref(database, `${DB_ROOT_NODE}/notifications/${targetAccount.toLowerCase()}/${notificationId}`), notifPayload).catch(console.error);
-    }
+    set(ref(database, `${DB_ROOT_NODE}/notifications/${targetAccount.toLowerCase()}/${notificationId}`), notifPayload).catch(console.error);
   } catch (err) {
     console.debug('Error writing direct notification:', err);
   }
 
-  // 2. Call server-side API to send Web Push to background/closed devices
+  // 2. Call server-side API to send Web Push to background/closed devices & guarantee DB write via REST
   try {
     fetch('/api/send-push', {
       method: 'POST',
@@ -324,7 +321,7 @@ export async function sendPushNotification({
         senderName,
         type,
         dbRootNode: DB_ROOT_NODE,
-        skipDbWrite: true,
+        skipDbWrite: false,
       }),
     }).catch((err) => {
       console.warn('[NotificationService] Background push fetch failed:', err);

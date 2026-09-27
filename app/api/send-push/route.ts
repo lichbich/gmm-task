@@ -144,9 +144,7 @@ export async function POST(req: Request) {
       // 1. Direct REST Realtime DB write to recipient's notification inbox
       if (!skipDbWrite) {
         await writeRtdbRest(`${dbRootNode}/notifications/${acc}/${notificationId}`, notifPayload);
-        if (acc.toLowerCase() !== acc) {
-          await writeRtdbRest(`${dbRootNode}/notifications/${acc.toLowerCase()}/${notificationId}`, notifPayload);
-        }
+        await writeRtdbRest(`${dbRootNode}/notifications/${acc.toLowerCase()}/${notificationId}`, notifPayload);
       }
 
       // 2. Send standard W3C WebPush via VAPID (100% reliable on Android Chrome & Safari iOS)
