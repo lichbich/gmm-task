@@ -34,8 +34,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Lock,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+import { Modal } from './common/Modal';
 import { UserDetailModal } from './UserDetailModal';
 
 export type SheetFieldKey =
@@ -832,7 +834,8 @@ export const UserManagementView: React.FC = () => {
     setIsUserFormOpen(false);
   };
 
-  const [showDisabledUsers, setShowDisabledUsers] = useState(false);
+  const [isLockedUsersModalOpen, setIsLockedUsersModalOpen] = useState(false);
+  const [lockedUsersSearchQuery, setLockedUsersSearchQuery] = useState('');
 
   const handleDeleteUser = (user: User) => {
     confirmDialog({
@@ -1591,18 +1594,15 @@ export const UserManagementView: React.FC = () => {
               <div className="flex items-center gap-2">
                 {isAdmin && users.some((u) => u.disabled || u.status === 'disabled') && (
                   <button
-                    onClick={() => setShowDisabledUsers(!showDisabledUsers)}
-                    className={`text-xs px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 font-semibold cursor-pointer ${
-                      showDisabledUsers
-                        ? 'bg-amber-50 text-amber-700 border-amber-300 shadow-2xs'
-                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                    }`}
-                    title={showDisabledUsers ? 'Ẩn các tài khoản đã bị khóa' : 'Xem danh sách tài khoản đã khóa trong DB'}
+                    onClick={() => {
+                      setLockedUsersSearchQuery('');
+                      setIsLockedUsersModalOpen(true);
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition flex items-center gap-1.5 font-semibold cursor-pointer shadow-2xs"
+                    title="Xem danh sách tài khoản đã khóa trong DB"
                   >
-                    <Eye className="w-3.5 h-3.5" />
-                    {showDisabledUsers
-                      ? 'Đang hiện tài khoản đã khóa'
-                      : `Tài khoản đã khóa (${users.filter((u) => u.disabled || u.status === 'disabled').length})`}
+                    <Lock className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Tài khoản đã khóa ({users.filter((u) => u.disabled || u.status === 'disabled').length})</span>
                   </button>
                 )}
 
@@ -1725,8 +1725,7 @@ export const UserManagementView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
                   {users
                     .filter((u) => {
-                      if (!isAdmin && (u.disabled || u.status === 'disabled')) return false;
-                      if (isAdmin && !showDisabledUsers && (u.disabled || u.status === 'disabled')) return false;
+                      if (u.disabled || u.status === 'disabled') return false;
 
                       if (!userSearchQuery.trim()) return true;
                       const q = userSearchQuery.toLowerCase().trim();
@@ -1894,8 +1893,7 @@ export const UserManagementView: React.FC = () => {
             <div className="md:hidden p-3 space-y-3">
               {users
                 .filter((u) => {
-                  if (!isAdmin && (u.disabled || u.status === 'disabled')) return false;
-                  if (isAdmin && !showDisabledUsers && (u.disabled || u.status === 'disabled')) return false;
+                  if (u.disabled || u.status === 'disabled') return false;
 
                   if (!userSearchQuery.trim()) return true;
                   const q = userSearchQuery.toLowerCase().trim();
@@ -2245,80 +2243,319 @@ export const UserManagementView: React.FC = () => {
         onClose={() => setSelectedUserForDetail(null)}
       />
 
-      {/* Temporary Credentials Modal (Displayed when Admin creates user or resets password) */}
-      {tempCredModal && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setTempCredModal(null);
-          }}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
-        >
-          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 relative animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
-                  <KeyRound className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800">{tempCredModal.title}</h3>
-                  <span className="text-[10px] text-purple-600 font-bold uppercase tracking-wider">Mật Khẩu Tạm Thời Hệ Thống</span>
-                </div>
-              </div>
+      {/* MODAL: DANH SÁCH TÀI KHOẢN ĐÃ KHÓA */}
+      <Modal
+        isOpen={isLockedUsersModalOpen}
+        onClose={() => setIsLockedUsersModalOpen(false)}
+        size="full"
+        className="max-w-4xl"
+        icon={
+          <div className="w-10 h-10 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center shadow-xs">
+            <Lock className="w-5 h-5" />
+          </div>
+        }
+        title={
+          <div className="flex items-center gap-2 flex-wrap text-base font-bold text-slate-800">
+            <span>Danh Sách Tài Khoản Đã Khóa</span>
+            <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 font-mono font-bold border border-rose-300">
+              {users.filter((u) => u.disabled || u.status === 'disabled').length} tài khoản
+            </span>
+          </div>
+        }
+        description="Danh sách các tài khoản đang bị vô hiệu hóa / ngưng hoạt động. Bạn có thể mở khóa để khôi phục quyền truy cập bất cứ lúc nào."
+        bodyClassName="space-y-3"
+        footer={
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-slate-500 font-medium">
+              Tổng cộng: <strong className="text-slate-800">{users.filter((u) => u.disabled || u.status === 'disabled').length}</strong> tài khoản đã khóa
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsLockedUsersModalOpen(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
+            >
+              Đóng
+            </button>
+          </div>
+        }
+      >
+        {/* Search Filter Bar */}
+        <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm theo tên, Staff Code, Gmail, SĐT..."
+              value={lockedUsersSearchQuery}
+              onChange={(e) => setLockedUsersSearchQuery(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 transition"
+            />
+            {lockedUsersSearchQuery && (
               <button
-                onClick={() => setTempCredModal(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 cursor-pointer"
+                onClick={() => setLockedUsersSearchQuery('')}
+                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                title="Xóa tìm kiếm"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
+            )}
+          </div>
+          <span className="text-[11px] text-slate-500 font-medium shrink-0">
+            Hiển thị{' '}
+            <strong className="text-slate-800">
+              {
+                users
+                  .filter((u) => u.disabled || u.status === 'disabled')
+                  .filter((u) => {
+                    if (!lockedUsersSearchQuery.trim()) return true;
+                    const q = lockedUsersSearchQuery.toLowerCase().trim();
+                    return (
+                      u.name.toLowerCase().includes(q) ||
+                      u.account.toLowerCase().includes(q) ||
+                      (u.email && u.email.toLowerCase().includes(q)) ||
+                      (u.phone && u.phone.toLowerCase().includes(q)) ||
+                      (u.technologies && u.technologies.toLowerCase().includes(q)) ||
+                      (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
+                    );
+                  }).length
+              }
+            </strong>{' '}
+            / {users.filter((u) => u.disabled || u.status === 'disabled').length} tài khoản
+          </span>
+        </div>
+
+        {/* Content Body */}
+        {users.filter((u) => u.disabled || u.status === 'disabled').length === 0 ? (
+          <div className="py-10 text-center flex flex-col items-center justify-center space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <h4 className="text-sm font-bold text-slate-800">Không có tài khoản nào bị khóa</h4>
+            <p className="text-xs text-slate-500 max-w-sm">
+              Tất cả các tài khoản nhân viên đều đang hoạt động bình thường trên hệ thống.
+            </p>
+          </div>
+        ) : users
+            .filter((u) => u.disabled || u.status === 'disabled')
+            .filter((u) => {
+              if (!lockedUsersSearchQuery.trim()) return true;
+              const q = lockedUsersSearchQuery.toLowerCase().trim();
+              return (
+                u.name.toLowerCase().includes(q) ||
+                u.account.toLowerCase().includes(q) ||
+                (u.email && u.email.toLowerCase().includes(q)) ||
+                (u.phone && u.phone.toLowerCase().includes(q)) ||
+                (u.technologies && u.technologies.toLowerCase().includes(q)) ||
+                (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
+              );
+            }).length === 0 ? (
+          <div className="py-10 text-center flex flex-col items-center justify-center space-y-2">
+            <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center">
+              <Search className="w-5 h-5" />
+            </div>
+            <h4 className="text-sm font-bold text-slate-700">Không tìm thấy tài khoản phù hợp</h4>
+            <p className="text-xs text-slate-400">
+              Thử tìm kiếm với từ khóa khác (tên nhân viên, staff code, email hoặc số điện thoại).
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3 pt-1">
+            {/* Desktop Table */}
+            <div className="hidden sm:block border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
+                    <th className="py-2.5 px-3 w-10 text-center">STT</th>
+                    <th className="py-2.5 px-3">STAFF CODE</th>
+                    <th className="py-2.5 px-4">HỌ VÀ TÊN</th>
+                    <th className="py-2.5 px-3">GMAIL / SĐT</th>
+                    <th className="py-2.5 px-3 text-center">ROLE</th>
+                    <th className="py-2.5 px-3 text-center">LEVEL</th>
+                    <th className="py-2.5 px-3">CÔNG NGHỆ</th>
+                    <th className="py-2.5 px-3 text-right">THAO TÁC</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                  {users
+                    .filter((u) => u.disabled || u.status === 'disabled')
+                    .filter((u) => {
+                      if (!lockedUsersSearchQuery.trim()) return true;
+                      const q = lockedUsersSearchQuery.toLowerCase().trim();
+                      return (
+                        u.name.toLowerCase().includes(q) ||
+                        u.account.toLowerCase().includes(q) ||
+                        (u.email && u.email.toLowerCase().includes(q)) ||
+                        (u.phone && u.phone.toLowerCase().includes(q)) ||
+                        (u.technologies && u.technologies.toLowerCase().includes(q)) ||
+                        (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
+                      );
+                    })
+                    .map((u, idx) => (
+                      <tr key={u.id} className="hover:bg-slate-50/80 transition">
+                        <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                          {idx + 1}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" title="Tài khoản đã bị khóa" />
+                            <button
+                              onClick={() => setSelectedUserForDetail(u)}
+                              className="hover:underline text-indigo-700 font-bold focus:outline-none cursor-pointer"
+                              title="Xem chi tiết thành viên"
+                            >
+                              {u.account}
+                            </button>
+                            <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[9px] font-bold border border-rose-200">
+                              Đã khóa
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-4 font-bold text-slate-800">
+                          <button
+                            onClick={() => setSelectedUserForDetail(u)}
+                            className="text-left font-bold text-slate-800 hover:text-indigo-600 hover:underline transition focus:outline-none cursor-pointer"
+                            title="Xem chi tiết thành viên"
+                          >
+                            {u.name}
+                          </button>
+                        </td>
+                        <td className="py-2.5 px-3 text-[11px]">
+                          <div className="text-slate-700 font-semibold">{u.email || '—'}</div>
+                          <div className="text-slate-400 font-mono text-[10px]">{u.phone || '—'}</div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex flex-wrap justify-center gap-1">
+                            {(u.specializations || ['BA']).map((s) => {
+                              const rObj = roles.find((r) => r.code === s);
+                              const style = getRoleStyle(rObj?.color);
+                              return (
+                                <span
+                                  key={s}
+                                  className={`px-2 py-0.5 rounded ${style.bg} ${style.text} border ${style.border} font-bold text-[10px]`}
+                                >
+                                  {s}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                              u.role === 'Admin'
+                                ? 'bg-purple-100 text-purple-700 border-purple-300'
+                                : u.role === 'Leader'
+                                ? 'bg-amber-100 text-amber-700 border-amber-300'
+                                : u.role === 'Advisor'
+                                ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                                : 'bg-blue-100 text-blue-700 border-blue-300'
+                            }`}
+                          >
+                            {u.role}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-[11px] text-slate-600 font-semibold">
+                          {u.technologies || '—'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreUser(u)}
+                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-2xs"
+                            title="Khôi phục & Mở khóa tài khoản này"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Mở Khóa</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             </div>
 
-            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
-              <p className="text-xs text-slate-600 leading-relaxed">
-                {tempCredModal.subtitle}
-              </p>
-
-              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-medium">Họ & Tên:</span>
-                  <span className="font-bold text-slate-800">{tempCredModal.name}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-500 font-medium">Staff Code (Tài khoản):</span>
-                  <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
-                    {tempCredModal.account}
-                  </span>
-                </div>
-                <div className="pt-2.5 border-t border-slate-200 flex justify-between items-center">
-                  <div>
-                    <span className="text-[10px] text-amber-700 uppercase font-bold tracking-wider block">Mật Khẩu Tạm Thời</span>
-                    <span className="font-mono font-black text-amber-800 text-base tracking-wider">
-                      {tempCredModal.tempPassword}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyPasswordOnly(tempCredModal.tempPassword)}
-                    className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-                    title="Chỉ sao chép mật khẩu"
+            {/* Mobile Card List */}
+            <div className="sm:hidden space-y-2.5">
+              {users
+                .filter((u) => u.disabled || u.status === 'disabled')
+                .filter((u) => {
+                  if (!lockedUsersSearchQuery.trim()) return true;
+                  const q = lockedUsersSearchQuery.toLowerCase().trim();
+                  return (
+                    u.name.toLowerCase().includes(q) ||
+                    u.account.toLowerCase().includes(q) ||
+                    (u.email && u.email.toLowerCase().includes(q)) ||
+                    (u.phone && u.phone.toLowerCase().includes(q)) ||
+                    (u.technologies && u.technologies.toLowerCase().includes(q)) ||
+                    (u.specializations && u.specializations.some((s) => s.toLowerCase().includes(q)))
+                  );
+                })
+                .map((u) => (
+                  <div
+                    key={`locked-mobile-${u.id}`}
+                    className="p-3.5 rounded-2xl border border-rose-200 bg-rose-50/30 space-y-2.5"
                   >
-                    {copiedField === 'password' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedField === 'password' ? 'Đã chép!' : 'Chép MK'}</span>
-                  </button>
-                </div>
-              </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center shrink-0">
+                          {u.account.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <button
+                            onClick={() => setSelectedUserForDetail(u)}
+                            className="font-bold text-xs text-slate-800 text-left hover:text-purple-600 block leading-tight cursor-pointer"
+                          >
+                            {u.name}
+                          </button>
+                          <span className="font-mono text-[11px] text-indigo-600 font-bold">
+                            @{u.account}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold border border-rose-200 shrink-0">
+                        Đã khóa
+                      </span>
+                    </div>
 
-              <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-indigo-600" />
-                  Cơ chế bảo mật đăng nhập lần đầu
-                </div>
-                <p className="text-indigo-800 leading-snug">
-                  Khi nhân viên đăng nhập bằng mật khẩu tạm này, hệ thống sẽ tự động bắt buộc đổi sang mật khẩu chính thức và mật khẩu tạm sẽ bị hủy.
-                </p>
-              </div>
+                    <div className="flex items-center justify-between pt-2 border-t border-rose-100 text-xs">
+                      <div className="text-slate-500 text-[11px]">
+                        {u.email || u.phone || 'Chưa cập nhật email'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreUser(u)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer shadow-xs"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Mở Khóa</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
             </div>
+          </div>
+        )}
+      </Modal>
 
-            <div className="flex items-center gap-2 p-3.5 sm:p-4 border-t border-slate-100 bg-slate-50/80 shrink-0">
+      {/* Temporary Credentials Modal (Displayed when Admin creates user or resets password) */}
+      <Modal
+        isOpen={!!tempCredModal}
+        onClose={() => setTempCredModal(null)}
+        size="md"
+        icon={
+          <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shadow-xs shrink-0">
+            <KeyRound className="w-5 h-5" />
+          </div>
+        }
+        title={
+          <div>
+            <div className="text-sm sm:text-base font-bold text-slate-800">{tempCredModal?.title || 'Thông Tin Mật Khẩu'}</div>
+            <span className="text-[10px] text-purple-600 font-bold uppercase tracking-wider block">Mật Khẩu Tạm Thời Hệ Thống</span>
+          </div>
+        }
+        footer={
+          tempCredModal ? (
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => handleCopyAllInfo(tempCredModal.account, tempCredModal.name, tempCredModal.tempPassword)}
@@ -2335,175 +2572,89 @@ export const UserManagementView: React.FC = () => {
                 Đóng
               </button>
             </div>
+          ) : null
+        }
+      >
+        {tempCredModal && (
+          <div className="space-y-4">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {tempCredModal.subtitle}
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-medium">Họ & Tên:</span>
+                <span className="font-bold text-slate-800">{tempCredModal.name}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-medium">Staff Code (Tài khoản):</span>
+                <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                  {tempCredModal.account}
+                </span>
+              </div>
+              <div className="pt-2.5 border-t border-slate-200 flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] text-amber-700 uppercase font-bold tracking-wider block">Mật Khẩu Tạm Thời</span>
+                  <span className="font-mono font-black text-amber-800 text-base tracking-wider">
+                    {tempCredModal.tempPassword}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyPasswordOnly(tempCredModal.tempPassword)}
+                  className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                  title="Chỉ sao chép mật khẩu"
+                >
+                  {copiedField === 'password' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedField === 'password' ? 'Đã chép!' : 'Chép MK'}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                Cơ chế bảo mật đăng nhập lần đầu
+              </div>
+              <p className="text-indigo-800 leading-snug">
+                Khi nhân viên đăng nhập bằng mật khẩu tạm này, hệ thống sẽ tự động bắt buộc đổi sang mật khẩu chính thức và mật khẩu tạm sẽ bị hủy.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Batch Temporary Credentials Modal */}
-      {batchCredModal && (
-        <div
-          onMouseDown={(e) => {
-            isMouseDownOnBatchBackdrop.current = e.target === e.currentTarget;
-          }}
-          onClick={(e) => {
-            if (isMouseDownOnBatchBackdrop.current && e.target === e.currentTarget) {
-              setBatchCredModal(null);
-            }
-            isMouseDownOnBatchBackdrop.current = false;
-          }}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
-        >
-          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden text-slate-800 relative max-h-[92vh] flex flex-col animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                  <KeyRound className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
-                    Danh Sách Mật Khẩu Tạm Thời
-                    <span className="text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-mono font-bold border border-amber-300">
-                      {batchCredModal.results.length} thành viên
-                    </span>
-                  </h3>
-                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                    {batchCredModal.newlyGeneratedCount > 0
-                      ? `Đã tạo mật khẩu mới cho ${batchCredModal.newlyGeneratedCount} người và giữ nguyên mật khẩu của ${batchCredModal.results.length - batchCredModal.newlyGeneratedCount} người đã có.`
-                      : `Danh sách ${batchCredModal.results.length} nhân sự mới đang có mật khẩu tạm chờ đăng nhập lần đầu.`}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setBatchCredModal(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Quick Copy Action Banner */}
-            <div className="p-3 sm:p-4 bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-indigo-500/10 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-              <div className="text-xs text-slate-700 font-medium">
-                <span className="font-bold text-slate-900 block sm:inline">1 Click sao chép:</span> Định dạng rõ ràng, sẵn sàng paste vào Slack / Zalo / Telegram.
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCopyBatchList(batchCredModal.results)}
-                className="w-full sm:w-auto px-4 sm:px-5 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer shrink-0"
-              >
-                {batchCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{batchCopied ? 'Đã Sao Chép Toàn Bộ Danh Sách!' : 'Sao Chép Toàn Bộ Gửi Nhóm'}</span>
-              </button>
-            </div>
-
-            {/* Search Filter Bar */}
-            <div className="px-4 sm:px-6 pt-3 pb-2 border-b border-slate-100 flex items-center justify-between gap-3 shrink-0">
-              <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="Lọc theo tên hoặc Staff Code..."
-                  value={batchSearchQuery}
-                  onChange={(e) => setBatchSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-100"
-                />
-              </div>
-              <span className="text-[11px] text-slate-400 font-medium shrink-0">
-                Hiển thị {batchCredModal.results.filter((u) => {
-                  if (!batchSearchQuery.trim()) return true;
-                  const q = batchSearchQuery.toLowerCase().trim();
-                  return u.name.toLowerCase().includes(q) || u.account.toLowerCase().includes(q);
-                }).length} / {batchCredModal.results.length}
+      <Modal
+        isOpen={!!batchCredModal}
+        onClose={() => setBatchCredModal(null)}
+        size="2xl"
+        className="max-w-2xl"
+        icon={
+          <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shadow-xs shrink-0">
+            <KeyRound className="w-5 h-5" />
+          </div>
+        }
+        title={
+          <div className="flex items-center gap-2 flex-wrap text-base font-bold text-slate-800">
+            <span>Danh Sách Mật Khẩu Tạm Thời</span>
+            {batchCredModal && (
+              <span className="text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-mono font-bold border border-amber-300">
+                {batchCredModal.results.length} thành viên
               </span>
-            </div>
-
-            {/* Scrollable Table List */}
-            <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-3 overscroll-contain">
-              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
-                      <th className="py-2.5 px-3 w-10 text-center">STT</th>
-                      <th className="py-2.5 px-3">STAFF CODE</th>
-                      <th className="py-2.5 px-4">HỌ VÀ TÊN</th>
-                      <th className="py-2.5 px-3">MẬT KHẨU TẠM</th>
-                      <th className="py-2.5 px-3 text-right">GỬI RIÊNG</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                    {batchCredModal.results
-                      .filter((u) => {
-                        if (!batchSearchQuery.trim()) return true;
-                        const q = batchSearchQuery.toLowerCase().trim();
-                        return u.name.toLowerCase().includes(q) || u.account.toLowerCase().includes(q);
-                      })
-                      .map((u, idx) => (
-                        <tr key={u.id} className="hover:bg-slate-50/80 transition">
-                          <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                            {idx + 1}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
-                            <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                              @{u.account}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-4 font-bold text-slate-800">
-                            {u.name}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="inline-flex items-center gap-1 font-mono font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">
-                                <KeyRound className="w-3 h-3 text-amber-600" />
-                                {u.tempPassword}
-                              </span>
-                              {u.isNewlyGenerated && (
-                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded border border-emerald-200">
-                                  Mới
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleCopyIndividualFromBatch(u.account, u.name, u.tempPassword, u.id)}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition inline-flex items-center gap-1 active:scale-95"
-                              title="Sao chép nội dung tin nhắn riêng cho thành viên này"
-                            >
-                              {individualCopiedId === u.id ? (
-                                <>
-                                  <Check className="w-3 h-3 text-emerald-600" />
-                                  <span className="text-emerald-700">Đã chép</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3 text-slate-400" />
-                                  <span>Chép info</span>
-                                </>
-                              )}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Instructions Reminder */}
-              <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-indigo-600" />
-                  Quy trình kích hoạt:
-                </div>
-                <p className="text-indigo-800 leading-snug">
-                  Nhân viên chỉ cần đăng nhập bằng Staff Code và Mật khẩu tạm thời. Khi đăng nhập thành công, hệ thống sẽ tự động bắt buộc đổi sang mật khẩu chính thức và hủy mật khẩu tạm.
-                </p>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 bg-slate-50/50 shrink-0">
+            )}
+          </div>
+        }
+        description={
+          batchCredModal
+            ? batchCredModal.newlyGeneratedCount > 0
+              ? `Đã tạo mật khẩu mới cho ${batchCredModal.newlyGeneratedCount} người và giữ nguyên mật khẩu của ${batchCredModal.results.length - batchCredModal.newlyGeneratedCount} người đã có.`
+              : `Danh sách ${batchCredModal.results.length} nhân sự mới đang có mật khẩu tạm chờ đăng nhập lần đầu.`
+            : undefined
+        }
+        footer={
+          batchCredModal ? (
+            <div className="flex items-center justify-between">
               <span className="text-xs text-slate-500 font-medium">
                 Tổng cộng: <strong className="text-slate-800">{batchCredModal.results.length}</strong> tài khoản
               </span>
@@ -2525,487 +2676,558 @@ export const UserManagementView: React.FC = () => {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-      {/* MODAL: THÊM CỘT MỚI VÀO SHEET MAPPING */}
-      {isAddColumnOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl border border-purple-200 max-w-md w-full p-5 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shadow-xs">
-                  <Plus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-800">Thêm Cột Mới Khớp Với Sheet</h4>
-                  <p className="text-[11px] text-slate-500">Đặt tên cột trên Sheet và chọn kiểu dữ liệu tương ứng</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAddColumnOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleConfirmAddColumn();
-                }
-              }}
-              className="space-y-3.5"
-            >
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  1. Tên cột hiển thị (Khớp với tiêu đề trên Sheet): <span className="text-rose-500">*</span>
-                </label>
+          ) : null
+        }
+      >
+        {batchCredModal && (
+          <div className="space-y-3">
+            {/* Search Filter Bar */}
+            <div className="pt-1 pb-1 flex items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  value={newColName}
-                  onChange={(e) => setNewColName(e.target.value)}
-                  placeholder="VD: Họ & Tên, Mã NV, CCCD, Link CV, v.v..."
-                  className="w-full bg-slate-50 border border-slate-300 focus:border-purple-600 focus:bg-white rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-200 transition font-medium"
-                  autoFocus
+                  placeholder="Lọc theo tên hoặc Staff Code..."
+                  value={batchSearchQuery}
+                  onChange={(e) => setBatchSearchQuery(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-100 transition"
                 />
               </div>
+              <span className="text-[11px] text-slate-400 font-medium shrink-0">
+                Hiển thị {batchCredModal.results.filter((u) => {
+                  if (!batchSearchQuery.trim()) return true;
+                  const q = batchSearchQuery.toLowerCase().trim();
+                  return u.name.toLowerCase().includes(q) || u.account.toLowerCase().includes(q);
+                }).length} / {batchCredModal.results.length}
+              </span>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  2. Gán vào trường thông tin thành viên (Kiểu dữ liệu):
-                </label>
-                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
-                  {AVAILABLE_SHEET_FIELDS.map((field) => {
-                    const isSelected = newColKey === field.key;
-                    return (
-                      <button
-                        key={field.key}
-                        type="button"
-                        onClick={() => {
-                          setNewColKey(field.key);
-                          if (!newColName || AVAILABLE_SHEET_FIELDS.some((f) => f.defaultName === newColName)) {
-                            setNewColName(field.defaultName);
-                          }
-                        }}
-                        className={`text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-between cursor-pointer ${
-                          isSelected
-                            ? 'bg-purple-600 text-white font-bold shadow-xs'
-                            : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-purple-50 hover:text-purple-700'
-                        }`}
-                      >
-                        <span className="truncate text-[11px]">{field.label}</span>
-                        {isSelected && <Check className="w-3 h-3 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+            {/* Table List */}
+            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
+                    <th className="py-2.5 px-3 w-10 text-center">STT</th>
+                    <th className="py-2.5 px-3">STAFF CODE</th>
+                    <th className="py-2.5 px-4">HỌ VÀ TÊN</th>
+                    <th className="py-2.5 px-3">MẬT KHẨU TẠM</th>
+                    <th className="py-2.5 px-3 text-right">GỬI RIÊNG</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                  {batchCredModal.results
+                    .filter((u) => {
+                      if (!batchSearchQuery.trim()) return true;
+                      const q = batchSearchQuery.toLowerCase().trim();
+                      return u.name.toLowerCase().includes(q) || u.account.toLowerCase().includes(q);
+                    })
+                    .map((u, idx) => (
+                      <tr key={u.id} className="hover:bg-slate-50/80 transition">
+                        <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                          {idx + 1}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
+                          <span className="bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                            @{u.account}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 font-bold text-slate-800">
+                          {u.name}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="inline-flex items-center gap-1 font-mono font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">
+                              <KeyRound className="w-3 h-3 text-amber-600" />
+                              {u.tempPassword}
+                            </span>
+                            {u.isNewlyGenerated && (
+                              <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[9px] font-bold rounded border border-emerald-200">
+                                Mới
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyIndividualFromBatch(u.account, u.name, u.tempPassword, u.id)}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition inline-flex items-center gap-1 active:scale-95 cursor-pointer"
+                            title="Sao chép nội dung tin nhắn riêng cho thành viên này"
+                          >
+                            {individualCopiedId === u.id ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span className="text-emerald-700">Đã chép</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3 text-slate-400" />
+                                <span>Chép info</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAddColumnOpen(false)}
-                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleConfirmAddColumn()}
-                  className="px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Thêm Vào Danh Sách</span>
-                </button>
+            {/* Instructions Reminder */}
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                Quy trình kích hoạt:
               </div>
+              <p className="text-indigo-800 leading-snug">
+                Nhân viên chỉ cần đăng nhập bằng Staff Code và Mật khẩu tạm thời. Khi đăng nhập thành công, hệ thống sẽ tự động bắt buộc đổi sang mật khẩu chính thức và hủy mật khẩu tạm.
+              </p>
+            </div>
+          </div>
+        )}
+      </Modal>
+      {/* MODAL: THÊM CỘT MỚI VÀO SHEET MAPPING */}
+      <Modal
+        isOpen={isAddColumnOpen}
+        onClose={() => setIsAddColumnOpen(false)}
+        size="md"
+        icon={
+          <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shadow-xs shrink-0">
+            <Plus className="w-4 h-4" />
+          </div>
+        }
+        title="Thêm Cột Mới Khớp Với Sheet"
+        description="Đặt tên cột trên Sheet và chọn kiểu dữ liệu tương ứng"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsAddColumnOpen(false)}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              onClick={() => handleConfirmAddColumn()}
+              className="px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Thêm Vào Danh Sách</span>
+            </button>
+          </div>
+        }
+      >
+        <div
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleConfirmAddColumn();
+            }
+          }}
+          className="space-y-3.5"
+        >
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              1. Tên cột hiển thị (Khớp với tiêu đề trên Sheet): <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={newColName}
+              onChange={(e) => setNewColName(e.target.value)}
+              placeholder="VD: Họ & Tên, Mã NV, CCCD, Link CV, v.v..."
+              className="w-full bg-slate-50 border border-slate-300 focus:border-purple-600 focus:bg-white rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-200 transition font-medium"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              2. Gán vào trường thông tin thành viên (Kiểu dữ liệu):
+            </label>
+            <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
+              {AVAILABLE_SHEET_FIELDS.map((field) => {
+                const isSelected = newColKey === field.key;
+                return (
+                  <button
+                    key={field.key}
+                    type="button"
+                    onClick={() => {
+                      setNewColKey(field.key);
+                      if (!newColName || AVAILABLE_SHEET_FIELDS.some((f) => f.defaultName === newColName)) {
+                        setNewColName(field.defaultName);
+                      }
+                    }}
+                    className={`text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-between cursor-pointer ${
+                      isSelected
+                        ? 'bg-purple-600 text-white font-bold shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-purple-50 hover:text-purple-700'
+                    }`}
+                  >
+                    <span className="truncate text-[11px]">{field.label}</span>
+                    {isSelected && <Check className="w-3 h-3 shrink-0" />}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* MODAL: CHỈNH SỬA CỘT HIỆN CÓ TRÊN SHEET MAPPING */}
-      {editingColIdx !== null && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl border border-purple-200 max-w-md w-full p-5 space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shadow-xs">
-                  <Edit2 className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-800">
-                    Chỉnh Sửa Cột Số {editingColIdx + 1}
-                  </h4>
-                  <p className="text-[11px] text-slate-500">Cập nhật tên hiển thị hoặc thay đổi trường dữ liệu gán</p>
-                </div>
-              </div>
+      <Modal
+        isOpen={editingColIdx !== null}
+        onClose={() => setEditingColIdx(null)}
+        size="md"
+        icon={
+          <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shadow-xs shrink-0">
+            <Edit2 className="w-4 h-4" />
+          </div>
+        }
+        title={`Chỉnh Sửa Cột Số ${(editingColIdx ?? 0) + 1}`}
+        description="Cập nhật tên hiển thị hoặc thay đổi trường dữ liệu gán"
+        footer={
+          <div className="flex items-center justify-between w-full">
+            {sheetColumns.length > 1 ? (
+              <button
+                type="button"
+                onClick={() => editingColIdx !== null && handleRemoveColumn(editingColIdx)}
+                className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xóa Cột</span>
+              </button>
+            ) : <div />}
+
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setEditingColIdx(null)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmEditColumn()}
+                className="px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Lưu Thay Đổi</span>
               </button>
             </div>
+          </div>
+        }
+      >
+        <div
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleConfirmEditColumn();
+            }
+          }}
+          className="space-y-3.5"
+        >
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              1. Tên cột hiển thị (Khớp với tiêu đề trên Sheet): <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={editColName}
+              onChange={(e) => setEditColName(e.target.value)}
+              placeholder="VD: Họ & Tên, Mã NV, CCCD..."
+              className="w-full bg-slate-50 border border-slate-300 focus:border-purple-600 focus:bg-white rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-200 transition font-medium"
+              autoFocus
+            />
+          </div>
 
-            <div
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleConfirmEditColumn();
-                }
-              }}
-              className="space-y-3.5"
-            >
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  1. Tên cột hiển thị (Khớp với tiêu đề trên Sheet): <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editColName}
-                  onChange={(e) => setEditColName(e.target.value)}
-                  placeholder="VD: Họ & Tên, Mã NV, CCCD..."
-                  className="w-full bg-slate-50 border border-slate-300 focus:border-purple-600 focus:bg-white rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-200 transition font-medium"
-                  autoFocus
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  2. Gán vào trường thông tin thành viên (Kiểu dữ liệu):
-                </label>
-                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
-                  {AVAILABLE_SHEET_FIELDS.map((field) => {
-                    const isSelected = editColKey === field.key;
-                    return (
-                      <button
-                        key={field.key}
-                        type="button"
-                        onClick={() => setEditColKey(field.key)}
-                        className={`text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-between cursor-pointer ${
-                          isSelected
-                            ? 'bg-purple-600 text-white font-bold shadow-xs'
-                            : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-purple-50 hover:text-purple-700'
-                        }`}
-                      >
-                        <span className="truncate text-[11px]">{field.label}</span>
-                        {isSelected && <Check className="w-3 h-3 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-2.5 border-t border-slate-100">
-                {sheetColumns.length > 1 ? (
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+              2. Gán vào trường thông tin thành viên (Kiểu dữ liệu):
+            </label>
+            <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/50">
+              {AVAILABLE_SHEET_FIELDS.map((field) => {
+                const isSelected = editColKey === field.key;
+                return (
                   <button
+                    key={field.key}
                     type="button"
-                    onClick={() => handleRemoveColumn(editingColIdx)}
-                    className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-1 cursor-pointer"
+                    onClick={() => setEditColKey(field.key)}
+                    className={`text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-between cursor-pointer ${
+                      isSelected
+                        ? 'bg-purple-600 text-white font-bold shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200/80 hover:bg-purple-50 hover:text-purple-700'
+                    }`}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Xóa Cột</span>
+                    <span className="truncate text-[11px]">{field.label}</span>
+                    {isSelected && <Check className="w-3 h-3 shrink-0" />}
                   </button>
-                ) : <div />}
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingColIdx(null)}
-                    className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmEditColumn()}
-                    className="px-4 py-2 text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white rounded-xl shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 cursor-pointer active:scale-95"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Lưu Thay Đổi</span>
-                  </button>
-                </div>
-              </div>
+                );
+              })}
             </div>
           </div>
         </div>
-      )}
+      </Modal>
       {/* MODAL: BẢNG XEM TRƯỚC & NHẬP HÀNG LOẠT THÀNH VIÊN TỪ SHEET */}
-      {isBatchImportModalOpen && multiParsedList.length > 0 && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl border border-purple-200 max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 via-indigo-50/40 to-purple-50 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20 shrink-0">
-                  <FileSpreadsheet className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-extrabold text-purple-950 flex items-center gap-2">
-                    <span>Xem Trước & Nhập Hàng Loạt Từ Sheet</span>
-                    <span className="text-xs font-mono font-bold bg-purple-200/80 text-purple-900 px-2 py-0.5 rounded-full">
-                      {multiParsedList.length} nhân sự
-                    </span>
-                  </h3>
-                  <p className="text-xs text-purple-700">
-                    Hệ thống đã tự động trích xuất các cột và phân loại tài khoản tạo mới / cập nhật
-                  </p>
-                </div>
-              </div>
+      <Modal
+        isOpen={isBatchImportModalOpen && multiParsedList.length > 0}
+        onClose={() => setIsBatchImportModalOpen(false)}
+        size="full"
+        className="max-w-5xl"
+        icon={
+          <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20 shrink-0">
+            <FileSpreadsheet className="w-5 h-5" />
+          </div>
+        }
+        title={
+          <div className="flex items-center gap-2 flex-wrap text-base font-extrabold text-purple-950">
+            <span>Xem Trước & Nhập Hàng Loạt Từ Sheet</span>
+            <span className="text-xs font-mono font-bold bg-purple-200/80 text-purple-900 px-2 py-0.5 rounded-full">
+              {multiParsedList.length} nhân sự
+            </span>
+          </div>
+        }
+        description="Hệ thống đã tự động trích xuất các cột và phân loại tài khoản tạo mới / cập nhật"
+        footer={
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
+            <div className="text-xs text-slate-600">
+              <span>Chuẩn bị xử lý: </span>
+              <strong className="text-purple-700 font-bold">{batchSelectedIndices.size}</strong> nhân sự (
+              <span className="text-emerald-700 font-bold">
+                {multiParsedList.filter((x, idx) => batchSelectedIndices.has(idx) && !x.existingUser).length} tạo mới
+              </span>
+              ,{' '}
+              <span className="text-amber-700 font-bold">
+                {multiParsedList.filter((x, idx) => batchSelectedIndices.has(idx) && !!x.existingUser).length} cập nhật
+              </span>
+              )
+            </div>
+
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={() => setIsBatchImportModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-white/80 transition cursor-pointer"
+                className="flex-1 sm:flex-initial px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                Hủy / Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsBatchImportModalOpen(false);
+                  applyParsedMember(multiParsedList[0].member);
+                }}
+                className="flex-1 sm:flex-initial px-4 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl border border-purple-200 transition cursor-pointer"
+              >
+                Điền Từng Người
+              </button>
+              <button
+                type="button"
+                disabled={batchSelectedIndices.size === 0 || isImportingBatch}
+                onClick={handleExecuteBatchImport}
+                className="flex-1 sm:flex-initial px-5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {isImportingBatch ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Đang Nhập Dữ Liệu...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                    <span>Xác Nhận Nhập Hàng Loạt ({batchSelectedIndices.size})</span>
+                  </>
+                )}
               </button>
             </div>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {/* Filter & Selection Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (batchSelectedIndices.size === multiParsedList.length) {
+                    setBatchSelectedIndices(new Set());
+                  } else {
+                    setBatchSelectedIndices(new Set(multiParsedList.map((_, i) => i)));
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:border-purple-500 rounded-xl font-bold text-slate-700 transition cursor-pointer shadow-2xs"
+              >
+                {batchSelectedIndices.size === multiParsedList.length ? (
+                  <CheckSquare className="w-4 h-4 text-purple-600" />
+                ) : batchSelectedIndices.size > 0 ? (
+                  <div className="w-4 h-4 rounded bg-purple-600 text-white flex items-center justify-center text-[10px] font-bold">
+                    -
+                  </div>
+                ) : (
+                  <Square className="w-4 h-4 text-slate-400" />
+                )}
+                <span>
+                  {batchSelectedIndices.size === multiParsedList.length
+                    ? 'Bỏ chọn tất cả'
+                    : `Chọn tất cả (${multiParsedList.length})`}
+                </span>
+              </button>
 
-            {/* Filter & Selection Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3 bg-slate-50 border-b border-slate-200 shrink-0 text-xs">
-              <div className="flex items-center gap-2">
+              {/* Filter Tabs */}
+              <div className="flex items-center bg-slate-200/70 p-0.5 rounded-xl gap-0.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (batchSelectedIndices.size === multiParsedList.length) {
-                      setBatchSelectedIndices(new Set());
-                    } else {
-                      setBatchSelectedIndices(new Set(multiParsedList.map((_, i) => i)));
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:border-purple-500 rounded-xl font-bold text-slate-700 transition cursor-pointer shadow-2xs"
+                  onClick={() => setBatchFilterTab('ALL')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    batchFilterTab === 'ALL' ? 'bg-white text-purple-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  {batchSelectedIndices.size === multiParsedList.length ? (
-                    <CheckSquare className="w-4 h-4 text-purple-600" />
-                  ) : batchSelectedIndices.size > 0 ? (
-                    <div className="w-4 h-4 rounded bg-purple-600 text-white flex items-center justify-center text-[10px] font-bold">
-                      -
-                    </div>
-                  ) : (
-                    <Square className="w-4 h-4 text-slate-400" />
-                  )}
-                  <span>
-                    {batchSelectedIndices.size === multiParsedList.length
-                      ? 'Bỏ chọn tất cả'
-                      : `Chọn tất cả (${multiParsedList.length})`}
-                  </span>
+                  Tất cả ({multiParsedList.length})
                 </button>
-
-                {/* Filter Tabs */}
-                <div className="flex items-center bg-slate-200/70 p-0.5 rounded-xl gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setBatchFilterTab('ALL')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                      batchFilterTab === 'ALL' ? 'bg-white text-purple-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Tất cả ({multiParsedList.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBatchFilterTab('NEW')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${
-                      batchFilterTab === 'NEW' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>Tạo mới ({multiParsedList.filter((x) => !x.existingUser).length})</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBatchFilterTab('UPDATE')}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${
-                      batchFilterTab === 'UPDATE' ? 'bg-white text-amber-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span>Cập nhật ({multiParsedList.filter((x) => !!x.existingUser).length})</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="text-slate-600 font-semibold flex items-center gap-2">
-                <span>Đã chọn:</span>
-                <span className="font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-lg font-mono">
-                  {batchSelectedIndices.size} / {multiParsedList.length}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setBatchFilterTab('NEW')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${
+                    batchFilterTab === 'NEW' ? 'bg-white text-emerald-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>Tạo mới ({multiParsedList.filter((x) => !x.existingUser).length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchFilterTab('UPDATE')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer ${
+                    batchFilterTab === 'UPDATE' ? 'bg-white text-amber-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  <span>Cập nhật ({multiParsedList.filter((x) => !!x.existingUser).length})</span>
+                </button>
               </div>
             </div>
 
-            {/* Preview Table */}
-            <div className="flex-1 overflow-y-auto p-4 max-h-[55vh]">
-              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left text-xs text-slate-700 border-collapse">
-                  <thead className="bg-slate-100/90 text-slate-700 uppercase text-[10px] font-extrabold sticky top-0 z-10 border-b border-slate-200">
-                    <tr>
-                      <th className="px-3 py-2.5 w-10 text-center">Chọn</th>
-                      <th className="px-2 py-2.5 w-10 text-center">STT</th>
-                      <th className="px-3 py-2.5">Trạng Thái</th>
-                      <th className="px-3 py-2.5">Họ và Tên</th>
-                      <th className="px-3 py-2.5">Staff Code</th>
-                      <th className="px-3 py-2.5">Role / Quyền</th>
-                      <th className="px-3 py-2.5">CCCD</th>
-                      <th className="px-3 py-2.5">TK Ngân Hàng</th>
-                      <th className="px-3 py-2.5">Gmail / SĐT</th>
-                      <th className="px-3 py-2.5">Công Nghệ</th>
-                      <th className="px-3 py-2.5">Năm Sinh</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
-                    {multiParsedList.map((item, idx) => {
-                      const isNew = !item.existingUser;
-                      if (batchFilterTab === 'NEW' && !isNew) return null;
-                      if (batchFilterTab === 'UPDATE' && isNew) return null;
-                      const isChecked = batchSelectedIndices.has(idx);
-
-                      return (
-                        <tr
-                          key={idx}
-                          onClick={() => {
-                            const next = new Set(batchSelectedIndices);
-                            if (next.has(idx)) next.delete(idx);
-                            else next.add(idx);
-                            setBatchSelectedIndices(next);
-                          }}
-                          className={`hover:bg-purple-50/60 transition cursor-pointer ${
-                            isChecked ? 'bg-purple-50/30' : 'opacity-60 bg-slate-50/40'
-                          }`}
-                        >
-                          <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                const next = new Set(batchSelectedIndices);
-                                if (e.target.checked) next.add(idx);
-                                else next.delete(idx);
-                                setBatchSelectedIndices(next);
-                              }}
-                              className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
-                            />
-                          </td>
-                          <td className="px-2 py-2 text-center font-mono text-[11px] text-slate-500">
-                            {idx + 1}
-                          </td>
-                          <td className="px-3 py-2">
-                            {isNew ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                <span>Tạo Mới</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                <span>Sửa (@{item.existingUser?.account})</span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 font-bold text-slate-900 whitespace-nowrap">
-                            {item.member.name || <span className="text-slate-400 italic">Chưa có tên</span>}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-[11px] font-bold text-purple-700 whitespace-nowrap">
-                            @{item.member.account || 'tự sinh'}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-1">
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
-                                {item.member.specializations[0] || 'BA'}
-                              </span>
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">
-                                {item.member.role}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                            {item.member.cccd || '-'}
-                          </td>
-                          <td className="px-3 py-2 text-[11px] text-slate-600 max-w-[150px] truncate" title={item.member.bankAccount}>
-                            {item.member.bankAccount || '-'}
-                          </td>
-                          <td className="px-3 py-2 text-[11px]">
-                            <div className="text-slate-800 truncate max-w-[140px]" title={item.member.email}>
-                              {item.member.email || '-'}
-                            </div>
-                            <div className="text-slate-500 font-mono text-[10px]">
-                              {item.member.phone || ''}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-[11px] text-slate-600 max-w-[130px] truncate" title={item.member.technologies}>
-                            {item.member.technologies || '-'}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-[11px] text-slate-600 text-center">
-                            {item.member.birthDate || '-'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-4 border-t border-slate-200 bg-slate-50/80 shrink-0">
-              <div className="text-xs text-slate-600">
-                <span>Chuẩn bị xử lý: </span>
-                <strong className="text-purple-700 font-bold">{batchSelectedIndices.size}</strong> nhân sự (
-                <span className="text-emerald-700 font-bold">
-                  {multiParsedList.filter((x, idx) => batchSelectedIndices.has(idx) && !x.existingUser).length} tạo mới
-                </span>
-                ,{' '}
-                <span className="text-amber-700 font-bold">
-                  {multiParsedList.filter((x, idx) => batchSelectedIndices.has(idx) && !!x.existingUser).length} cập nhật
-                </span>
-                )
-              </div>
-
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => setIsBatchImportModalOpen(false)}
-                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition cursor-pointer"
-                >
-                  Hủy / Đóng
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsBatchImportModalOpen(false);
-                    applyParsedMember(multiParsedList[0].member);
-                  }}
-                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl border border-purple-200 transition cursor-pointer"
-                >
-                  Điền Từng Người
-                </button>
-                <button
-                  type="button"
-                  disabled={batchSelectedIndices.size === 0 || isImportingBatch}
-                  onClick={handleExecuteBatchImport}
-                  className="flex-1 sm:flex-initial px-5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer"
-                >
-                  {isImportingBatch ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Đang Nhập Dữ Liệu...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
-                      <span>Xác Nhận Nhập Hàng Loạt ({batchSelectedIndices.size})</span>
-                    </>
-                  )}
-                </button>
-              </div>
+            <div className="text-slate-600 font-semibold flex items-center gap-2">
+              <span>Đã chọn:</span>
+              <span className="font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-lg font-mono">
+                {batchSelectedIndices.size} / {multiParsedList.length}
+              </span>
             </div>
           </div>
+
+          {/* Preview Table */}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs max-h-[50vh] overflow-y-auto">
+            <table className="w-full text-left text-xs text-slate-700 border-collapse">
+              <thead className="bg-slate-100/90 text-slate-700 uppercase text-[10px] font-extrabold sticky top-0 z-10 border-b border-slate-200 backdrop-blur-xs">
+                <tr>
+                  <th className="px-3 py-2.5 w-10 text-center">Chọn</th>
+                  <th className="px-2 py-2.5 w-10 text-center">STT</th>
+                  <th className="px-3 py-2.5">Trạng Thái</th>
+                  <th className="px-3 py-2.5">Họ và Tên</th>
+                  <th className="px-3 py-2.5">Staff Code</th>
+                  <th className="px-3 py-2.5">Role / Quyền</th>
+                  <th className="px-3 py-2.5">CCCD</th>
+                  <th className="px-3 py-2.5">TK Ngân Hàng</th>
+                  <th className="px-3 py-2.5">Gmail / SĐT</th>
+                  <th className="px-3 py-2.5">Công Nghệ</th>
+                  <th className="px-3 py-2.5">Năm Sinh</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {multiParsedList.map((item, idx) => {
+                  const isNew = !item.existingUser;
+                  if (batchFilterTab === 'NEW' && !isNew) return null;
+                  if (batchFilterTab === 'UPDATE' && isNew) return null;
+                  const isChecked = batchSelectedIndices.has(idx);
+
+                  return (
+                    <tr
+                      key={idx}
+                      onClick={() => {
+                        const next = new Set(batchSelectedIndices);
+                        if (next.has(idx)) next.delete(idx);
+                        else next.add(idx);
+                        setBatchSelectedIndices(next);
+                      }}
+                      className={`hover:bg-purple-50/60 transition cursor-pointer ${
+                        isChecked ? 'bg-purple-50/30' : 'opacity-60 bg-slate-50/40'
+                      }`}
+                    >
+                      <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const next = new Set(batchSelectedIndices);
+                            if (e.target.checked) next.add(idx);
+                            else next.delete(idx);
+                            setBatchSelectedIndices(next);
+                          }}
+                          className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                        />
+                      </td>
+                      <td className="px-2 py-2 text-center font-mono text-[11px] text-slate-500">
+                        {idx + 1}
+                      </td>
+                      <td className="px-3 py-2">
+                        {isNew ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span>Tạo Mới</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <span>Sửa (@{item.existingUser?.account})</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-bold text-slate-900 whitespace-nowrap">
+                        {item.member.name || <span className="text-slate-400 italic">Chưa có tên</span>}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px] font-bold text-purple-700 whitespace-nowrap">
+                        @{item.member.account || 'tự sinh'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
+                            {item.member.specializations[0] || 'BA'}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700">
+                            {item.member.role}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px] text-slate-600 whitespace-nowrap">
+                        {item.member.cccd || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-[11px] text-slate-600 max-w-[150px] truncate" title={item.member.bankAccount}>
+                        {item.member.bankAccount || '-'}
+                      </td>
+                      <td className="px-3 py-2 text-[11px]">
+                        <div className="text-slate-800 truncate max-w-[140px]" title={item.member.email}>
+                          {item.member.email || '-'}
+                        </div>
+                        <div className="text-slate-500 font-mono text-[10px]">
+                          {item.member.phone || ''}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-[11px] text-slate-600 max-w-[130px] truncate" title={item.member.technologies}>
+                        {item.member.technologies || '-'}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px] text-slate-600 text-center">
+                        {item.member.birthDate || '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

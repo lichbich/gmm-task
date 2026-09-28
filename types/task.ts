@@ -246,6 +246,13 @@ export const isTaskUnworked = (t: Task): boolean => {
   return pct === 0;
 };
 
+export const getEffectiveTaskStatus = (t: Task): TaskStatus => {
+  const pct = t.completionPercentage || 0;
+  if (pct >= 100 || t.status === 'Done') return 'Done';
+  if (pct > 0) return 'In Progress';
+  return 'To do';
+};
+
 export type ResourceLevel =
   | 'Business Plan'
   | 'Level 1 - Business'

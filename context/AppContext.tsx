@@ -575,9 +575,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (weekNo !== t.weekNumber) {
               hasLegacy = true;
             }
+
+            const pct = typeof t.completionPercentage === 'number' ? t.completionPercentage : 0;
+            let taskStatus: TaskStatus = t.status || 'To do';
+
+            // Auto-normalize status:
+            // - 100% -> Done
+            // - 0% < pct < 100% -> In Progress (even if legacy database had it as 'To do')
+            // - 0% -> To do (cannot be Done if 0%)
+            if (pct >= 100) {
+              if (taskStatus !== 'Done') {
+                taskStatus = 'Done';
+                hasLegacy = true;
+              }
+            } else if (pct > 0) {
+              if (taskStatus === 'To do') {
+                taskStatus = 'In Progress';
+                hasLegacy = true;
+              }
+            } else if (pct === 0) {
+              if (taskStatus === 'Done') {
+                taskStatus = 'To do';
+                hasLegacy = true;
+              }
+            }
+
             return {
               ...t,
               weekNumber: weekNo,
+              status: taskStatus,
+              completionPercentage: pct,
               activityLogs: Array.isArray(t.activityLogs)
                 ? t.activityLogs
                 : t.activityLogs && typeof t.activityLogs === 'object'
@@ -624,7 +651,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (data.weeklyArchives) {
             const archivesList = Object.values(data.weeklyArchives) as WeeklyHistoryArchive[];
-            setWeeklyArchives(archivesList);
+            const uniqueMap = new Map<string, WeeklyHistoryArchive>();
+            archivesList.forEach((a) => {
+              const key = `${a.weekNumber}_${a.year || 2026}`;
+              const existing = uniqueMap.get(key);
+              if (!existing || (a.archivedAt && existing.archivedAt && new Date(a.archivedAt).getTime() > new Date(existing.archivedAt).getTime())) {
+                uniqueMap.set(key, a);
+              }
+            });
+            const deduplicatedList = Array.from(uniqueMap.values()).sort((a, b) => a.weekNumber - b.weekNumber);
+            setWeeklyArchives(deduplicatedList);
+
+            if (deduplicatedList.length < archivesList.length) {
+              const obj: Record<string, WeeklyHistoryArchive> = {};
+              deduplicatedList.forEach((a) => {
+                obj[a.id] = sanitizeForFirebase(a);
+              });
+              set(ref(database, `${DB_ROOT_NODE}/weeklyArchives`), obj).catch(console.error);
+            }
           } else {
             setWeeklyArchives([]);
           }
@@ -1665,12 +1709,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       summary: 'Khởi tạo công việc mới',
     };
 
+    const pct = taskData.completionPercentage || 0;
+    let initialStatus: TaskStatus = taskData.status || 'To do';
+    if (pct > 0 && pct < 100 && initialStatus === 'To do') {
+      initialStatus = 'In Progress';
+    } else if (pct >= 100) {
+      initialStatus = 'Done';
+    } else if (pct === 0 && initialStatus === 'Done') {
+      initialStatus = 'To do';
+    }
+
     const newTask: Task = {
       ...taskData,
       id: `tsk-${Date.now()}`,
       orderInMilestone: milestoneTasks.length + 1,
+      status: initialStatus,
       actualEffort: taskData.actualEffort || 0,
-      completionPercentage: taskData.completionPercentage || 0,
+      completionPercentage: pct,
       weekNumber: taskData.weekNumber || selectedWeek,
       year: taskData.year || selectedYear,
       createdBy: taskData.createdBy || creatorDisplay,
@@ -1717,13 +1772,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (t.id !== id) return t;
 
       // If completionPercentage is explicitly set to 0 or is 0, ensure actualEffort is 0 and status is To do (cannot be Done)
-      const effectivePct = updates.completionPercentage !== undefined ? updates.completionPercentage : t.completionPercentage;
+      const effectivePct = updates.completionPercentage !== undefined ? updates.completionPercentage : (t.completionPercentage || 0);
+      let nextStatus: TaskStatus = updates.status || t.status || 'To do';
       if (effectivePct === 0) {
         updates.actualEffort = 0;
-        if (updates.status === 'Done' || (!updates.status && t.status === 'Done')) {
-          updates.status = 'To do';
+        if (nextStatus === 'Done') {
+          nextStatus = 'To do';
+        }
+      } else if (effectivePct >= 100) {
+        nextStatus = 'Done';
+      } else if (effectivePct > 0 && effectivePct < 100) {
+        if (nextStatus === 'To do') {
+          nextStatus = 'In Progress';
         }
       }
+      updates.status = nextStatus;
 
       if (options?.skipLog) {
         targetTaskUpdated = {
@@ -2226,7 +2289,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ),
     };
 
-    const updatedArchives = [...weeklyArchives, archiveRecord];
+    const updatedArchives = [
+      ...weeklyArchives.filter((a) => !(a.weekNumber === selectedWeek && a.year === selectedYear)),
+      archiveRecord,
+    ].sort((a, b) => a.weekNumber - b.weekNumber);
     setWeeklyArchives(updatedArchives);
     syncArchivesToFirebase(updatedArchives);
 
@@ -2322,7 +2388,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     >();
 
-    users.forEach((u) => {
+    // Filter active users only (exclude disabled/locked accounts)
+    const activeUsers = users.filter((u) => !u.disabled && u.status !== 'disabled');
+
+    activeUsers.forEach((u) => {
       userEffortMap.set(u.account, {
         totalEffort: 0,
         count: 0,
@@ -2375,7 +2444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const awards: WeeklyAwardSummary[] = [];
 
-    users.forEach((u) => {
+    activeUsers.forEach((u) => {
       const stats = userEffortMap.get(u.account) || {
         totalEffort: 0,
         count: 0,
@@ -2431,7 +2500,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     if (archive && archive.awards) {
-      return archive.awards;
+      // Exclude disabled accounts from historical archive view
+      return archive.awards.filter(
+        (w) =>
+          !users.some(
+            (u) =>
+              u.account.toLowerCase() === w.account.toLowerCase() &&
+              (u.disabled || u.status === 'disabled')
+          )
+      );
     }
 
     return calculateWeeklyAwardsForWeek(selectedWeek, selectedYear, isFinalized);

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown } from './common/Dropdown';
+import { Modal } from './common/Modal';
 import { parseSheetRow } from './UserManagementView';
 
 interface UserDetailModalProps {
@@ -859,32 +860,45 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
       </div>
 
       {/* Temporary Password Modal upon Reset */}
-      {tempCredModal && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setTempCredModal(null);
-          }}
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
-        >
-          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden text-slate-800 relative animate-in zoom-in-95 duration-200 p-5 sm:p-6 space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                  <KeyRound className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800">Đặt Lại Mật Khẩu Thành Công</h3>
-                  <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">Mật Khẩu Tạm Thời Mới</span>
-                </div>
-              </div>
+      <Modal
+        isOpen={!!tempCredModal}
+        onClose={() => setTempCredModal(null)}
+        size="md"
+        icon={
+          <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <KeyRound className="w-5 h-5" />
+          </div>
+        }
+        title={
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">Đặt Lại Mật Khẩu Thành Công</h3>
+            <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block">Mật Khẩu Tạm Thời Mới</span>
+          </div>
+        }
+        footer={
+          tempCredModal ? (
+            <div className="flex items-center gap-2 w-full">
               <button
-                onClick={() => setTempCredModal(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95"
+                type="button"
+                onClick={() => handleCopyAllInfo(tempCredModal.account, tempCredModal.name, tempCredModal.tempPassword)}
+                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/20 transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                {copiedField === 'all' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedField === 'all' ? 'Đã Sao Chép Toàn Bộ!' : 'Sao Chép Gửi Nhân Viên'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTempCredModal(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer"
+              >
+                Đóng
               </button>
             </div>
-
+          ) : null
+        }
+      >
+        {tempCredModal && (
+          <div className="space-y-4">
             <p className="text-xs text-slate-600 leading-relaxed">
               Mật khẩu cũ đã bị hủy. Hãy gửi thông tin đăng nhập và mật khẩu tạm thời mới này cho nhân viên.
             </p>
@@ -910,7 +924,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                 <button
                   type="button"
                   onClick={() => handleCopyPasswordOnly(tempCredModal.tempPassword)}
-                  className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-1.5 transition active:scale-95"
+                  className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
                   title="Chỉ sao chép mật khẩu"
                 >
                   {copiedField === 'password' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -928,27 +942,9 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                 Khi nhân viên đăng nhập bằng mật khẩu tạm này, hệ thống sẽ yêu cầu tạo mật khẩu mới ngay lập tức.
               </p>
             </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => handleCopyAllInfo(tempCredModal.account, tempCredModal.name, tempCredModal.tempPassword)}
-                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/20 transition flex items-center justify-center gap-2 active:scale-95"
-              >
-                {copiedField === 'all' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedField === 'all' ? 'Đã Sao Chép Toàn Bộ!' : 'Sao Chép Gửi Nhân Viên'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTempCredModal(null)}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition"
-              >
-                Đóng
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 };

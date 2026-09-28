@@ -598,3 +598,29 @@ html.dark .bg-slate-100 {
   transform: translateX(-50%) rotate(45deg);
 }
 
+/* ==========================================================================
+   ROLE SWITCH BLUR & REVEAL TRANSITION
+   ========================================================================== */
+@keyframes roleBlurReveal {
+  0% {
+    filter: blur(6px);
+    opacity: 0.15;
+    transform: translateY(-2px) scale(0.96);
+  }
+  50% {
+    filter: blur(2px);
+    opacity: 0.8;
+  }
+  100% {
+    filter: blur(0px);
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-role-blur {
+  animation: roleBlurReveal 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: filter, opacity, transform;
+}
+
+

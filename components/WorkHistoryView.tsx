@@ -141,10 +141,23 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     }
   };
 
+  // Ensure archives are unique by (weekNumber, year)
+  const uniqueArchives = React.useMemo(() => {
+    const map = new Map<string, WeeklyHistoryArchive>();
+    weeklyArchives.forEach((a) => {
+      const key = `${a.weekNumber}_${a.year || 2026}`;
+      const existing = map.get(key);
+      if (!existing || (a.archivedAt && existing.archivedAt && new Date(a.archivedAt).getTime() > new Date(existing.archivedAt).getTime())) {
+        map.set(key, a);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.weekNumber - b.weekNumber);
+  }, [weeklyArchives]);
+
   // If archives exist and no selection, pick the latest archive
   const activeArchive =
-    weeklyArchives.find((a) => a.id === selectedArchiveId) ||
-    (weeklyArchives.length > 0 ? weeklyArchives[weeklyArchives.length - 1] : null);
+    uniqueArchives.find((a) => a.id === selectedArchiveId) ||
+    (uniqueArchives.length > 0 ? uniqueArchives[uniqueArchives.length - 1] : null);
 
   // PO & Admin check: ONLY PO or Admin can finalize week & create archives
   const isPOOrAdmin = (u?: any): boolean => {
@@ -303,8 +316,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
           <div className="flex items-center gap-2">
             <FolderArchive className="w-5 h-5 text-amber-500 shrink-0" />
             <h3 className="text-sm font-bold text-slate-800">
-              <span className="sm:hidden">Nhật Ký Tuần ({weeklyArchives.length})</span>
-              <span className="hidden sm:inline">Danh Sách Nhật Ký Các Tuần Đã Lưu Lưu Trữ ({weeklyArchives.length})</span>
+              <span className="sm:hidden">Nhật Ký Tuần ({uniqueArchives.length})</span>
+              <span className="hidden sm:inline">Danh Sách Nhật Ký Các Tuần Đã Lưu Trữ ({uniqueArchives.length})</span>
             </h3>
           </div>
 
@@ -322,11 +335,11 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
             </div>
 
             {/* Week Selector Dropdown */}
-            {weeklyArchives.length > 0 && (
+            {uniqueArchives.length > 0 && (
               <Dropdown
                 value={activeArchive?.id || ''}
                 onChange={(val) => setSelectedArchiveId(val)}
-                options={weeklyArchives.map((archive) => {
+                options={uniqueArchives.map((archive) => {
                   const range = getWeekDateRangeStr(archive.weekNumber, archive.year);
                   return {
                     value: archive.id,
@@ -352,7 +365,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
 
         {/* Content Body Wrapper (overflow-hidden ONLY on bottom content) */}
         <div className="overflow-hidden rounded-b-2xl">
-          {weeklyArchives.length === 0 ? (
+          {uniqueArchives.length === 0 ? (
           <div className="py-12 text-center bg-slate-50 text-xs text-slate-500 space-y-2">
             <History className="w-8 h-8 text-slate-300 mx-auto" />
             <p className="font-semibold text-slate-700">Chưa có bản lưu lịch sử tuần nào</p>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, Specialization, Milestone, Ticket } from '../types/task';
+import { Task, TaskStatus, Specialization, Milestone, Ticket, getEffectiveTaskStatus } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
@@ -312,7 +312,10 @@ const getRoleOrderRank = (roleCode?: string): number => {
         } else if (selectedMilestone !== 'ALL') {
           if (t.milestoneId !== selectedMilestone) return false;
         }
-        if (selectedStatus !== 'ALL' && t.status !== selectedStatus) return false;
+        if (selectedStatus !== 'ALL') {
+          const effStatus = getEffectiveTaskStatus(t);
+          if (effStatus !== selectedStatus) return false;
+        }
         return true;
       })
       .sort(sortByPriority);
@@ -338,60 +341,75 @@ const getRoleOrderRank = (roleCode?: string): number => {
     const rObj = roles.find((r) => r.code.toLowerCase() === roleCode.toLowerCase());
     const color = rObj?.color || (roleCode.toLowerCase() === 'designer' || roleCode.toLowerCase() === 'design' ? 'amber' : roleCode.toLowerCase() === 'devops' ? 'cyan' : roleCode.toLowerCase() === 'ai' ? 'slate' : roleCode.toLowerCase() === 'po' ? 'purple' : 'indigo');
 
-    // Rút gọn tên chuyên môn cho mobile (bỏ phần chú thích tiếng Việt dài dòng)
-    let cleanMobileName = rObj ? rObj.name : roleCode;
-    cleanMobileName = cleanMobileName
-      .replace(/\s*\([^)]*(Nghiệp vụ|Thiết kế|Kiểm thử|Lập trình|Vận hành|Hạ tầng|Phân tích|FE|BE)[^)]*\)/gi, '')
-      .trim();
+    // Chuẩn hóa và làm sạch tên chuyên môn, loại bỏ việc lặp lại mã role (ví dụ "BA (BA)" -> "Business Analyst (Nghiệp vụ)")
+    const getCleanRoleDisplayName = (code: string, rawName?: string): string => {
+      const uCode = code.toUpperCase();
+      if (!rawName || rawName.trim().toLowerCase() === code.trim().toLowerCase() || rawName.trim().toLowerCase() === `${code.toLowerCase()} (${code.toLowerCase()})`) {
+        if (uCode === 'BA') return 'Business Analyst (Nghiệp vụ)';
+        if (uCode === 'FE' || uCode === 'FRONTEND') return 'Front-End Development';
+        if (uCode === 'BE' || uCode === 'BACKEND') return 'Back-End Development';
+        if (uCode === 'QA' || uCode === 'QC') return 'Quality Assurance (Kiểm thử)';
+        if (uCode === 'SA') return 'System Architecture (Kiến trúc)';
+        if (uCode === 'DEVOPS') return 'DevOps & Infrastructure';
+        if (uCode === 'AI') return 'AI & Machine Learning';
+        if (uCode === 'PO') return 'Product Owner';
+        if (code.toLowerCase() === 'design' || code.toLowerCase() === 'designer') return 'UI/UX Design (Thiết kế)';
+        return `Team ${code}`;
+      }
+      // Loại bỏ phần mã thừa trong ngoặc như "(FE)", "(BE)", "(BA)", "(QA)" nếu có
+      let clean = rawName.replace(new RegExp(`\\s*\\(${code}\\)`, 'gi'), '').trim();
+      return clean || rawName;
+    };
 
-    const desktopLabel = rObj ? `${rObj.code} (${rObj.name})` : `${roleCode} (${roleCode})`;
-    const mobileLabel = cleanMobileName || roleCode;
+    const cleanName = getCleanRoleDisplayName(roleCode, rObj?.name);
+    const desktopLabel = cleanName;
+    const mobileLabel = cleanName.replace(/\s*\([^)]*\)/gi, '').trim() || roleCode;
 
     const colorClasses: Record<string, { bg: string; text: string; badgeBg: string; border: string }> = {
       purple: {
-        bg: 'bg-purple-50/75 dark:bg-purple-950/50',
+        bg: 'bg-purple-50/95 dark:bg-purple-950/90',
         text: 'text-purple-900 dark:text-purple-200',
         badgeBg: 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/60 dark:text-purple-300 dark:border-purple-700',
         border: 'border-purple-200/80 dark:border-purple-900/40',
       },
       amber: {
-        bg: 'bg-amber-50/75 dark:bg-amber-950/50',
+        bg: 'bg-amber-50/95 dark:bg-amber-950/90',
         text: 'text-amber-900 dark:text-amber-200',
         badgeBg: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/60 dark:text-amber-300 dark:border-amber-700',
         border: 'border-amber-200/80 dark:border-amber-900/40',
       },
       blue: {
-        bg: 'bg-blue-50/75 dark:bg-blue-950/50',
+        bg: 'bg-blue-50/95 dark:bg-blue-950/90',
         text: 'text-blue-900 dark:text-blue-200',
         badgeBg: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/60 dark:text-blue-300 dark:border-blue-700',
         border: 'border-blue-200/80 dark:border-blue-900/40',
       },
       emerald: {
-        bg: 'bg-emerald-50/75 dark:bg-emerald-950/50',
+        bg: 'bg-emerald-50/95 dark:bg-emerald-950/90',
         text: 'text-emerald-900 dark:text-emerald-200',
         badgeBg: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/60 dark:text-emerald-300 dark:border-emerald-700',
         border: 'border-emerald-200/80 dark:border-emerald-900/40',
       },
       rose: {
-        bg: 'bg-rose-50/75 dark:bg-rose-950/50',
+        bg: 'bg-rose-50/95 dark:bg-rose-950/90',
         text: 'text-rose-900 dark:text-rose-200',
         badgeBg: 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-900/60 dark:text-rose-300 dark:border-rose-700',
         border: 'border-rose-200/80 dark:border-rose-900/40',
       },
       indigo: {
-        bg: 'bg-indigo-50/75 dark:bg-indigo-950/50',
+        bg: 'bg-indigo-50/95 dark:bg-indigo-950/90',
         text: 'text-indigo-900 dark:text-indigo-200',
         badgeBg: 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-900/60 dark:text-indigo-300 dark:border-indigo-700',
         border: 'border-indigo-200/80 dark:border-indigo-900/40',
       },
       cyan: {
-        bg: 'bg-cyan-50/75 dark:bg-cyan-950/50',
+        bg: 'bg-cyan-50/95 dark:bg-cyan-950/90',
         text: 'text-cyan-900 dark:text-cyan-200',
         badgeBg: 'bg-cyan-100 text-cyan-700 border-cyan-300 dark:bg-cyan-900/60 dark:text-cyan-300 dark:border-cyan-700',
         border: 'border-cyan-200/80 dark:border-cyan-900/40',
       },
       slate: {
-        bg: 'bg-slate-100/75 dark:bg-slate-900/90',
+        bg: 'bg-slate-100/95 dark:bg-slate-900/90',
         text: 'text-slate-900 dark:text-slate-100',
         badgeBg: 'bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
         border: 'border-slate-300/80 dark:border-slate-800',
@@ -447,6 +465,96 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
     return groups;
   }, [filteredTasks, ROLE_ORDER]);
+
+  const [activeRoleInView, setActiveRoleInView] = useState<string>('');
+  const [showFloatingRoleBar, setShowFloatingRoleBar] = useState<boolean>(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const isProgrammaticScrollRef = useRef<boolean>(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (subTab !== 'ALL_TASKS' || groupedTasksByRole.length === 0) {
+      setShowFloatingRoleBar(false);
+      return;
+    }
+
+    const handleScroll = () => {
+      const container = tableContainerRef.current;
+      if (!container) return;
+
+      const isDesktop = window.innerWidth >= 768;
+      const topOffset = isDesktop ? 70 : 60;
+      const containerRect = container.getBoundingClientRect();
+
+      // Show floating bar when scrolling through the table area
+      const isInTableArea = containerRect.top <= topOffset && containerRect.bottom >= topOffset + 100;
+      setShowFloatingRoleBar(isInTableArea);
+
+      // When smooth scrolling programmatically to a selected role, skip updating intermediate active roles to prevent flickering
+      if (isProgrammaticScrollRef.current) return;
+
+      if (isInTableArea) {
+        let currentActive = groupedTasksByRole[0]?.role || '';
+        for (const group of groupedTasksByRole) {
+          const id = isDesktop ? `role-section-${group.role}` : `mobile-role-section-${group.role}`;
+          const el = document.getElementById(id);
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            if (rect.top <= topOffset + 35) {
+              currentActive = group.role;
+            }
+          }
+        }
+        setActiveRoleInView((prev) => (prev !== currentActive ? currentActive : prev));
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll, { passive: true });
+    handleScroll();
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [subTab, groupedTasksByRole]);
+
+  const scrollToRole = useCallback((roleCode: string) => {
+    const isDesktop = window.innerWidth >= 768;
+    const id = isDesktop ? `role-section-${roleCode}` : `mobile-role-section-${roleCode}`;
+    const el = document.getElementById(id);
+    if (el) {
+      const topOffset = isDesktop ? 65 : 55;
+      const elementPosition = el.getBoundingClientRect().top + window.scrollY;
+      const offsetPosition = Math.max(0, elementPosition - topOffset);
+
+      // Lock scroll spy updates during smooth scroll
+      isProgrammaticScrollRef.current = true;
+      setActiveRoleInView(roleCode);
+
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth',
+      });
+
+      // Release lock once smooth scrolling completes
+      scrollTimeoutRef.current = setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 650);
+    }
+  }, []);
 
   const totalEstimatedEffort =
     Math.round(filteredTasks.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0) * 100) / 100;
@@ -506,7 +614,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
     const isPastDeadline = nowTime > deadline.getTime();
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
-    const isTaskDone = t.status === 'Done' || t.completionPercentage === 100;
+    const effStatus = getEffectiveTaskStatus(t);
+    const isTaskDone = effStatus === 'Done' || t.status === 'Done' || t.completionPercentage === 100;
     // A task is officially reported if it is Done 100% OR submitted at/after Sunday 12:00 PM of that week
     const isReported =
       isTaskDone ||
@@ -644,10 +753,10 @@ const getRoleOrderRank = (roleCode?: string): number => {
         <td className="py-3 px-3 text-center">
           <span
             className={`inline-block whitespace-nowrap px-3 py-1 text-[11px] font-semibold rounded-full border ${getStatusBadge(
-              t.status
+              effStatus
             )}`}
           >
-            {t.status}
+            {effStatus}
           </span>
         </td>
 
@@ -832,7 +941,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
     const isPastDeadline = nowTime > deadline.getTime();
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
-    const isTaskDone = t.status === 'Done' || t.completionPercentage === 100;
+    const effStatus = getEffectiveTaskStatus(t);
+    const isTaskDone = effStatus === 'Done' || t.status === 'Done' || t.completionPercentage === 100;
     const isReported =
       isTaskDone ||
       (!!t.lastSubmittedAt &&
@@ -889,8 +999,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
             )}
           </div>
 
-          <span className={`whitespace-nowrap px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${getStatusBadge(t.status)}`}>
-            {t.status}
+          <span className={`whitespace-nowrap px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${getStatusBadge(effStatus)}`}>
+            {effStatus}
           </span>
         </div>
 
@@ -1075,6 +1185,101 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
   return (
     <div className="space-y-4">
+      {/* Dynamic Floating Sticky Role Bar (Option 2 - Linear / Notion style) */}
+      {subTab === 'ALL_TASKS' && groupedTasksByRole.length > 0 && (
+        <div
+          className={`fixed top-3 sm:top-4 left-0 right-0 z-40 flex justify-center pointer-events-none px-3 transition-all duration-300 ease-out transform ${
+            showFloatingRoleBar && activeRoleInView
+              ? 'opacity-100 scale-100 translate-y-0'
+              : 'opacity-0 scale-75 -translate-y-2 pointer-events-none'
+          }`}
+        >
+          <div className="pointer-events-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/90 shadow-xl shadow-slate-900/10 dark:shadow-black/50 rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 sm:gap-3 max-w-full sm:max-w-4xl overflow-x-auto no-scrollbar transition-transform duration-300 ease-out">
+            {/* Active Role Indicator */}
+            {(() => {
+              const activeGroup =
+                groupedTasksByRole.find((g) => g.role === activeRoleInView) || groupedTasksByRole[0];
+              if (!activeGroup) return null;
+              const cfg = getRoleConfig(activeGroup.role);
+              const groupTotalEst =
+                Math.round(
+                  activeGroup.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0) * 100
+                ) / 100;
+              const groupTotalActual =
+                Math.round(
+                  activeGroup.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0) * 100
+                ) / 100;
+              const displayEffort = activeGroup.tasks.some((item) => !!item.lastSubmittedAt)
+                ? groupTotalActual
+                : groupTotalEst;
+
+              return (
+                <div
+                  key={`active-role-indicator-${activeGroup.role}`}
+                  className="flex items-center gap-2 shrink-0 pr-1 animate-role-blur"
+                >
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-black border transition-colors ${cfg.badgeBg}`}
+                  >
+                    {activeGroup.role}
+                  </span>
+                  <div className="hidden sm:flex flex-col">
+                    <span className={`text-xs font-bold ${cfg.text} leading-tight truncate max-w-[200px]`}>
+                      {cfg.label}
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                      {activeGroup.tasks.length} đầu việc •{' '}
+                      <strong className="text-indigo-600 dark:text-indigo-400 font-mono">
+                        {displayEffort}h
+                      </strong>
+                    </span>
+                  </div>
+                  <span className="sm:hidden text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                    {activeGroup.tasks.length} task •{' '}
+                    <strong className="text-indigo-600 dark:text-indigo-400 font-mono">
+                      {displayEffort}h
+                    </strong>
+                  </span>
+                </div>
+              );
+            })()}
+
+            {/* Subtle Vertical Divider */}
+            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 shrink-0 mx-0.5" />
+
+            {/* Quick Role Switcher Pills */}
+            <div className="flex items-center gap-1 shrink-0 overflow-x-auto no-scrollbar">
+              {groupedTasksByRole.map((group) => {
+                const isActive = group.role === activeRoleInView;
+                return (
+                  <button
+                    key={`quick-role-${group.role}`}
+                    onClick={() => scrollToRole(group.role)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all duration-200 active:scale-95 cursor-pointer whitespace-nowrap shrink-0 ${
+                      isActive
+                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30 ring-2 ring-indigo-400/30'
+                        : 'bg-slate-100/90 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}
+                    title={`Nhảy tới nhóm ${group.role}`}
+                  >
+                    <span>{group.role}</span>
+                    <span
+                      className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold transition-colors ${
+                        isActive
+                          ? 'bg-indigo-700/80 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      {group.tasks.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header & Sub-tabs Switcher */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-4">
@@ -1244,32 +1449,36 @@ const getRoleOrderRank = (roleCode?: string): number => {
             </div>
           </div>
 
-          {/* DESKTOP VIEW: Table Grid */}
-          <div className="hidden md:block bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
-                    <th className="py-3.5 px-4 w-12 text-center">STT</th>
-                    <th className="py-3.5 px-4 min-w-[280px]">Task Name (Bấm xem chi tiết)</th>
-                    <th className="py-3.5 px-3 w-24">Role</th>
-                    <th className="py-3.5 px-3 w-24 text-center">Effort (h)</th>
-                    <th className="py-3.5 px-3 w-28 text-center">Status</th>
-                    <th className="py-3.5 px-3 w-36">Account</th>
-                    <th className="py-3.5 px-3 w-36">Tiến độ (%)</th>
-                    <th className="py-3.5 px-3 w-32 text-center">Alert</th>
-                    <th className="py-3.5 px-4 min-w-[130px] w-36 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {filteredTasks.length === 0 ? (
+          {/* Task List Container (Observed by tableContainerRef for Floating Bar detection) */}
+          <div ref={tableContainerRef} className="space-y-4">
+            {/* DESKTOP VIEW: Table Grid */}
+            <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider">
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-400">
-                        {subTab === 'MY_TASKS'
-                          ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
-                          : 'Không tìm thấy đầu việc nào phù hợp.'}
-                      </td>
+                      <th className="py-3.5 px-4 w-12 text-center">STT</th>
+                      <th className="py-3.5 px-4 min-w-[280px]">Task Name (Bấm xem chi tiết)</th>
+                      <th className="py-3.5 px-3 w-24">Role</th>
+                      <th className="py-3.5 px-3 w-24 text-center">Effort (h)</th>
+                      <th className="py-3.5 px-3 w-28 text-center">Status</th>
+                      <th className="py-3.5 px-3 w-36">Account</th>
+                      <th className="py-3.5 px-3 w-36">Tiến độ (%)</th>
+                      <th className="py-3.5 px-3 w-32 text-center">Alert</th>
+                      <th className="py-3.5 px-4 min-w-[130px] w-36 text-right">Thao tác</th>
                     </tr>
+                  </thead>
+
+                  {filteredTasks.length === 0 ? (
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-slate-400">
+                          {subTab === 'MY_TASKS'
+                            ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
+                            : 'Không tìm thấy đầu việc nào phù hợp.'}
+                        </td>
+                      </tr>
+                    </tbody>
                   ) : subTab === 'ALL_TASKS' ? (
                     groupedTasksByRole.map((group) => {
                       const cfg = getRoleConfig(group.role);
@@ -1277,82 +1486,84 @@ const getRoleOrderRank = (roleCode?: string): number => {
                       const groupTotalActual = group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0);
 
                       return (
-                        <React.Fragment key={`role-group-${group.role}`}>
+                        <tbody key={`role-group-${group.role}`} className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
                           {/* Role Section Header */}
-                          <tr className={`${cfg.bg} border-y ${cfg.border} select-none`}>
-                            <td colSpan={9} className="py-2.5 px-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2.5">
-                                  <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${cfg.badgeBg}`}>
-                                    {group.role}
-                                  </span>
-                                  <span className={`text-xs font-bold ${cfg.text} tracking-tight`}>
-                                    {cfg.label}
-                                  </span>
-                                  <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-white/80 dark:bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
-                                    {group.tasks.length} đầu việc
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-3 text-xs">
-                                  <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                                    Tổng Effort:{' '}
-                                    <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
-                                      {group.tasks.some((item) => !!item.lastSubmittedAt)
-                                        ? groupTotalActual
-                                        : groupTotalEst}
-                                      h
-                                    </strong>
-                                    {group.tasks.some((item) => !!item.lastSubmittedAt) &&
-                                      groupTotalActual !== groupTotalEst && (
-                                        <span className="text-slate-400 dark:text-slate-400 font-mono ml-1">
-                                          (est: {groupTotalEst}h)
-                                        </span>
-                                      )}
-                                  </span>
-                                </div>
+                          <tr id={`role-section-${group.role}`} className="scroll-mt-20 select-none">
+                            <td colSpan={9} className={`py-2.5 px-4 ${cfg.bg} border-y ${cfg.border} shadow-2xs`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${cfg.badgeBg}`}>
+                                  {group.role}
+                                </span>
+                                <span className={`text-xs font-bold ${cfg.text} tracking-tight`}>
+                                  {cfg.label}
+                                </span>
+                                <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-white/90 dark:bg-slate-800/90 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
+                                  {group.tasks.length} đầu việc
+                                </span>
                               </div>
-                            </td>
-                          </tr>
 
-                          {/* Group Tasks by Account */}
-                          {(() => {
-                            const tasksByAccountMap = new Map<string, Task[]>();
-                            group.tasks.forEach((t) => {
-                              const acc = t.assigneeAccount || 'Unassigned';
-                              const list = tasksByAccountMap.get(acc) || [];
-                              list.push(t);
-                              tasksByAccountMap.set(acc, list);
-                            });
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="text-slate-600 dark:text-slate-400 text-[11px]">
+                                  Tổng Effort:{' '}
+                                  <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
+                                    {group.tasks.some((item) => !!item.lastSubmittedAt)
+                                      ? groupTotalActual
+                                      : groupTotalEst}
+                                    h
+                                  </strong>
+                                  {group.tasks.some((item) => !!item.lastSubmittedAt) &&
+                                    groupTotalActual !== groupTotalEst && (
+                                      <span className="text-slate-400 dark:text-slate-400 font-mono ml-1">
+                                        (est: {groupTotalEst}h)
+                                      </span>
+                                    )}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
 
-                            const accountGroups = Array.from(tasksByAccountMap.entries());
+                        {/* Group Tasks by Account */}
+                        {(() => {
+                          const tasksByAccountMap = new Map<string, Task[]>();
+                          group.tasks.forEach((t) => {
+                            const acc = t.assigneeAccount || 'Unassigned';
+                            const list = tasksByAccountMap.get(acc) || [];
+                            list.push(t);
+                            tasksByAccountMap.set(acc, list);
+                          });
 
-                            return accountGroups.map(([acc, accTasks], accIdx) => (
-                              <React.Fragment key={`acc-group-${group.role}-${acc}`}>
-                                {accIdx > 0 && (
-                                  <tr className="h-4 bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-100/80 dark:border-slate-800 select-none">
-                                    <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
-                                  </tr>
-                                )}
-                                {[...accTasks].sort(sortByPriority).map((t) => {
-                                  const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                                  const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                                  return renderTaskRow(t, displayIdx);
-                                })}
-                              </React.Fragment>
-                            ));
-                          })()}
-                        </React.Fragment>
-                      );
-                    })
-                  ) : (
-                    filteredTasks.map((t, idx) => {
+                          const accountGroups = Array.from(tasksByAccountMap.entries());
+
+                          return accountGroups.map(([acc, accTasks], accIdx) => (
+                            <React.Fragment key={`acc-group-${group.role}-${acc}`}>
+                              {accIdx > 0 && (
+                                <tr className="h-4 bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-100/80 dark:border-slate-800 select-none">
+                                  <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
+                                </tr>
+                              )}
+                              {[...accTasks].sort(sortByPriority).map((t) => {
+                                const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                                const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
+                                return renderTaskRow(t, displayIdx);
+                              })}
+                            </React.Fragment>
+                          ));
+                        })()}
+                      </tbody>
+                    );
+                  })
+                ) : (
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                    {filteredTasks.map((t, idx) => {
                       const taskIdx = tasks.findIndex((item) => item.id === t.id);
                       const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
                       return renderTaskRow(t, displayIdx);
-                    })
-                  )}
-                </tbody>
+                    })}
+                  </tbody>
+                )}
+
                 {/* Table Footer Totals */}
                 <tfoot>
                   <tr className="bg-slate-50 border-t border-slate-200 text-slate-700 font-semibold">
@@ -1405,7 +1616,10 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 return (
                   <div key={`mobile-role-${group.role}`} className="space-y-2.5">
                     {/* Mobile Role Group Header */}
-                    <div className={`${cfg.bg} border ${cfg.border} p-2.5 sm:p-3 rounded-2xl flex items-center justify-between shadow-2xs gap-2`}>
+                    <div
+                      id={`mobile-role-section-${group.role}`}
+                      className={`scroll-mt-16 ${cfg.bg} border ${cfg.border} p-2.5 sm:p-3 rounded-2xl flex items-center justify-between shadow-2xs gap-2`}
+                    >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${cfg.badgeBg}`}>
                           {group.role}
@@ -1473,6 +1687,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 </div>
               </div>
             )}
+          </div>
           </div>
         </>
       )}

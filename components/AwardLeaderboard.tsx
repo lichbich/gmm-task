@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Trophy, AlertTriangle, Award, CheckCircle2, Sparkles, TrendingUp, RefreshCw, Calendar, History, FolderArchive, Clock } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
@@ -9,6 +9,7 @@ import { getWeekDateRangeStr } from './WorkHistoryView';
 export const AwardLeaderboard: React.FC = () => {
   const {
     weeklyAwards,
+    users,
     selectedWeek,
     setSelectedWeek,
     selectedYear,
@@ -23,8 +24,22 @@ export const AwardLeaderboard: React.FC = () => {
     (a) => a.weekNumber === selectedWeek && a.year === selectedYear
   );
 
-  const topEffortMember = isWeekFinalized ? weeklyAwards.find((w) => w.isTopEffort && w.totalEffort > 0) : undefined;
-  const lateMembers = isWeekFinalized ? weeklyAwards.filter((w) => w.isLate) : [];
+  // Exclude locked / disabled accounts from ranking and awards
+  const activeWeeklyAwards = useMemo(() => {
+    return weeklyAwards.filter(
+      (w) =>
+        !users.some(
+          (u) =>
+            u.account.toLowerCase() === w.account.toLowerCase() &&
+            (u.disabled || u.status === 'disabled')
+        )
+    );
+  }, [weeklyAwards, users]);
+
+  const topEffortMember = isWeekFinalized
+    ? activeWeeklyAwards.find((w) => w.isTopEffort && w.totalEffort > 0)
+    : undefined;
+  const lateMembers = isWeekFinalized ? activeWeeklyAwards.filter((w) => w.isLate) : [];
 
   // PO & Admin check: ONLY PO or Admin can finalize week & rollover
   const isPOOrAdmin = (u?: any): boolean => {
@@ -251,7 +266,7 @@ export const AwardLeaderboard: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
-              {weeklyAwards.map((item, index) => (
+              {activeWeeklyAwards.map((item, index) => (
                 <tr
                   key={item.account}
                   className={`hover:bg-slate-50 dark:hover:bg-slate-800/60 transition ${
@@ -323,7 +338,7 @@ export const AwardLeaderboard: React.FC = () => {
 
         {/* MOBILE VIEW: Ranking Cards */}
         <div className="md:hidden space-y-2">
-          {weeklyAwards.map((item, index) => (
+          {activeWeeklyAwards.map((item, index) => (
             <div
               key={item.account}
               className={`p-2.5 rounded-xl border space-y-1.5 shadow-2xs ${
