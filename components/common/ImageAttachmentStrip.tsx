@@ -44,6 +44,7 @@ export const ImageAttachmentStrip: React.FC<ImageAttachmentStripProps> = ({
               onClick={() => onPreviewImage(url)}
               className="w-full h-full object-cover cursor-pointer group-hover/thumb:scale-105 transition duration-150"
               loading="lazy"
+              compact
             />
 
             {/* Click to expand overlay */}

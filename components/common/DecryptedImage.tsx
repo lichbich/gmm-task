@@ -41,14 +41,22 @@ export const DecryptedImage: React.FC<DecryptedImageProps> = ({
     loadDecryptedImageUrl(src)
       .then((url) => {
         if (isMounted) {
-          setDecryptedSrc(url);
+          if (url && url.endsWith('.enc') && !url.startsWith('blob:')) {
+            setHasError(true);
+          } else {
+            setDecryptedSrc(url);
+          }
           setIsLoading(false);
         }
       })
       .catch((err) => {
         console.error('Error decrypting image in component:', err);
         if (isMounted) {
-          setDecryptedSrc(src); // fallback to original
+          if (src && src.endsWith('.enc') && !src.startsWith('blob:')) {
+            setHasError(true);
+          } else {
+            setDecryptedSrc(src);
+          }
           setIsLoading(false);
         }
       });
@@ -83,10 +91,11 @@ export const DecryptedImage: React.FC<DecryptedImageProps> = ({
     if (compact) {
       return (
         <div
-          className={`flex items-center justify-center bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[10px] w-full h-full ${className}`}
+          className={`flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-400 w-full h-full ${className}`}
           style={style}
+          title="Không thể tải ảnh"
         >
-          {fallbackAlt?.slice(0, 2).toUpperCase() || '??'}
+          <ImageOff className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
         </div>
       );
     }

@@ -183,24 +183,47 @@ export async function loadDecryptedImageUrl(
 
   const promise = (async () => {
     try {
-      // Use internal proxy route to bypass browser CORS on external image hosts
-      const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
-      const res = await fetch(proxyUrl);
-      if (!res.ok) {
-        return url; // fallback to original
+      let buffer: ArrayBuffer | null = null;
+      let contentType = 'image/png';
+
+      // 1. Try Direct Client-side Fetch first (Fastest, zero serverless latency, Catbox has CORS: *)
+      try {
+        const directRes = await fetch(url, { mode: 'cors' });
+        if (directRes.ok) {
+          buffer = await directRes.arrayBuffer();
+          contentType = directRes.headers.get('content-type') || 'image/png';
+        }
+      } catch {
+        // Direct fetch failed (e.g. cross-origin without CORS), fallback to proxy below
       }
 
-      const buffer = await res.arrayBuffer();
+      // 2. If Direct Fetch did not succeed, Try internal Next.js Proxy Route
+      if (!buffer) {
+        try {
+          const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+          const proxyRes = await fetch(proxyUrl);
+          if (proxyRes.ok) {
+            buffer = await proxyRes.arrayBuffer();
+            contentType = proxyRes.headers.get('content-type') || 'image/png';
+          }
+        } catch {
+          // Proxy also failed
+        }
+      }
 
-      // Attempt decryption
+      // If we could not fetch binary buffer from either method, return url as fallback
+      if (!buffer) {
+        return url;
+      }
+
+      // 3. Attempt decryption if it is an encrypted AES package
       const decrypted = await decryptImageBuffer(buffer, secretKey);
       if (decrypted && decrypted.blobUrl) {
         decryptedCache.set(url, decrypted.blobUrl);
         return decrypted.blobUrl;
       }
 
-      // If not encrypted (legacy unencrypted image), create standard Blob URL for caching
-      const contentType = res.headers.get('content-type') || 'image/png';
+      // 4. If not encrypted (legacy plain image), create standard Blob URL for caching
       const plainBlob = new Blob([buffer], { type: contentType });
       const plainBlobUrl = URL.createObjectURL(plainBlob);
       decryptedCache.set(url, plainBlobUrl);

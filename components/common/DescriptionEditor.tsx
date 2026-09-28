@@ -488,6 +488,7 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
                           src={block.url}
                           alt={block.alt}
                           className="w-full h-full object-cover"
+                          compact
                         />
                       </div>
 

@@ -42,37 +42,6 @@ async function uploadToCatbox(file: Blob, fileName: string): Promise<string | nu
   return null;
 }
 
-/**
- * Fallback uploader: tmpfiles.org
- */
-async function uploadToTmpfiles(file: Blob, fileName: string): Promise<string | null> {
-  try {
-    const tmpFormData = new FormData();
-    tmpFormData.append('file', file, fileName);
-
-    const tmpResponse = await fetch('https://tmpfiles.org/api/v1/upload', {
-      method: 'POST',
-      body: tmpFormData,
-      headers: {
-        'User-Agent': BROWSER_USER_AGENT,
-        Accept: 'application/json',
-      },
-    });
-
-    if (tmpResponse.ok) {
-      const data = await tmpResponse.json();
-      if (data?.status === 'success' && data?.data?.url) {
-        // Convert tmpfiles view URL (https://tmpfiles.org/123/file) to direct download (https://tmpfiles.org/dl/123/file)
-        const directUrl = String(data.data.url).replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-        return directUrl;
-      }
-    }
-  } catch (err) {
-    console.warn('Tmpfiles fallback upload error:', err);
-  }
-  return null;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -113,14 +82,8 @@ export async function POST(req: NextRequest) {
 
     const fileName = (file as any).name || 'image.png';
 
-    // 1. Try Primary Host (Catbox)
-    let uploadedUrl = await uploadToCatbox(file, fileName);
-
-    // 2. If Primary Host fails, Try Fallback Host (tmpfiles.org)
-    if (!uploadedUrl) {
-      console.log('Using fallback image hosting provider for encrypted asset...');
-      uploadedUrl = await uploadToTmpfiles(file, fileName);
-    }
+    // Upload to Catbox storage
+    const uploadedUrl = await uploadToCatbox(file, fileName);
 
     if (!uploadedUrl) {
       return NextResponse.json(
