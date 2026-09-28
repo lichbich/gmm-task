@@ -54,16 +54,25 @@ function MainApp() {
         return;
       }
 
+      const rawId = cleanId.toLowerCase();
+      const strippedId = rawId.replace(/^tsk-/, '');
+
       // 1. Search in current tasks
       let target = cleanId
-        ? tasks.find((t) => String(t.id).trim() === cleanId)
+        ? tasks.find((t) => {
+            const tId = String(t.id).trim().toLowerCase();
+            return tId === rawId || tId.replace(/^tsk-/, '') === strippedId;
+          })
         : undefined;
 
       // 2. Search in weeklyArchives if not found in current tasks
       if (!target && cleanId && weeklyArchives) {
         for (const archive of weeklyArchives) {
           if (Array.isArray(archive.tasksSnapshot)) {
-            const found = archive.tasksSnapshot.find((t: Task) => String(t.id).trim() === cleanId);
+            const found = archive.tasksSnapshot.find((t: Task) => {
+              const tId = String(t.id).trim().toLowerCase();
+              return tId === rawId || tId.replace(/^tsk-/, '') === strippedId;
+            });
             if (found) {
               target = found;
               break;
@@ -114,10 +123,10 @@ function MainApp() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // 1. Check URL parameters (e.g. from system notification tap on Android/Desktop)
+    // 1. Check URL parameters (e.g. from system notification tap on Android/Desktop or shared link)
     const params = new URLSearchParams(window.location.search);
-    const openTaskId = params.get('openTaskId') || params.get('taskId');
-    const openTicketId = params.get('openTicketId') || params.get('ticketId');
+    const openTaskId = params.get('openTaskId') || params.get('taskId') || params.get('task');
+    const openTicketId = params.get('openTicketId') || params.get('ticketId') || params.get('ticket');
     const tab = params.get('tab');
 
     if (openTicketId) {
@@ -127,15 +136,17 @@ function MainApp() {
       const url = new URL(window.location.href);
       url.searchParams.delete('openTicketId');
       url.searchParams.delete('ticketId');
+      url.searchParams.delete('ticket');
       window.history.replaceState({}, '', url.pathname + (url.search || ''));
     } else if (tab === 'tickets') {
       setActiveMainSection('tasks');
       setActiveTaskTab('tickets');
-    } else if (openTaskId && tasks.length > 0) {
+    } else if (openTaskId && (tasks.length > 0 || (weeklyArchives && weeklyArchives.length > 0))) {
       handleSelectTaskFromNotification(openTaskId);
       const url = new URL(window.location.href);
       url.searchParams.delete('openTaskId');
       url.searchParams.delete('taskId');
+      url.searchParams.delete('task');
       window.history.replaceState({}, '', url.pathname + (url.search || ''));
     }
 

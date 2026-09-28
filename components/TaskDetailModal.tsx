@@ -57,6 +57,7 @@ import { ImageLightbox } from './common/ImageLightbox';
 import { DecryptedImage } from './common/DecryptedImage';
 import { DescriptionEditor } from './common/DescriptionEditor';
 import { UserAvatar } from './common/UserAvatar';
+import { TaskShareButton } from './common/TaskShareButton';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -107,7 +108,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     selectedYear,
     requestTaskAssignment,
   } = useApp();
-  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   // Keep task updated in real-time with context
   const task = tasks.find((t) => t.id === taskProp?.id) || taskProp;
@@ -131,6 +131,95 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const descFileInputRef = useRef<HTMLInputElement>(null);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; alt?: string } | null>(null);
   const [copiedImageUrl, setCopiedImageUrl] = useState<string | null>(null);
+
+  const forceCloseRef = useRef<() => void>(() => {});
+
+  const checkDirtyAndConfirmClose = React.useCallback((): boolean => {
+    const isDescDirty =
+      isEditingDesc && (descText || '').trim() !== (task?.description || '').trim();
+    const isCommentDirty = quickComment.trim() !== '';
+    const isEditingNoteDirty =
+      editingNoteIndex !== null && editingNoteText.trim() !== '';
+
+    const isDirty = isDescDirty || isCommentDirty || isEditingNoteDirty;
+
+    if (isDirty) {
+      confirmDialog({
+        title: 'Nội dung chưa được lưu',
+        message:
+          'Bạn đang có nội dung chỉnh sửa mô tả hoặc ghi chú chưa được lưu. Nếu thoát ra ngoài, các thay đổi này sẽ bị mất. Bạn có chắc chắn muốn thoát không?',
+        confirmText: 'Rời đi & Hủy thay đổi',
+        cancelText: 'Tiếp tục chỉnh sửa',
+        type: 'warning',
+        onConfirm: () => {
+          setIsEditingDesc(false);
+          if (task) {
+            setDescText(task.description || '');
+          }
+          setQuickComment('');
+          setEditingNoteIndex(null);
+          setEditingNoteText('');
+          forceCloseRef.current();
+        },
+      });
+      return false;
+    }
+    return true;
+  }, [
+    isEditingDesc,
+    descText,
+    task?.description,
+    quickComment,
+    editingNoteIndex,
+    editingNoteText,
+    confirmDialog,
+  ]);
+
+  const {
+    isRendered,
+    isVisible,
+    handleClose,
+    forceClose,
+    handleBackdropMouseDown,
+    handleBackdropClick,
+  } = useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
+
+  useEffect(() => {
+    forceCloseRef.current = forceClose;
+  }, [forceClose]);
+
+  const handleNavigateTo = (callback: () => void) => {
+    const isDescDirty =
+      isEditingDesc && (descText || '').trim() !== (task?.description || '').trim();
+    const isCommentDirty = quickComment.trim() !== '';
+    const isEditingNoteDirty =
+      editingNoteIndex !== null && editingNoteText.trim() !== '';
+
+    if (isDescDirty || isCommentDirty || isEditingNoteDirty) {
+      confirmDialog({
+        title: 'Nội dung chưa được lưu',
+        message:
+          'Bạn đang có nội dung chỉnh sửa mô tả hoặc ghi chú chưa được lưu. Nếu tiếp tục chuyển màn hình, các thay đổi này sẽ bị mất. Bạn có chắc chắn muốn tiếp tục không?',
+        confirmText: 'Rời đi & Chuyển màn hình',
+        cancelText: 'Tiếp tục chỉnh sửa',
+        type: 'warning',
+        onConfirm: () => {
+          setIsEditingDesc(false);
+          if (task) {
+            setDescText(task.description || '');
+          }
+          setQuickComment('');
+          setEditingNoteIndex(null);
+          setEditingNoteText('');
+          forceClose();
+          setTimeout(callback, 150);
+        },
+      });
+      return;
+    }
+    handleClose();
+    setTimeout(callback, 150);
+  };
 
   const handleDescImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -502,13 +591,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             </h3>
           </div>
 
-          <button
-            onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition active:scale-95 shrink-0"
-            title="Đóng cửa sổ"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <TaskShareButton task={task} variant="button" align="right" />
+            <button
+              onClick={handleClose}
+              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
+              title="Đóng cửa sổ"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Body with custom-scrollbar */}
@@ -537,12 +629,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               {onEditTask && isEditable && (
                 <button
                   type="button"
-                  onClick={() => {
-                    handleClose();
-                    setTimeout(() => {
-                      onEditTask(task);
-                    }, 150);
-                  }}
+                  onClick={() => handleNavigateTo(() => onEditTask(task))}
                   className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
@@ -670,8 +757,22 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setDescText(task.description || '');
-                      setIsEditingDesc(false);
+                      if (descText.trim() !== (task.description || '').trim()) {
+                        confirmDialog({
+                          title: 'Hủy chỉnh sửa mô tả',
+                          message: 'Nội dung mô tả đã thay đổi nhưng chưa lưu. Bạn có chắc chắn muốn hủy các thay đổi này không?',
+                          confirmText: 'Xác nhận hủy',
+                          cancelText: 'Tiếp tục sửa',
+                          type: 'warning',
+                          onConfirm: () => {
+                            setDescText(task.description || '');
+                            setIsEditingDesc(false);
+                          },
+                        });
+                      } else {
+                        setDescText(task.description || '');
+                        setIsEditingDesc(false);
+                      }
                     }}
                     className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-xl font-medium transition cursor-pointer"
                   >
@@ -1165,12 +1266,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             {onEditTask && isEditable && (
               <button
                 type="button"
-                onClick={() => {
-                  handleClose();
-                  setTimeout(() => {
-                    onEditTask(task);
-                  }, 150);
-                }}
+                onClick={() => handleNavigateTo(() => onEditTask(task))}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
               >
                 <Edit3 className="w-3.5 h-3.5" />
@@ -1180,12 +1276,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
             {isMyTaskToReport && onOpenReport && (
               <button
-                onClick={() => {
-                  handleClose();
-                  setTimeout(() => {
-                    onOpenReport(task);
-                  }, 200);
-                }}
+                onClick={() => handleNavigateTo(() => onOpenReport(task))}
                 className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
               >
                 <Clock className="w-3.5 h-3.5" />

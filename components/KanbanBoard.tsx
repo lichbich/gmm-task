@@ -8,6 +8,7 @@ import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { UserAvatar } from './common/UserAvatar';
+import { TaskShareButton } from './common/TaskShareButton';
 import {
   AlertTriangle,
   Award,
@@ -389,6 +390,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
 
           {/* Quick Action Icons */}
           <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <TaskShareButton task={t} variant="icon" align="right" />
+
             <button
               onClick={(e) => {
                 e.stopPropagation();

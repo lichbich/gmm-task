@@ -31,6 +31,7 @@ import {
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
 import { UserAvatar } from './common/UserAvatar';
+import { TaskShareButton } from './common/TaskShareButton';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 
@@ -839,6 +840,9 @@ const getRoleOrderRank = (roleCode?: string): number => {
         {/* Action Buttons */}
         <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-1.5">
+            {/* Quick Share / Copy Link Button */}
+            <TaskShareButton task={t} variant="icon" align="right" />
+
             {/* Note & Discussion Button for all members - Glows yellow when there's an unread note */}
             {(() => {
               const isUnread = hasUnreadNote(t);
@@ -1138,6 +1142,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
           </button>
 
           <div className="flex items-center gap-1.5">
+            <TaskShareButton task={t} variant="icon" align="left" />
+
             {/* Edit Button */}
             {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
               <button

@@ -6,6 +6,7 @@ import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
 import { UserAvatar } from './common/UserAvatar';
+import { TaskShareButton } from './common/TaskShareButton';
 import {
   History,
   FolderArchive,
@@ -604,7 +605,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                 </td>
 
                                 <td className="py-3 px-4 text-center">
-                                  <div className="flex items-center justify-center gap-1">
+                                  <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                    <TaskShareButton task={t} variant="icon" align="right" />
                                     <button
                                       onClick={() => setDiscussingTask(t)}
                                       className={`p-1.5 rounded-lg border transition ${
