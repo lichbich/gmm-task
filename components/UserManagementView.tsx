@@ -2236,13 +2236,6 @@ export const UserManagementView: React.FC = () => {
         </div>
       )}
 
-      {/* User Detail & Edit Modal */}
-      <UserDetailModal
-        user={selectedUserForDetail}
-        isOpen={!!selectedUserForDetail}
-        onClose={() => setSelectedUserForDetail(null)}
-      />
-
       {/* MODAL: DANH SÁCH TÀI KHOẢN ĐÃ KHÓA */}
       <Modal
         isOpen={isLockedUsersModalOpen}
@@ -3228,6 +3221,13 @@ export const UserManagementView: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* User Detail & Edit Modal */}
+      <UserDetailModal
+        user={selectedUserForDetail}
+        isOpen={!!selectedUserForDetail}
+        onClose={() => setSelectedUserForDetail(null)}
+      />
     </div>
   );
 };

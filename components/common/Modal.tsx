@@ -16,6 +16,8 @@ export interface ModalProps {
   footer?: React.ReactNode;
   className?: string;
   bodyClassName?: string;
+  containerClassName?: string;
+  zIndex?: string;
   closeOnBackdropClick?: boolean;
 }
 
@@ -31,6 +33,8 @@ export const Modal: React.FC<ModalProps> = ({
   footer,
   className = '',
   bodyClassName = '',
+  containerClassName = '',
+  zIndex = 'z-50',
   closeOnBackdropClick = true,
 }) => {
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
@@ -54,9 +58,9 @@ export const Modal: React.FC<ModalProps> = ({
           handleBackdropClick(e);
         }
       }}
-      className={`fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
+      className={`fixed inset-0 ${zIndex} bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
-      }`}
+      } ${containerClassName}`}
     >
       <div
         onClick={(e) => e.stopPropagation()}

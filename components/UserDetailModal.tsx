@@ -254,7 +254,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
+      className={`fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
@@ -864,6 +864,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
         isOpen={!!tempCredModal}
         onClose={() => setTempCredModal(null)}
         size="md"
+        zIndex="z-[80]"
         icon={
           <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
             <KeyRound className="w-5 h-5" />
