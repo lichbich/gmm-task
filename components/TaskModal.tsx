@@ -1,12 +1,14 @@
-'use client';
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, Specialization, TaskStatus } from '../types/task';
-import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare } from 'lucide-react';
+import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown, DropdownOption } from './common/Dropdown';
-import { insertCheckboxToText } from '../lib/descriptionHelper';
+import { insertCheckboxToText, removeImageFromDescription } from '../lib/descriptionHelper';
+import { uploadAndInsertImage, getImageFilesFromClipboard, getImageFilesFromDrop } from '../lib/imageUploadHelper';
+import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
+import { ImageLightbox } from './common/ImageLightbox';
+import { DescriptionEditor } from './common/DescriptionEditor';
 
 interface TaskModalProps {
   task?: Task | null;
@@ -86,6 +88,50 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [status, setStatus] = useState<TaskStatus>('To do');
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
   const [notes, setNotes] = useState<string>('');
+  const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        await uploadAndInsertImage(files[i], setDescription, setIsUploadingImage);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi xử lý tải ảnh');
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handlePasteDescription = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromClipboard(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setDescription, setIsUploadingImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
+
+  const handleDropDescription = async (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromDrop(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setDescription, setIsUploadingImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
 
   const checkDirtyAndConfirmClose = useCallback((): boolean => {
     let isDirty = false;
@@ -408,27 +454,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
             {/* Chi Tiết Task (Mô tả công việc chi tiết cho thành viên) */}
             <div>
-              <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                  Chi Tiết Task (Mô tả & Checklist việc con):
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setDescription((prev) => insertCheckboxToText(prev))}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 hover:underline transition"
-                  title="Chèn thêm checkbox / việc con"
-                >
-                  <CheckSquare className="w-3.5 h-3.5" />
-                  + Thêm Checkbox
-                </button>
-              </div>
-              <textarea
-                rows={3}
-                placeholder="Mô tả chi tiết nội dung đầu việc, hướng dẫn thực hiện, hoặc checklist việc con cho thành viên... (Gõ - [ ] Tên việc con để tạo checkbox)"
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                Chi Tiết Task (Mô tả & Checklist việc con):
+              </label>
+              <DescriptionEditor
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300/90 rounded-xl p-3 text-slate-800 text-xs focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition resize-none leading-relaxed"
+                onChange={setDescription}
+                placeholder="Mô tả chi tiết nội dung đầu việc, hướng dẫn thực hiện, hoặc checklist việc con cho thành viên... (Gõ - [ ] Tên việc con, hoặc Paste / Kéo thả ảnh trực tiếp)"
+                minRows={3}
+                onPreviewImage={(url) => setLightboxUrl(url)}
               />
             </div>
 
@@ -629,6 +664,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Image Lightbox preview */}
+      <ImageLightbox
+        isOpen={!!lightboxUrl}
+        imageUrl={lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
+      />
     </div>
   );
 };

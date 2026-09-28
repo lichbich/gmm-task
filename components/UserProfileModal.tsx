@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   X,
@@ -20,8 +20,13 @@ import {
   Clock,
   Edit2,
   Save,
+  Camera,
+  Loader2,
+  Trash2,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
+import { UserAvatar } from './common/UserAvatar';
+import { uploadImageToCatbox } from '../lib/imageUploadHelper';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -60,6 +65,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const [isSavingInfo, setIsSavingInfo] = useState(false);
   const [isSavedInfo, setIsSavedInfo] = useState(false);
   const [isSavedPassword, setIsSavedPassword] = useState(false);
+
+  // Avatar upload
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   if (!isRendered || !currentUser) return null;
 
@@ -137,6 +146,46 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
         setSuccessMsg('');
       }, 4000);
     }, 300);
+  };
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Vui lòng chọn file hình ảnh hợp lệ (PNG, JPG, WebP, GIF).');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMsg('Dung lượng ảnh đại diện tối đa là 10MB.');
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const result = await uploadImageToCatbox(file);
+      updateUser(userRecord.id, { avatarUrl: result.url });
+      setSuccessMsg('Cập nhật ảnh đại diện thành công!');
+      setTimeout(() => setSuccessMsg(''), 4000);
+    } catch (err: any) {
+      console.error('Failed to upload avatar:', err);
+      setErrorMsg(err?.message || 'Không thể tải ảnh đại diện lên. Vui lòng thử lại!');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarFileInputRef.current) {
+        avatarFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveAvatar = () => {
+    updateUser(userRecord.id, { avatarUrl: '' });
+    setSuccessMsg('Đã gỡ ảnh đại diện.');
+    setTimeout(() => setSuccessMsg(''), 3000);
   };
 
   const getRoleTheme = (role: string) => {
@@ -254,23 +303,57 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
           {/* User Profile Header (Sleek Dark Gradient Card) */}
           <div className="flex items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-slate-800 rounded-2xl p-4 shadow-md">
             <div className="flex items-center gap-3.5">
-              {/* Avatar */}
-              <div className="relative shrink-0">
-                <div
-                  className={`w-14 h-14 rounded-2xl bg-gradient-to-tr ${roleTheme.gradient} flex items-center justify-center text-white font-extrabold text-xl shadow-md ${roleTheme.glow}`}
-                >
-                  {userRecord.account.slice(0, 2).toUpperCase()}
-                </div>
-                <span
-                  className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 shadow-xs ${
-                    userRecord.password && userRecord.password.trim() !== '' ? 'bg-emerald-500' : 'bg-slate-400'
-                  }`}
-                  title={
-                    userRecord.password && userRecord.password.trim() !== ''
-                      ? 'Trạng thái: Đã tham gia hệ thống (Đã tạo mật khẩu)'
-                      : 'Trạng thái: Chưa tham gia hệ thống (Chưa tạo mật khẩu)'
-                  }
+              {/* Avatar with Camera Button & Hover overlay */}
+              <div className="relative shrink-0 group/avatar">
+                <input
+                  type="file"
+                  ref={avatarFileInputRef}
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarFileChange}
                 />
+
+                <div
+                  className="relative rounded-2xl overflow-hidden cursor-pointer"
+                  onClick={() => avatarFileInputRef.current?.click()}
+                  title="Bấm để thay đổi ảnh đại diện"
+                >
+                  <UserAvatar
+                    user={userRecord}
+                    size="xl"
+                    showStatus
+                    isOnline={Boolean(userRecord.password && userRecord.password.trim() !== '')}
+                  />
+
+                  {/* Hover Overlay with Camera Icon */}
+                  <div className="absolute inset-0 bg-slate-950/65 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex flex-col items-center justify-center text-white rounded-2xl z-10">
+                    <Camera className="w-5 h-5 mb-0.5 text-indigo-300" />
+                    <span className="text-[9px] font-bold">Đổi ảnh</span>
+                  </div>
+
+                  {/* Uploading Spinner */}
+                  {isUploadingAvatar && (
+                    <div className="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center text-white rounded-2xl z-20">
+                      <Loader2 className="w-5 h-5 animate-spin text-indigo-400 mb-0.5" />
+                      <span className="text-[8px] font-bold">Đang tải...</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Remove Avatar button if user already has an avatar */}
+                {userRecord.avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveAvatar();
+                    }}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition shadow-md cursor-pointer active:scale-90 z-30"
+                    title="Gỡ ảnh đại diện"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
               </div>
 
               {/* Name & Account Details */}

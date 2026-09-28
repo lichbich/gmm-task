@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Trophy, AlertTriangle, Award, CheckCircle2, Sparkles, TrendingUp, RefreshCw, Calendar, History, FolderArchive, Clock } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+import { UserAvatar } from './common/UserAvatar';
 import { getWeekDateRangeStr } from './WorkHistoryView';
 
 export const AwardLeaderboard: React.FC = () => {
@@ -147,9 +148,13 @@ export const AwardLeaderboard: React.FC = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/80 border border-emerald-300 dark:border-emerald-600 flex items-center justify-center text-xs sm:text-sm font-bold text-emerald-800 dark:text-emerald-200 shadow-2xs shrink-0">
-                    {topEffortMember.account.slice(0, 2)}
-                  </div>
+                  <UserAvatar
+                    user={users.find((u) => u.account.toLowerCase() === topEffortMember.account.toLowerCase())}
+                    account={topEffortMember.account}
+                    name={topEffortMember.userName}
+                    role={topEffortMember.role}
+                    size="sm"
+                  />
                   <div className="min-w-0">
                     <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-white truncate">
                       {topEffortMember.userName}
@@ -209,9 +214,13 @@ export const AwardLeaderboard: React.FC = () => {
                   className="bg-white/90 dark:bg-slate-800/90 p-2 rounded-xl border border-red-200 dark:border-red-800/80 flex items-center justify-between text-xs gap-2"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-6 h-6 rounded-lg bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 flex items-center justify-center text-[10px] font-bold text-red-700 dark:text-red-300 shrink-0">
-                      {m.account.slice(0, 2)}
-                    </div>
+                    <UserAvatar
+                      user={users.find((u) => u.account.toLowerCase() === m.account.toLowerCase())}
+                      account={m.account}
+                      name={m.userName}
+                      role={m.role}
+                      size="xs"
+                    />
                     <div className="min-w-0">
                       <span className="font-bold text-slate-800 dark:text-slate-100 block text-xs truncate">{m.userName}</span>
                       <span className="text-[10px] text-red-600 dark:text-red-400 block truncate">
@@ -282,9 +291,13 @@ export const AwardLeaderboard: React.FC = () => {
                   </td>
                   <td className="py-2.5 px-3 font-semibold">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs font-bold text-indigo-700 dark:text-indigo-300">
-                        {item.account.slice(0, 2)}
-                      </div>
+                      <UserAvatar
+                        user={users.find((u) => u.account.toLowerCase() === item.account.toLowerCase())}
+                        account={item.account}
+                        name={item.userName}
+                        role={item.role}
+                        size="xs"
+                      />
                       <div>
                         <span className="text-slate-800 dark:text-slate-100 block">{item.userName}</span>
                         <span className="text-[10px] text-slate-400 font-mono">@{item.account}</span>
@@ -354,9 +367,13 @@ export const AwardLeaderboard: React.FC = () => {
                   <span className="font-mono font-bold text-xs text-slate-500 dark:text-slate-400 shrink-0">
                     {index === 0 ? '🥇 1' : index === 1 ? '🥈 2' : index === 2 ? '🥉 3' : `#${index + 1}`}
                   </span>
-                  <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-xs font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
-                    {item.account.slice(0, 2)}
-                  </div>
+                  <UserAvatar
+                    user={users.find((u) => u.account.toLowerCase() === item.account.toLowerCase())}
+                    account={item.account}
+                    name={item.userName}
+                    role={item.role}
+                    size="xs"
+                  />
                   <div className="min-w-0">
                     <span className="font-bold text-xs text-slate-800 dark:text-slate-100 block truncate">
                       {item.userName}

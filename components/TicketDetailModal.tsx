@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Ticket, TicketStatus, TicketPriority } from '../types/task';
@@ -26,7 +26,23 @@ import {
   ArrowRight,
   Edit2,
   Plus,
+  Image as ImageIcon,
+  Loader2,
+  Maximize2,
+  Copy,
+  Check,
 } from 'lucide-react';
+import { parseDescription, removeImageFromDescription } from '../lib/descriptionHelper';
+import {
+  uploadAndInsertImage,
+  getImageFilesFromClipboard,
+  getImageFilesFromDrop,
+} from '../lib/imageUploadHelper';
+import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
+import { ImageLightbox } from './common/ImageLightbox';
+import { DecryptedImage } from './common/DecryptedImage';
+import { DescriptionEditor } from './common/DescriptionEditor';
+import { UserAvatar } from './common/UserAvatar';
 
 interface TicketDetailModalProps {
   ticket: Ticket | null;
@@ -59,6 +75,8 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
   const [commentContent, setCommentContent] = useState('');
   const [commentAttachment, setCommentAttachment] = useState('');
   const [isSendingComment, setIsSendingComment] = useState(false);
+  const [isUploadingCommentImage, setIsUploadingCommentImage] = useState(false);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
 
   const [isResolving, setIsResolving] = useState(false);
   const [resolutionNoteInput, setResolutionNoteInput] = useState('');
@@ -72,6 +90,104 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
     ticket?.attachments && ticket.attachments.length > 0 ? ticket.attachments : ['']
   );
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isUploadingEditImage, setIsUploadingEditImage] = useState(false);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Lightbox Image Preview Modal State
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; alt?: string } | null>(null);
+  const [copiedImageUrl, setCopiedImageUrl] = useState<string | null>(null);
+
+  const handleCopyImageUrl = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedImageUrl(url);
+    setTimeout(() => setCopiedImageUrl(null), 2000);
+  };
+
+  const handleEditImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        await uploadAndInsertImage(files[i], setEditDescription, setIsUploadingEditImage);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi xử lý tải ảnh');
+      }
+    }
+    if (editFileInputRef.current) editFileInputRef.current.value = '';
+  };
+
+  const handlePasteEditDescription = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromClipboard(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setEditDescription, setIsUploadingEditImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
+
+  const handleDropEditDescription = async (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromDrop(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setEditDescription, setIsUploadingEditImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
+
+  const handleCommentImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        await uploadAndInsertImage(files[i], setCommentContent, setIsUploadingCommentImage);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi xử lý tải ảnh');
+      }
+    }
+    if (commentFileInputRef.current) commentFileInputRef.current.value = '';
+  };
+
+  const handlePasteComment = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromClipboard(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setCommentContent, setIsUploadingCommentImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
+
+  const handleRemoveImageFromTicket = (imageUrl: string) => {
+    if (!ticket) return;
+    confirmDialog({
+      title: 'Xác nhận xóa ảnh đính kèm',
+      message: 'Bạn có chắc chắn muốn xóa ảnh này khỏi mô tả ticket? Thao tác này sẽ lưu ngay lập tức.',
+      confirmText: 'Xác nhận xóa',
+      type: 'danger',
+      onConfirm: () => {
+        const newDesc = removeImageFromDescription(ticket.description, imageUrl);
+        updateTicket(ticket.id, { description: newDesc });
+        setEditDescription(newDesc);
+        if (lightboxImage?.url === imageUrl) {
+          setLightboxImage(null);
+        }
+      },
+    });
+  };
 
   // Sync edit form fields when ticket changes
   React.useEffect(() => {
@@ -85,6 +201,8 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
       setIsEditing(false);
     }
   }, [ticket?.id]);
+
+  const parsedTicketDesc = useMemo(() => parseDescription(ticket?.description), [ticket?.description]);
 
   const {
     isRendered,
@@ -473,16 +591,16 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                 </div>
 
                 {/* Edit Description */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
                     Nội dung yêu cầu chi tiết <span className="text-rose-500">*</span>
                   </label>
-                  <textarea
-                    rows={6}
+                  <DescriptionEditor
                     value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    placeholder="Mô tả chi tiết nội dung cần team bạn phối hợp / giải đáp..."
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-normal leading-relaxed text-slate-800 dark:text-slate-200"
+                    onChange={setEditDescription}
+                    placeholder="Mô tả chi tiết nội dung cần team bạn phối hợp / giải đáp... (Hỗ trợ Paste Ctrl+V hoặc kéo thả ảnh trực tiếp)"
+                    minRows={5}
+                    onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
                   />
                 </div>
 
@@ -579,9 +697,13 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
 
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-xs shrink-0">
-                    {(ticket.assignedToName || ticket.assignedTo || '?').slice(0, 2).toUpperCase()}
-                  </div>
+                  <UserAvatar
+                    user={ticket.assignedTo ? users.find((u) => u.account.toLowerCase() === ticket.assignedTo!.toLowerCase()) : null}
+                    account={ticket.assignedTo}
+                    name={ticket.assignedToName}
+                    size="sm"
+                    shape="circle"
+                  />
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
                       {ticket.assignedToName || (ticket.assignedTo ? `@${ticket.assignedTo}` : 'Chưa phân công')}
@@ -650,8 +772,60 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
                     Nội dung yêu cầu chi tiết
                   </label>
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
-                    {ticket.description}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
+                    <div className="space-y-1.5">
+                      {parsedTicketDesc.items.map((item) => {
+                        if (item.isImage && item.imageUrl) {
+                          return (
+                            <div key={item.id} className="my-2 group/img relative inline-block max-w-full">
+                              <div
+                                onClick={() => setLightboxImage({ url: item.imageUrl!, alt: 'Ảnh đính kèm' })}
+                                className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer shadow-2xs hover:shadow-md transition duration-200 group-hover/img:border-indigo-400"
+                              >
+                                <DecryptedImage
+                                  src={item.imageUrl}
+                                  alt="Ảnh đính kèm"
+                                  className="max-h-64 sm:max-h-72 w-auto max-w-full object-contain rounded-xl transition duration-200 group-hover/img:scale-[1.01]"
+                                  loading="lazy"
+                                />
+
+                                {/* Hover Overlay */}
+                                <div className="absolute inset-0 bg-slate-900/0 group-hover/img:bg-slate-900/25 transition-all flex items-center justify-center opacity-0 group-hover/img:opacity-100">
+                                  <span className="px-3 py-1.5 rounded-xl bg-slate-900/85 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
+                                    <Maximize2 className="w-3.5 h-3.5" />
+                                    Phóng to ảnh
+                                  </span>
+                                </div>
+
+                                {/* Hover Quick Delete Button */}
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveImageFromTicket(item.imageUrl!);
+                                    }}
+                                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition duration-150 shadow-md cursor-pointer active:scale-90 z-10"
+                                    title="Xóa ảnh này khỏi ticket"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <p
+                            key={item.id}
+                            className="whitespace-pre-wrap text-slate-800 dark:text-slate-200 text-xs leading-relaxed font-normal"
+                          >
+                            {item.text}
+                          </p>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </>
@@ -904,6 +1078,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
 
               {ticket.comments?.map((comment) => {
                 const isMe = comment.authorAccount.toLowerCase() === currentUser.account.toLowerCase();
+                const parsedComment = parseDescription(comment.content);
                 return (
                   <div
                     key={comment.id}
@@ -911,6 +1086,13 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                   >
                     {/* Author & Timestamp */}
                     <div className="flex items-center gap-1.5 mb-1 px-1">
+                      <UserAvatar
+                        user={users.find((u) => u.account.toLowerCase() === (comment.authorAccount || '').toLowerCase())}
+                        account={comment.authorAccount}
+                        name={comment.authorName}
+                        size="xs"
+                        shape="circle"
+                      />
                       <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
                         {comment.authorName}
                       </span>
@@ -932,7 +1114,32 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                           : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-tl-xs'
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{comment.content}</p>
+                      <div className="space-y-1.5">
+                        {parsedComment.items.map((cItem) => {
+                          if (cItem.isImage && cItem.imageUrl) {
+                            return (
+                              <div key={cItem.id} className="my-1.5 group/img relative inline-block max-w-full">
+                                <div
+                                  onClick={() => setLightboxImage({ url: cItem.imageUrl!, alt: cItem.imageAlt })}
+                                  className="relative rounded-xl overflow-hidden border border-white/20 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 cursor-pointer shadow-2xs hover:shadow-md transition duration-200"
+                                >
+                                  <DecryptedImage
+                                    src={cItem.imageUrl}
+                                    alt={cItem.imageAlt || 'Ảnh'}
+                                    className="max-h-48 w-auto max-w-full object-contain rounded-xl"
+                                    loading="lazy"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <p key={cItem.id} className="whitespace-pre-wrap leading-relaxed">
+                              {cItem.text}
+                            </p>
+                          );
+                        })}
+                      </div>
 
                       {/* Attached links */}
                       {comment.attachments && comment.attachments.length > 0 && (
@@ -964,15 +1171,46 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
               onSubmit={handleSendComment}
               className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5"
             >
-              <textarea
-                rows={2}
-                value={commentContent}
-                onChange={(e) => setCommentContent(e.target.value)}
-                placeholder="Nhập nội dung phản hồi, câu hỏi hoặc giải đáp..."
-                className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  rows={2}
+                  value={commentContent}
+                  onChange={(e) => setCommentContent(e.target.value)}
+                  onPaste={handlePasteComment}
+                  placeholder="Nhập nội dung phản hồi... (Hỗ trợ Paste Ctrl+V ảnh trực tiếp)"
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
+                />
+                {isUploadingCommentImage && (
+                  <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-emerald-200 shadow-xs animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Đang xử lý ảnh lên...</span>
+                  </div>
+                )}
+              </div>
 
               <div className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={commentFileInputRef}
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleCommentImageFileSelect}
+                />
+                <button
+                  type="button"
+                  disabled={isUploadingCommentImage}
+                  onClick={() => commentFileInputRef.current?.click()}
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition cursor-pointer shrink-0 disabled:opacity-50"
+                  title="Tải ảnh đính kèm từ máy"
+                >
+                  {isUploadingCommentImage ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                  ) : (
+                    <ImageIcon className="w-4 h-4" />
+                  )}
+                </button>
+
                 <div className="flex-1 relative">
                   <LinkIcon className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -986,7 +1224,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
 
                 <button
                   type="submit"
-                  disabled={!commentContent.trim() || isSendingComment}
+                  disabled={!commentContent.trim() || isSendingComment || isUploadingCommentImage}
                   className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs active:scale-95 transition disabled:opacity-50 flex items-center gap-1.5 shrink-0 cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -997,6 +1235,19 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Lightbox Image Preview Modal with Pan, Zoom & Delete */}
+      <ImageLightbox
+        isOpen={!!lightboxImage}
+        imageUrl={lightboxImage?.url || null}
+        altText={lightboxImage?.alt}
+        onClose={() => setLightboxImage(null)}
+        onDelete={
+          canEdit && lightboxImage?.url
+            ? () => handleRemoveImageFromTicket(lightboxImage.url)
+            : undefined
+        }
+      />
     </div>
   );
 };

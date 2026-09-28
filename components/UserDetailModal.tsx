@@ -32,6 +32,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
+import { UserAvatar } from './common/UserAvatar';
 import { Dropdown } from './common/Dropdown';
 import { Modal } from './common/Modal';
 import { parseSheetRow } from './UserManagementView';
@@ -282,25 +283,12 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
           {/* User Profile Banner Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-slate-800 rounded-2xl p-4 shadow-md gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="relative shrink-0">
-                <div
-                  className={`w-14 h-14 rounded-2xl bg-gradient-to-tr ${roleTheme.gradient} flex items-center justify-center text-white font-extrabold text-xl shadow-md`}
-                >
-                  {user.account ? user.account.slice(0, 2).toUpperCase() : 'NV'}
-                </div>
-                <span
-                  className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-slate-900 shadow-xs ${
-                    user.password && user.password.trim() !== '' && user.firstLoginCompleted === true
-                      ? 'bg-emerald-500'
-                      : 'bg-slate-400'
-                  }`}
-                  title={
-                    user.password && user.password.trim() !== '' && user.firstLoginCompleted === true
-                      ? 'Trạng thái: Đã vào hệ thống (Đã đổi mật khẩu cá nhân)'
-                      : 'Trạng thái: Chưa vào hệ thống (Chưa đổi mật khẩu cá nhân / Đang dùng mật khẩu tạm)'
-                  }
-                />
-              </div>
+              <UserAvatar
+                user={user}
+                size="xl"
+                showStatus
+                isOnline={Boolean(user.password && user.password.trim() !== '' && user.firstLoginCompleted === true)}
+              />
 
               <div className="space-y-1">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">

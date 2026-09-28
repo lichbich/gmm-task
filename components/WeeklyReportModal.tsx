@@ -6,6 +6,7 @@ import { Task, TaskStatus } from '../types/task';
 import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare, Info } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
+import { UserAvatar } from './common/UserAvatar';
 
 interface WeeklyReportModalProps {
   task: Task | null;
@@ -203,14 +204,23 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 <span className="font-semibold text-slate-800">{task.estimatedEffort} giờ</span>
               </div>
               <div>
-                <span className="text-slate-500 block text-[11px] mb-0.5">Người thực hiện:</span>
-                <div className="font-semibold text-indigo-600 break-words">
-                  {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
-                  {task.assigneeAccount && (
-                    <span className="text-[10px] font-normal text-slate-500 block font-mono">
-                      @{task.assigneeAccount}
-                    </span>
-                  )}
+                <span className="text-slate-500 block text-[11px] mb-1">Người thực hiện:</span>
+                <div className="flex items-center gap-2">
+                  <UserAvatar
+                    user={assigneeUser}
+                    account={task.assigneeAccount}
+                    name={assigneeUser?.name}
+                    size="xs"
+                    shape="circle"
+                  />
+                  <div className="font-semibold text-indigo-600 dark:text-indigo-400 break-words text-xs">
+                    {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
+                    {task.assigneeAccount && (
+                      <span className="text-[10px] font-normal text-slate-500 block font-mono">
+                        @{task.assigneeAccount}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div>

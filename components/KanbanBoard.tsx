@@ -7,6 +7,7 @@ import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
+import { UserAvatar } from './common/UserAvatar';
 import {
   AlertTriangle,
   Award,
@@ -30,6 +31,7 @@ interface KanbanBoardProps {
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => {
   const {
     tasks,
+    users,
     milestones,
     updateTask,
     weeklyAwards,
@@ -361,10 +363,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
           {/* Assignee & Effort */}
           <div className="flex items-center gap-2 min-w-0">
             {t.assigneeAccount ? (
-              <div className="flex items-center gap-1 min-w-0" title={`Giao cho @${t.assigneeAccount}`}>
-                <div className="w-4 h-4 rounded-full bg-indigo-100 dark:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[8px] font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
-                  {t.assigneeAccount.slice(0, 2)}
-                </div>
+              <div className="flex items-center gap-1.5 min-w-0" title={`Giao cho @${t.assigneeAccount}`}>
+                <UserAvatar
+                  user={users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase())}
+                  account={t.assigneeAccount}
+                  size="xs"
+                  shape="circle"
+                />
                 <span className="font-mono text-[10px] text-slate-600 dark:text-slate-300 truncate max-w-[70px]">
                   {t.assigneeAccount}
                 </span>

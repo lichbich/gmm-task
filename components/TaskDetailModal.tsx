@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import { Task, TaskActivityLog } from '../types/task';
@@ -32,6 +32,12 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle2,
+  Image as ImageIcon,
+  Loader2,
+  Maximize2,
+  ExternalLink,
+  Copy,
+  Download,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { parseNoteLine, formatNewNoteLine, formatEditedNoteLine } from '../lib/notesHelper';
@@ -39,7 +45,18 @@ import {
   parseDescription,
   toggleDescriptionCheckbox,
   insertCheckboxToText,
+  removeImageFromDescription,
 } from '../lib/descriptionHelper';
+import {
+  uploadAndInsertImage,
+  getImageFilesFromClipboard,
+  getImageFilesFromDrop,
+} from '../lib/imageUploadHelper';
+import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
+import { ImageLightbox } from './common/ImageLightbox';
+import { DecryptedImage } from './common/DecryptedImage';
+import { DescriptionEditor } from './common/DescriptionEditor';
+import { UserAvatar } from './common/UserAvatar';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -110,6 +127,69 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [descText, setDescText] = useState('');
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [isSavedDesc, setIsSavedDesc] = useState(false);
+  const [isUploadingDescImage, setIsUploadingDescImage] = useState(false);
+  const descFileInputRef = useRef<HTMLInputElement>(null);
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; alt?: string } | null>(null);
+  const [copiedImageUrl, setCopiedImageUrl] = useState<string | null>(null);
+
+  const handleDescImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        await uploadAndInsertImage(files[i], setDescText, setIsUploadingDescImage);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi xử lý tải ảnh');
+      }
+    }
+    if (descFileInputRef.current) descFileInputRef.current.value = '';
+  };
+
+  const handlePasteDescText = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromClipboard(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setDescText, setIsUploadingDescImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
+
+  const handleDropDescText = async (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromDrop(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setDescText, setIsUploadingDescImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
+
+  const handleRemoveImageFromTask = (imageUrl: string) => {
+    if (!task) return;
+    confirmDialog({
+      title: 'Xác nhận xóa ảnh đính kèm',
+      message: 'Bạn có chắc chắn muốn xóa ảnh này khỏi mô tả task? Thao tác này sẽ lưu ngay lập tức.',
+      confirmText: 'Xác nhận xóa',
+      type: 'danger',
+      onConfirm: () => {
+        const newDesc = removeImageFromDescription(task.description, imageUrl);
+        updateTask(task.id, { description: newDesc });
+        setDescText(newDesc);
+        if (lightboxImage?.url === imageUrl) {
+          setLightboxImage(null);
+        }
+      },
+    });
+  };
 
   // Collapsible activity history state (default: collapsed)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -576,43 +656,30 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             </div>
 
             {isEditingDesc ? (
-              <form onSubmit={handleSaveDescription} className="space-y-2 pt-1">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={handleAddCheckboxInEdit}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 rounded-lg border border-indigo-200/80 dark:border-indigo-800/80 transition shadow-2xs"
-                    title="Chèn thêm checkbox / việc con"
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" />
-                    + Thêm Checkbox / Sub-task
-                  </button>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                    Gõ <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-indigo-600 dark:text-indigo-400">- [ ] Việc con</code> để tạo checkbox
-                  </span>
-                </div>
-                <textarea
-                  rows={5}
+              <form onSubmit={handleSaveDescription} className="space-y-3 pt-1">
+                <DescriptionEditor
                   value={descText}
-                  onChange={(e) => setDescText(e.target.value)}
-                  placeholder="Nhập mô tả chi tiết công việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên...&#10;Ví dụ:&#10;- [ ] Bước 1: Thiết kế wireframe&#10;- [ ] Bước 2: Review với Leader"
-                  className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition resize-none leading-relaxed"
-                  autoFocus
+                  onChange={setDescText}
+                  placeholder="Nhập mô tả chi tiết công việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên... Hỗ trợ Paste (Ctrl+V) hoặc kéo thả ảnh trực tiếp!"
+                  minRows={5}
+                  autoFocus={true}
+                  onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
                 />
-                <div className="flex items-center justify-end gap-2">
+
+                <div className="flex items-center justify-end gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => {
                       setDescText(task.description || '');
                       setIsEditingDesc(false);
                     }}
-                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-xl font-medium transition"
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-xl font-medium transition cursor-pointer"
                   >
                     Hủy
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5"
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
                     Lưu Mô Tả
@@ -623,9 +690,50 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <div>
                 {task.description ? (
                   <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3">
-                    {/* Description Items & Interactive Checkboxes */}
+                    {/* Description Items & Interactive Checkboxes & Images */}
                     <div className="space-y-1 text-xs sm:text-sm leading-relaxed">
                       {parsedDesc.items.map((item) => {
+                        if (item.isImage && item.imageUrl) {
+                          return (
+                            <div key={item.id} className="my-2 group/img relative inline-block max-w-full">
+                              <div
+                                onClick={() => setLightboxImage({ url: item.imageUrl!, alt: 'Ảnh đính kèm' })}
+                                className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer shadow-2xs hover:shadow-md transition duration-200 group-hover/img:border-indigo-400"
+                              >
+                                <DecryptedImage
+                                  src={item.imageUrl}
+                                  alt="Ảnh đính kèm"
+                                  className="max-h-72 sm:max-h-80 w-auto max-w-full object-contain rounded-xl transition duration-200 group-hover/img:scale-[1.01]"
+                                  loading="lazy"
+                                />
+
+                                {/* Hover Overlay */}
+                                <div className="absolute inset-0 bg-slate-900/0 group-hover/img:bg-slate-900/25 transition-all flex items-center justify-center opacity-0 group-hover/img:opacity-100">
+                                  <span className="px-3 py-1.5 rounded-xl bg-slate-900/85 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
+                                    <Maximize2 className="w-3.5 h-3.5" />
+                                    Phóng to ảnh
+                                  </span>
+                                </div>
+
+                                {/* Hover Quick Delete Button */}
+                                {isEditable && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveImageFromTask(item.imageUrl!);
+                                    }}
+                                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition duration-150 shadow-md cursor-pointer active:scale-90 z-10"
+                                    title="Xóa ảnh này khỏi task"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+
                         if (item.isCheckbox) {
                           return (
                             <div
@@ -692,10 +800,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               {/* Assignee Card */}
               <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
                 <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Người phụ trách:</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-xs shrink-0">
-                    {task.assigneeAccount ? task.assigneeAccount.slice(0, 2).toUpperCase() : '??'}
-                  </div>
+                <div className="flex items-center gap-2.5">
+                  <UserAvatar
+                    user={assigneeUser}
+                    account={task.assigneeAccount}
+                    name={assigneeUser?.name}
+                    size="sm"
+                    shape="circle"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-slate-800 dark:text-slate-100 text-xs leading-snug break-words">
                       {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
@@ -1083,6 +1195,19 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Lightbox Image Preview Modal with Pan, Zoom & Delete */}
+      <ImageLightbox
+        isOpen={!!lightboxImage}
+        imageUrl={lightboxImage?.url || null}
+        altText={lightboxImage?.alt}
+        onClose={() => setLightboxImage(null)}
+        onDelete={
+          isEditable && lightboxImage?.url
+            ? () => handleRemoveImageFromTask(lightboxImage.url)
+            : undefined
+        }
+      />
     </div>
   );
 

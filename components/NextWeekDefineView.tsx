@@ -6,6 +6,7 @@ import { Task, Milestone, User as UserType, isTaskUnworked, Ticket } from '../ty
 import { TaskDetailModal } from './TaskDetailModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
+import { UserAvatar } from './common/UserAvatar';
 import { getWeekDateRangeStr } from './WorkHistoryView';
 import {
   ClipboardList,
@@ -618,9 +619,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         {/* Avatar / Initials */}
-                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center font-extrabold text-sm shadow-md shrink-0">
-                          {group.account.slice(0, 2).toUpperCase()}
-                        </div>
+                        <UserAvatar user={group.user} account={group.account} size="md" />
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">

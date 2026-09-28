@@ -39,6 +39,7 @@ import {
 import { Dropdown } from './common/Dropdown';
 import { Modal } from './common/Modal';
 import { UserDetailModal } from './UserDetailModal';
+import { UserAvatar } from './common/UserAvatar';
 
 export type SheetFieldKey =
   | 'no'
@@ -1917,9 +1918,7 @@ export const UserManagementView: React.FC = () => {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center shrink-0">
-                            {u.account.slice(0, 2).toUpperCase()}
-                          </div>
+                          <UserAvatar user={u} size="sm" />
                           <div>
                             <button
                               onClick={() => setSelectedUserForDetail(u)}
@@ -2490,9 +2489,7 @@ export const UserManagementView: React.FC = () => {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 font-bold text-xs flex items-center justify-center shrink-0">
-                          {u.account.slice(0, 2).toUpperCase()}
-                        </div>
+                        <UserAvatar user={u} size="sm" />
                         <div>
                           <button
                             onClick={() => setSelectedUserForDetail(u)}

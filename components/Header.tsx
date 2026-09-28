@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { UserProfileModal } from './UserProfileModal';
 import { GMMLogo } from './common/GMMLogo';
 import { NotificationBell } from './NotificationBell';
+import { UserAvatar } from './common/UserAvatar';
 
 import {
   LayoutGrid,
@@ -215,18 +216,15 @@ export const Header: React.FC<HeaderProps> = ({
                   title="Bấm để xem thông tin chi tiết & Đổi mật khẩu"
                 >
                   {/* User Avatar */}
-                  <div className="relative shrink-0">
-                    <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr ${theme.avatarGrad} flex items-center justify-center text-xs font-black shadow-xs`}>
-                      {currentUser.account.slice(0, 2).toUpperCase()}
-                    </div>
-                    <span
-                      className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-white dark:border-slate-900 shadow-xs ${
-                        (userRecord?.password && userRecord.password.trim() !== '') || (currentUser.password && currentUser.password.trim() !== '')
-                          ? 'bg-emerald-500 dark:bg-emerald-400'
-                          : 'bg-slate-400 dark:bg-slate-400'
-                      }`}
-                    />
-                  </div>
+                  <UserAvatar
+                    user={userRecord || currentUser}
+                    size="sm"
+                    showStatus
+                    isOnline={Boolean(
+                      (userRecord?.password && userRecord.password.trim() !== '') ||
+                      (currentUser.password && currentUser.password.trim() !== '')
+                    )}
+                  />
 
                   {/* Name, Role & Specialization (Shown on lg+ screens) */}
                   <div className="hidden lg:block leading-tight">

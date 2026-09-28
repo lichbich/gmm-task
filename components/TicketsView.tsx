@@ -6,6 +6,7 @@ import { Ticket, TicketStatus, TicketPriority } from '../types/task';
 import { TicketCreateModal } from './TicketCreateModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown, DropdownOption } from './common/Dropdown';
+import { UserAvatar } from './common/UserAvatar';
 import {
   Sparkles,
   Plus,
@@ -639,8 +640,14 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
                     {/* Right: Assignee & Discussion Pill */}
                     <div className="flex items-center gap-2 shrink-0">
                       {t.assignedTo ? (
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          <UserCheck className="w-3 h-3 text-indigo-500" />
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                          <UserAvatar
+                            user={users.find((u) => u.account.toLowerCase() === t.assignedTo!.toLowerCase())}
+                            account={t.assignedTo}
+                            name={t.assignedToName}
+                            size="xs"
+                            shape="circle"
+                          />
                           <span>{t.assignedToName || t.assignedTo}</span>
                         </div>
                       ) : (

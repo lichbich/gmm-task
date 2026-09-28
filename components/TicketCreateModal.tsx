@@ -15,7 +15,17 @@ import {
   Sparkles,
   Flame,
   Layers,
+  Image as ImageIcon,
+  Loader2,
 } from 'lucide-react';
+import {
+  uploadAndInsertImage,
+  getImageFilesFromClipboard,
+  getImageFilesFromDrop,
+} from '../lib/imageUploadHelper';
+import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
+import { ImageLightbox } from './common/ImageLightbox';
+import { DescriptionEditor } from './common/DescriptionEditor';
 
 interface TicketCreateModalProps {
   isOpen: boolean;
@@ -57,6 +67,50 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
   const [attachmentUrls, setAttachmentUrls] = useState<string[]>(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        await uploadAndInsertImage(files[i], setDescription, setIsUploadingImage);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi xử lý tải ảnh');
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handlePasteDescription = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromClipboard(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setDescription, setIsUploadingImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
+
+  const handleDropDescription = async (e: React.DragEvent<HTMLTextAreaElement>) => {
+    const imageFiles = getImageFilesFromDrop(e);
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      for (const file of imageFiles) {
+        try {
+          await uploadAndInsertImage(file, setDescription, setIsUploadingImage);
+        } catch (err: any) {
+          alert(err.message || 'Lỗi xử lý tải ảnh');
+        }
+      }
+    }
+  };
 
   const checkDirtyAndConfirmClose = React.useCallback((): boolean => {
     const isDirty =
@@ -367,16 +421,15 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               Mô tả chi tiết khúc mắc & yêu cầu hỗ trợ <span className="text-red-500">*</span>
             </label>
-            <textarea
-              rows={4}
+            <DescriptionEditor
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Mô tả cụ thể bối cảnh: Team bạn đang làm gì, đang gặp vướng mắc ở phần nào, và cần team đích cung cấp hay xử lý thông tin gì để có thể tiếp tục..."
-              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              required
+              onChange={setDescription}
+              placeholder="Mô tả cụ thể bối cảnh: Team bạn đang làm gì, đang gặp vướng mắc ở phần nào... (Hỗ trợ Paste Ctrl+V hoặc kéo thả ảnh trực tiếp)"
+              minRows={4}
+              onPreviewImage={(url) => setLightboxUrl(url)}
             />
           </div>
 
@@ -485,6 +538,13 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Lightbox Image Preview Modal */}
+      <ImageLightbox
+        isOpen={!!lightboxUrl}
+        imageUrl={lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
+      />
     </div>
   );
 };

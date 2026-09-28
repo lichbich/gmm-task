@@ -5,6 +5,7 @@ import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
+import { UserAvatar } from './common/UserAvatar';
 import {
   History,
   FolderArchive,
@@ -100,6 +101,7 @@ export const getWeekDeadline = (weekNo: number, year: number = 2026): Date => {
 export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModal }) => {
   const {
     tasks,
+    users,
     weeklyArchives,
     selectedWeek,
     selectedYear,
@@ -540,10 +542,13 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                 </td>
 
                                 <td className="py-3 px-3">
-                                  <div className="flex items-center gap-1.5 text-xs text-slate-700">
-                                    <div className="w-5 h-5 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                      {(t.assigneeAccount || '?').slice(0, 1).toUpperCase()}
-                                    </div>
+                                  <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
+                                    <UserAvatar
+                                      user={users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase())}
+                                      account={t.assigneeAccount}
+                                      size="xs"
+                                      shape="circle"
+                                    />
                                     <span className="truncate">{t.assigneeAccount || 'Chưa phân công'}</span>
                                   </div>
                                 </td>
@@ -696,10 +701,13 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                               </h4>
 
                               <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-700/80">
-                                <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
-                                  <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center text-[8px] font-bold">
-                                    {(t.assigneeAccount || '?').slice(0, 1).toUpperCase()}
-                                  </div>
+                                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                                  <UserAvatar
+                                    user={users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase())}
+                                    account={t.assigneeAccount}
+                                    size="xs"
+                                    shape="circle"
+                                  />
                                   <span>{t.assigneeAccount || 'Chưa phân công'}</span>
                                 </div>
 

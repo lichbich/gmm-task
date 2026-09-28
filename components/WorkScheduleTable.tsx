@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
+import { UserAvatar } from './common/UserAvatar';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 
@@ -764,9 +765,12 @@ const getRoleOrderRank = (roleCode?: string): number => {
         <td className="py-3 px-3 font-medium">
           {t.assigneeAccount ? (
             <div className="flex items-center gap-1.5">
-              <div className="w-5 h-5 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[9px] font-bold text-indigo-600 dark:text-indigo-300">
-                {t.assigneeAccount.slice(0, 2)}
-              </div>
+              <UserAvatar
+                user={users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase())}
+                account={t.assigneeAccount}
+                size="xs"
+                shape="circle"
+              />
               <span className="text-slate-700 dark:text-slate-200">{t.assigneeAccount}</span>
             </div>
           ) : (
@@ -1036,9 +1040,12 @@ const getRoleOrderRank = (roleCode?: string): number => {
             <div className="flex items-center gap-1.5">
               {t.assigneeAccount ? (
                 <>
-                  <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-[9px] font-bold text-indigo-700 dark:text-indigo-300">
-                    {t.assigneeAccount.slice(0, 2)}
-                  </div>
+                  <UserAvatar
+                    user={users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase())}
+                    account={t.assigneeAccount}
+                    size="xs"
+                    shape="circle"
+                  />
                   <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs">
                     {t.assigneeAccount}
                   </span>
@@ -1188,13 +1195,18 @@ const getRoleOrderRank = (roleCode?: string): number => {
       {/* Dynamic Floating Sticky Role Bar (Option 2 - Linear / Notion style) */}
       {subTab === 'ALL_TASKS' && groupedTasksByRole.length > 0 && (
         <div
-          className={`fixed top-3 sm:top-4 left-0 right-0 z-40 flex justify-center pointer-events-none px-3 transition-all duration-300 ease-out transform ${
+          className={`fixed top-3 sm:top-4 left-0 right-0 z-40 flex justify-center px-3 transition-all duration-300 ease-out transform ${
             showFloatingRoleBar && activeRoleInView
-              ? 'opacity-100 scale-100 translate-y-0'
-              : 'opacity-0 scale-75 -translate-y-2 pointer-events-none'
+              ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto visible'
+              : 'opacity-0 scale-90 -translate-y-3 pointer-events-none invisible'
           }`}
+          aria-hidden={!showFloatingRoleBar}
         >
-          <div className="pointer-events-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/90 shadow-xl shadow-slate-900/10 dark:shadow-black/50 rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 sm:gap-3 max-w-full sm:max-w-4xl overflow-x-auto no-scrollbar transition-transform duration-300 ease-out">
+          <div
+            className={`${
+              showFloatingRoleBar && activeRoleInView ? 'pointer-events-auto' : 'pointer-events-none'
+            } bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/90 shadow-xl shadow-slate-900/10 dark:shadow-black/50 rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 sm:gap-3 max-w-full sm:max-w-4xl overflow-x-auto no-scrollbar transition-transform duration-300 ease-out`}
+          >
             {/* Active Role Indicator */}
             {(() => {
               const activeGroup =
