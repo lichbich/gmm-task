@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, Specialization, TaskStatus } from '../types/task';
 import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare } from 'lucide-react';
@@ -28,7 +28,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   defaultAssignee,
 }) => {
   const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear } = useApp();
-  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   const allRoleCodes = roles.map((r) => r.code);
 
@@ -87,6 +86,87 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [status, setStatus] = useState<TaskStatus>('To do');
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
   const [notes, setNotes] = useState<string>('');
+
+  const checkDirtyAndConfirmClose = useCallback((): boolean => {
+    let isDirty = false;
+    if (!task) {
+      // Creating new task
+      const defaultAssigneeVal =
+        defaultAssignee !== undefined
+          ? defaultAssignee
+          : currentUser?.role === 'Member' && currentUser?.account
+          ? currentUser.account
+          : '';
+      const defaultMilestoneVal = initialMilestoneId !== undefined ? initialMilestoneId : '';
+
+      isDirty =
+        title.trim() !== '' ||
+        description.trim() !== '' ||
+        notes.trim() !== '' ||
+        (estimatedEffort !== 2 && estimatedEffort !== '2') ||
+        assigneeAccount !== defaultAssigneeVal ||
+        milestoneId !== defaultMilestoneVal;
+    } else {
+      // Editing existing task
+      const origTitle = task.title || '';
+      const origDesc = task.description || '';
+      const origNotes = task.notes || '';
+      const origEffort = task.estimatedEffort !== undefined ? task.estimatedEffort : 2;
+      const origAssignee =
+        task.assigneeAccount ||
+        task.assignmentRequestedBy ||
+        (defaultAssignee !== undefined ? defaultAssignee : '');
+      const origMilestone = task.milestoneId || initialMilestoneId || '';
+      const origRole = task.role || defaultRole;
+      const origStatus = task.status || 'To do';
+      const origPriority = task.priority || 'Medium';
+
+      isDirty =
+        title !== origTitle ||
+        description !== origDesc ||
+        notes !== origNotes ||
+        String(estimatedEffort) !== String(origEffort) ||
+        assigneeAccount !== origAssignee ||
+        milestoneId !== origMilestone ||
+        role !== origRole ||
+        status !== origStatus ||
+        priority !== origPriority;
+    }
+
+    if (isDirty) {
+      confirmDialog({
+        title: 'Task đang điền dở dang',
+        message: 'Bạn đang nhập thông tin công việc chưa lưu. Bạn có chắc chắn muốn hủy và thoát không? Mọi thông tin vừa nhập sẽ bị mất.',
+        confirmText: 'Rời khỏi & Hủy',
+        cancelText: 'Tiếp tục điền',
+        type: 'warning',
+        onConfirm: () => {
+          forceClose();
+        },
+      });
+      return false;
+    }
+    return true;
+  }, [
+    task,
+    title,
+    description,
+    notes,
+    estimatedEffort,
+    assigneeAccount,
+    milestoneId,
+    role,
+    status,
+    priority,
+    defaultAssignee,
+    initialMilestoneId,
+    defaultRole,
+    currentUser,
+    confirmDialog,
+  ]);
+
+  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
+    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -199,7 +279,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         notes,
       });
     }
-    handleClose();
+    forceClose();
   };
 
   const handleDelete = () => {
@@ -211,7 +291,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       type: 'danger',
       onConfirm: () => {
         deleteTask(task.id);
-        handleClose();
+        forceClose();
       },
     });
   };

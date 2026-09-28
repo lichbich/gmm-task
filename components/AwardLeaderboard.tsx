@@ -26,6 +26,16 @@ export const AwardLeaderboard: React.FC = () => {
   const topEffortMember = isWeekFinalized ? weeklyAwards.find((w) => w.isTopEffort && w.totalEffort > 0) : undefined;
   const lateMembers = isWeekFinalized ? weeklyAwards.filter((w) => w.isLate) : [];
 
+  // PO & Admin check: ONLY PO or Admin can finalize week & rollover
+  const isPOOrAdmin = (u?: any): boolean => {
+    if (!u) return false;
+    if (u.role === 'Admin' || u.role === 'PO') return true;
+    const specs = u.specializations || [];
+    return specs.some((s: string) => s.toUpperCase() === 'PO');
+  };
+
+  const canFinalizeWeek = isPOOrAdmin(currentUser);
+
   const handleRollover = () => {
     confirmDialog({
       title: 'Xác nhận Chốt tuần & Lưu trữ',
@@ -74,8 +84,8 @@ export const AwardLeaderboard: React.FC = () => {
               />
             </div>
 
-            {/* Leader/Advisor/Admin Rollover Button */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
+            {/* PO & Admin Rollover Button */}
+            {canFinalizeWeek && (
               <button
                 onClick={handleRollover}
                 className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
@@ -99,7 +109,7 @@ export const AwardLeaderboard: React.FC = () => {
               Chưa chốt Tuần {selectedWeek}
             </strong>
             <span>
-              Admin chưa bấm nút <strong>"Chốt Tuần {selectedWeek}"</strong>. Danh hiệu <strong>Thưởng (Top Effort)</strong> và các mức <strong>Cảnh Báo Phạt</strong> sẽ chỉ được áp dụng và hiển thị chính thức sau khi tuần được chốt.
+              Admin hoặc PO chưa bấm nút <strong>"Chốt Tuần {selectedWeek}"</strong>. Danh hiệu <strong>Thưởng (Top Effort)</strong> và các mức <strong>Cảnh Báo Phạt</strong> sẽ chỉ được áp dụng và hiển thị chính thức sau khi tuần được chốt.
             </span>
           </div>
         </div>

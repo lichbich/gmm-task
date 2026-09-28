@@ -40,6 +40,7 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
     tasks,
     milestones,
     createTicket,
+    confirmDialog,
   } = useApp();
 
   const userSpecializations = currentUser?.specializations && currentUser.specializations.length > 0
@@ -57,13 +58,36 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  const checkDirtyAndConfirmClose = React.useCallback((): boolean => {
+    const isDirty =
+      title.trim() !== '' ||
+      description.trim() !== '' ||
+      attachmentUrls.some((u) => u.trim() !== '');
+
+    if (isDirty) {
+      confirmDialog({
+        title: 'Ticket đang điền dở dang',
+        message: 'Bạn đang tạo yêu cầu hỗ trợ (ticket) dở dang. Bạn có chắc chắn muốn hủy và thoát không? Nội dung vừa nhập sẽ bị mất.',
+        confirmText: 'Rời khỏi & Hủy',
+        cancelText: 'Tiếp tục điền',
+        type: 'warning',
+        onConfirm: () => {
+          forceClose();
+        },
+      });
+      return false;
+    }
+    return true;
+  }, [title, description, attachmentUrls, confirmDialog]);
+
   const {
     isRendered,
     isVisible,
     handleClose,
+    forceClose,
     handleBackdropMouseDown,
     handleBackdropClick,
-  } = useModalAnimation(isOpen, onClose);
+  } = useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
 
   // Available roles for destination
   const availableToRoles = roles && roles.length > 0
@@ -171,7 +195,7 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
       if (onCreated) {
         onCreated(created);
       }
-      handleClose();
+      forceClose();
     } catch (err: any) {
       console.error('Error creating ticket:', err);
       setErrorMessage(err?.message || 'Có lỗi xảy ra khi tạo ticket yêu cầu.');

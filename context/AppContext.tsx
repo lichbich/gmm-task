@@ -1716,6 +1716,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = tasks.map((t) => {
       if (t.id !== id) return t;
 
+      // If completionPercentage is explicitly set to 0 or is 0, ensure actualEffort is 0 and status is To do (cannot be Done)
+      const effectivePct = updates.completionPercentage !== undefined ? updates.completionPercentage : t.completionPercentage;
+      if (effectivePct === 0) {
+        updates.actualEffort = 0;
+        if (updates.status === 'Done' || (!updates.status && t.status === 'Done')) {
+          updates.status = 'To do';
+        }
+      }
+
       if (options?.skipLog) {
         targetTaskUpdated = {
           ...t,
@@ -1968,8 +1977,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = new Date(simulatedTime);
     const nowIso = new Date().toISOString();
 
+    const estEffort = targetTask?.estimatedEffort || 0;
+    // If completion percentage is 0%, actualEffort is automatically 0h and status is To do (cannot be Done)
+    // If completion percentage > 0 and actualEffort is 0, default to estimatedEffort
+    const finalActualEffort =
+      completionPercentage === 0
+        ? 0
+        : actualEffort > 0
+        ? actualEffort
+        : estEffort;
     const isSundayNoonOrLater = now.getTime() >= sundayNoon.getTime();
-    const isDone = status === 'Done' || completionPercentage === 100;
+    const finalStatus: TaskStatus =
+      completionPercentage === 0
+        ? 'To do'
+        : completionPercentage === 100
+        ? 'Done'
+        : isSundayNoonOrLater || status === 'Done'
+        ? 'Done'
+        : 'In Progress';
+
+    const isDone = finalStatus === 'Done' || completionPercentage === 100;
     const isOfficialReport = isDone || isSundayNoonOrLater;
     const isLate = now.getTime() > deadline.getTime();
 
@@ -1984,14 +2011,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (t.id !== taskId) return t;
 
       const changes: string[] = [];
-      if (status !== t.status) {
-        changes.push(`Trạng thái: "${t.status}" ➔ "${status}"`);
+      if (finalStatus !== t.status) {
+        changes.push(`Trạng thái: "${t.status}" ➔ "${finalStatus}"`);
       }
       if (completionPercentage !== t.completionPercentage) {
         changes.push(`Tiến độ: ${t.completionPercentage}% ➔ ${completionPercentage}%`);
       }
-      if (actualEffort !== t.actualEffort) {
-        changes.push(`Effort: ${t.actualEffort}h ➔ ${actualEffort}h`);
+      if (finalActualEffort !== t.actualEffort) {
+        changes.push(`Effort: ${t.actualEffort}h ➔ ${finalActualEffort}h`);
       }
       if (notes !== undefined && notes !== t.notes) {
         changes.push(`Kèm ghi chú báo cáo`);
@@ -2015,9 +2042,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       updatedReportTask = {
         ...t,
-        actualEffort,
+        actualEffort: finalActualEffort,
         completionPercentage,
-        status,
+        status: finalStatus,
         notes: notes !== undefined ? notes : t.notes,
         lastSubmittedAt: isOfficialReport ? now.toISOString() : t.lastSubmittedAt,
         isSubmittedLate: isOfficialReport ? (isDone ? false : isLate) : t.isSubmittedLate,
@@ -2146,8 +2173,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Finish Week & Rollover Unfinished Tasks to Next Week
+  // Finish Week & Rollover Unfinished Tasks to Next Week (Admin & PO only)
   const finishWeekAndRollover = () => {
+    const isPOOrAdmin = (u?: any): boolean => {
+      if (!u) return false;
+      if (u.role === 'Admin' || u.role === 'PO') return true;
+      const specs = u.specializations || [];
+      return specs.some((s: string) => s.toUpperCase() === 'PO');
+    };
+
+    if (!isPOOrAdmin(authSession)) {
+      confirmDialog({
+        title: 'Không có quyền',
+        message: 'Chỉ có Admin hoặc PO mới có quyền Chốt tuần và lưu trữ lịch sử công việc!',
+        type: 'danger',
+        confirmText: 'Đã hiểu',
+        onConfirm: () => {},
+      });
+      return;
+    }
+
     const nextWeek = selectedWeek + 1;
     // Only assigned tasks are part of active weekly schedules & history
     const currentWeekAssignedTasks = tasks.filter(
@@ -2158,8 +2203,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const workedTasks = currentWeekAssignedTasks.filter((t) => !isTaskUnworked(t));
     const unworkedTasks = currentWeekAssignedTasks.filter((t) => isTaskUnworked(t));
 
-    const completedTasksCount = workedTasks.filter((t) => t.status === 'Done').length;
-    const rolledOverTasksCount = workedTasks.filter((t) => t.status !== 'Done').length;
+    const completedTasksCount = workedTasks.filter((t) => (t.completionPercentage || 0) >= 100).length;
+    const rolledOverTasksCount = workedTasks.filter((t) => (t.completionPercentage || 0) < 100).length;
 
     // Create Archive Record for current week:
     // IMPORTANT: Exclude 0%/0h unworked tasks from tasksSnapshot so they do NOT pollute historical logs!
@@ -2171,7 +2216,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       completedTasksCount: completedTasksCount,
       rolledOverTasksCount: rolledOverTasksCount,
       awards: calculateWeeklyAwardsForWeek(selectedWeek, selectedYear, true),
-      tasksSnapshot: JSON.parse(JSON.stringify(workedTasks)),
+      tasksSnapshot: JSON.parse(
+        JSON.stringify(
+          workedTasks.map((t) => ({
+            ...t,
+            actualEffort: t.completionPercentage === 0 ? 0 : (t.actualEffort || 0),
+          }))
+        )
+      ),
     };
 
     const updatedArchives = [...weeklyArchives, archiveRecord];
@@ -2179,7 +2231,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncArchivesToFirebase(updatedArchives);
 
     // Update tasks array:
-    // 1. Move unworked tasks (0% & 0h) directly to nextWeek (clears them from currentWeek)
+    // 1. Move unworked tasks (0% progress) directly to nextWeek (clears them from currentWeek)
     const newTasksList = tasks
       .map((t) => {
         if (t.weekNumber === selectedWeek && t.year === selectedYear && t.assigneeAccount && isTaskUnworked(t)) {
@@ -2196,6 +2248,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return {
             ...t,
             weekNumber: nextWeek,
+            actualEffort: 0,
+            status: 'To do' as TaskStatus,
+            lastSubmittedAt: undefined,
+            isSubmittedLate: undefined,
             updatedAt: new Date().toISOString(),
           };
         }
@@ -2203,9 +2259,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
       .filter(Boolean) as Task[];
 
-    // 2. For partially worked unfinished tasks, create continuation tasks for nextWeek while keeping original record in current week
+    // 2. For partially worked unfinished tasks (0% < completionPercentage < 100%), create continuation tasks for nextWeek while keeping original record in current week
     const partiallyWorkedUnfinished = currentWeekAssignedTasks.filter(
-      (t) => t.status !== 'Done' && !isTaskUnworked(t)
+      (t) => (t.completionPercentage || 0) > 0 && (t.completionPercentage || 0) < 100
     );
 
     partiallyWorkedUnfinished.forEach((t) => {
@@ -2221,7 +2277,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
           weekNumber: nextWeek,
           parentTaskId: t.id,
-          status: 'To do',
+          status: 'In Progress',
+          actualEffort: 0,
+          completionPercentage: t.completionPercentage,
           lastSubmittedAt: undefined,
           isSubmittedLate: undefined,
           createdAt: new Date().toISOString(),
@@ -2284,7 +2342,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         hasUnsubmitted: false,
       };
       entry.total += 1;
-      entry.totalEffort += task.actualEffort || 0;
+      const effectiveEffort = (task.completionPercentage === 0) ? 0 : (task.actualEffort || 0);
+      entry.totalEffort += effectiveEffort;
 
       const isTaskDone = task.status === 'Done' || task.completionPercentage === 100;
       const isTaskReported =

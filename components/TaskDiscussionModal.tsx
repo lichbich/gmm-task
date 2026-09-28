@@ -31,7 +31,6 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
   onOpenFullDetail,
 }) => {
   const { currentUser, tasks, updateTaskNotes, markNoteAsRead, users, confirmDialog } = useApp();
-  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
 
   // Keep task updated in real-time with context
   const activeTask = tasks.find((t) => t.id === task?.id) || task;
@@ -42,6 +41,27 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
   const [editingNoteIndex, setEditingNoteIndex] = useState<number | null>(null);
   const [editingNoteText, setEditingNoteText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const checkDirtyAndConfirmClose = React.useCallback((): boolean => {
+    const isDirty = quickComment.trim() !== '' || editingNoteIndex !== null;
+    if (isDirty) {
+      confirmDialog({
+        title: 'Bình luận đang soạn dở',
+        message: 'Bạn đang soạn dở nội dung trao đổi chưa gửi. Bạn có chắc chắn muốn thoát không?',
+        confirmText: 'Rời khỏi & Hủy',
+        cancelText: 'Tiếp tục soạn',
+        type: 'warning',
+        onConfirm: () => {
+          forceClose();
+        },
+      });
+      return false;
+    }
+    return true;
+  }, [quickComment, editingNoteIndex, confirmDialog]);
+
+  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
+    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
 
   useEffect(() => {
     if (activeTask) {

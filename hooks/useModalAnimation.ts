@@ -2,10 +2,19 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-export function useModalAnimation(isOpen: boolean, onClose: () => void) {
+export function useModalAnimation(
+  isOpen: boolean,
+  onClose: () => void,
+  onRequestClose?: () => boolean | void
+) {
   const [isRendered, setIsRendered] = useState(isOpen);
   const [isVisible, setIsVisible] = useState(false);
   const isMouseDownOnBackdrop = useRef(false);
+  const onRequestCloseRef = useRef(onRequestClose);
+
+  useEffect(() => {
+    onRequestCloseRef.current = onRequestClose;
+  }, [onRequestClose]);
 
   useEffect(() => {
     if (isOpen) {
@@ -23,12 +32,22 @@ export function useModalAnimation(isOpen: boolean, onClose: () => void) {
     }
   }, [isOpen]);
 
-  const handleClose = useCallback(() => {
+  const forceClose = useCallback(() => {
     setIsVisible(false);
     setTimeout(() => {
       onClose();
     }, 200);
   }, [onClose]);
+
+  const handleClose = useCallback(() => {
+    if (onRequestCloseRef.current) {
+      const allowed = onRequestCloseRef.current();
+      if (allowed === false) {
+        return;
+      }
+    }
+    forceClose();
+  }, [forceClose]);
 
   const handleBackdropMouseDown = useCallback((e: React.MouseEvent) => {
     isMouseDownOnBackdrop.current = e.target === e.currentTarget;
@@ -57,6 +76,7 @@ export function useModalAnimation(isOpen: boolean, onClose: () => void) {
     isRendered,
     isVisible,
     handleClose,
+    forceClose,
     handleBackdropMouseDown,
     handleBackdropClick,
     backdropProps: {

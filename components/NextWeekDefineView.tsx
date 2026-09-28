@@ -35,6 +35,21 @@ import {
   Ticket as TicketIcon,
 } from 'lucide-react';
 
+const PREFERRED_ROLE_ORDER = ['BA', 'Designer', 'Design', 'FE', 'BE', 'DevOps', 'AI', 'PO'];
+
+const getRoleOrderRank = (roleCode?: string): number => {
+  if (!roleCode) return 999;
+  const normalized = roleCode.trim().toLowerCase();
+  if (normalized === 'ba') return 1;
+  if (normalized === 'designer' || normalized === 'design') return 2;
+  if (normalized === 'fe') return 3;
+  if (normalized === 'be') return 4;
+  if (normalized === 'devops') return 5;
+  if (normalized === 'ai') return 6;
+  if (normalized === 'po') return 7;
+  return 100;
+};
+
 interface NextWeekDefineViewProps {
   onOpenTaskModal: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
 }
@@ -160,7 +175,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     return tasks.filter((t) => {
       if (t.weekNumber > selectedWeek || t.year !== selectedYear) return false;
       if (!t.assigneeAccount || t.assigneeAccount.trim() === '') return false;
-      if (t.status === 'Done') return false; // Unfinished tasks only
+      if ((t.completionPercentage !== undefined && t.completionPercentage >= 100) || (t.status === 'Done' && (t.completionPercentage === undefined || t.completionPercentage >= 100))) return false; // Unfinished tasks only
 
       if (currentUser?.role === 'Member') {
         return t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
@@ -247,19 +262,32 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     });
   }, [tasks, nextWeek, selectedYear, currentUser, roleFilter, searchQuery, users]);
 
-  // Group next week assigned tasks by Role
+  // Group next week assigned tasks by Role & sort by preferred role order
   const nextWeekTasksByRole = React.useMemo(() => {
     const map = new Map<string, Task[]>();
 
-    roles.forEach((r) => map.set(r.code, []));
+    const sortedRoles = [...roles].sort((a, b) => {
+      const rankA = getRoleOrderRank(a.code);
+      const rankB = getRoleOrderRank(b.code);
+      if (rankA !== rankB) return rankA - rankB;
+      return (a.order || 0) - (b.order || 0);
+    });
+
+    sortedRoles.forEach((r) => map.set(r.code, []));
 
     nextWeekAssignedTasks.forEach((t) => {
       const list = map.get(t.role);
       if (list) list.push(t);
-      else map.set(t.role, [t]);
+      else {
+        const existing = map.get(t.role) || [];
+        existing.push(t);
+        map.set(t.role, existing);
+      }
     });
 
-    return Array.from(map.entries()).filter(([_, list]) => list.length > 0);
+    const entries = Array.from(map.entries()).filter(([_, list]) => list.length > 0);
+    entries.sort(([roleA], [roleB]) => getRoleOrderRank(roleA) - getRoleOrderRank(roleB));
+    return entries;
   }, [nextWeekAssignedTasks, roles]);
 
   // 3. Unassigned Milestone Tasks Pool
@@ -318,7 +346,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
         weekNumber: nextWeek,
         parentTaskId: t.id,
-        status: 'To do',
+        status: 'In Progress',
+        actualEffort: 0,
+        completionPercentage: t.completionPercentage,
         lastSubmittedAt: undefined,
         isSubmittedLate: undefined,
         createdAt: new Date().toISOString(),
@@ -861,244 +891,371 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {nextWeekTasksByRole.map(([roleCode, roleTasks]) => (
-                    <React.Fragment key={roleCode}>
-                      {/* Role Header */}
-                      <tr className="bg-indigo-50/50 border-y border-indigo-100/80">
-                        <td colSpan={7} className="py-2.5 px-4">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-indigo-900 text-xs uppercase tracking-wide">
-                              Role: {roleCode} ({roleTasks.length} task)
-                            </span>
-                            <span className="text-[11px] text-indigo-600 font-semibold">
-                              Tổng Effort Dự Kiến: {roleTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0)}h
-                            </span>
-                          </div>
-                        </td>
-                      </tr>
+                  {nextWeekTasksByRole.map(([roleCode, roleTasks]) => {
+                    // Group tasks by Account within this role
+                    const tasksByAccountMap = new Map<string, Task[]>();
+                    roleTasks.forEach((t) => {
+                      const acc = t.assigneeAccount || 'Unassigned';
+                      const list = tasksByAccountMap.get(acc) || [];
+                      list.push(t);
+                      tasksByAccountMap.set(acc, list);
+                    });
 
-                      {/* Task Rows */}
-                      {roleTasks.map((t) => {
-                        const milestone = milestones.find((m) => m.id === t.milestoneId);
-                        const isMyTask = t.assigneeAccount === currentUser?.account;
+                    const myAcc = (currentUser?.account || '').toLowerCase();
+                    const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
+                      if (accA.toLowerCase() === myAcc) return -1;
+                      if (accB.toLowerCase() === myAcc) return 1;
+                      return accA.localeCompare(accB);
+                    });
 
-                        return (
-                          <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-4 text-center text-slate-400 font-mono text-[11px]">
-                              {t.id.replace('tsk-', '')}
-                            </td>
-
-                            <td className="py-3 px-4">
-                              <div className="space-y-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span
-                                    onClick={() => handleTaskClick(t)}
-                                    className="font-bold text-slate-800 hover:text-indigo-600 transition cursor-pointer leading-snug"
-                                  >
-                                    {t.title}
-                                  </span>
-
-                                  {(() => {
-                                    const linkedTicket = getLinkedTicket(t);
-                                    const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
-                                    if (!isTicketTask) return null;
-                                    return (
-                                      <span
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 font-bold text-[10px] shadow-2xs"
-                                        title="Ticket yêu cầu liên team"
-                                      >
-                                        <TicketIcon className="w-3 h-3 text-purple-600 shrink-0" />
-                                        Ticket yêu cầu
-                                      </span>
-                                    );
-                                  })()}
-
-                                  {t.priority === 'High' && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 border border-red-200 text-red-700 font-bold text-[10px] shrink-0">
-                                      <Flame className="w-3 h-3 text-red-500 fill-red-500" /> Ưu tiên cao
-                                    </span>
-                                  )}
-                                </div>
-
-                                <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                                  {milestone ? (
-                                    <span className="inline-flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
-                                      <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> {milestone.title}
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                      <FolderOpen className="w-2.5 h-2.5 text-slate-400 shrink-0" /> Ngoài Milestone
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </td>
-
-                            <td className="py-3 px-3 text-center">
-                              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold border border-slate-200">
-                                {t.role}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-3 text-center font-mono font-bold text-indigo-600">
-                              {t.estimatedEffort}h
-                            </td>
-
-                            <td className="py-3 px-3">
-                              <div className="flex items-center gap-1.5 text-xs">
-                                <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                  {t.assigneeAccount.slice(0, 2)}
-                                </div>
-                                <span className={`font-semibold ${isMyTask ? 'text-indigo-700 font-bold' : 'text-slate-700'}`}>
-                                  {t.assigneeAccount} {isMyTask && '(Tôi)'}
+                    return (
+                      <React.Fragment key={roleCode}>
+                        {/* Role Header */}
+                        <tr className="bg-indigo-50/80 border-y border-indigo-200/80 select-none">
+                          <td colSpan={7} className="py-2.5 px-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-300">
+                                  {roleCode}
+                                </span>
+                                <span className="font-bold text-indigo-900 text-xs uppercase tracking-wide">
+                                  Role: {roleCode} ({roleTasks.length} task)
                                 </span>
                               </div>
-                            </td>
-
-                            <td className="py-3 px-3 text-center">
-                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
-                                Kế hoạch Tuần {nextWeek}
+                              <span className="text-[11px] text-indigo-600 font-bold font-mono">
+                                Tổng Effort Kế Hoạch: {roleTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0)}h
                               </span>
-                            </td>
+                            </div>
+                          </td>
+                        </tr>
 
-                            <td className="py-3 px-4 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => onOpenTaskModal(t)}
-                                  className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 transition"
-                                  title="Chỉnh sửa task"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                                {isLeaderOrAdmin && (
-                                  <button
-                                    onClick={() => {
-                                      confirmDialog({
-                                        title: 'Xóa task',
-                                        message: `Bạn có chắc muốn xóa task "${t.title}" khỏi kế hoạch tuần tới?`,
-                                        type: 'danger',
-                                        onConfirm: () => deleteTask(t.id),
-                                      });
-                                    }}
-                                    className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:bg-red-100 hover:text-red-600 border border-slate-200 transition"
-                                    title="Xóa task"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </React.Fragment>
-                  ))}
+                        {/* Member Account Sub-Groups */}
+                        {accountGroups.map(([acc, accTasks]) => {
+                          const userObj = users.find((u) => u.account.toLowerCase() === acc.toLowerCase());
+                          const displayName = userObj ? userObj.name : acc;
+                          const isMe = acc.toLowerCase() === myAcc;
+                          const totalEst = accTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0);
+
+                          return (
+                            <React.Fragment key={`acc-group-${roleCode}-${acc}`}>
+                              {/* Member Sub-Header Row */}
+                              <tr className="bg-slate-50/90 border-t border-b border-slate-200/80 select-none">
+                                <td colSpan={7} className="py-2 px-4">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                      <div className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold shadow-2xs">
+                                        {acc.slice(0, 2).toUpperCase()}
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-bold text-slate-800 text-xs">
+                                          {displayName}
+                                        </span>
+                                        <span className="text-[11px] font-mono text-slate-500 font-semibold">
+                                          (@{acc})
+                                        </span>
+                                        {isMe && (
+                                          <span className="px-1.5 py-0.2 text-[9px] font-extrabold bg-indigo-100 text-indigo-700 rounded-md border border-indigo-200">
+                                            Tôi
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[10px] text-slate-500 font-semibold bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                                        {accTasks.length} đầu việc
+                                      </span>
+                                    </div>
+
+                                    <div className="text-[11px] text-slate-600 font-medium">
+                                      Tổng Effort kế hoạch:{' '}
+                                      <strong className="text-indigo-600 font-mono font-bold">
+                                        {totalEst}h
+                                      </strong>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+
+                              {/* Task Rows for this Member */}
+                              {accTasks.map((t) => {
+                                const milestone = milestones.find((m) => m.id === t.milestoneId);
+                                const isMyTask = t.assigneeAccount === currentUser?.account;
+
+                                return (
+                                  <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="py-3 px-4 text-center text-slate-400 font-mono text-[11px]">
+                                      {t.id.replace('tsk-', '')}
+                                    </td>
+
+                                    <td className="py-3 px-4">
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span
+                                            onClick={() => handleTaskClick(t)}
+                                            className="font-bold text-slate-800 hover:text-indigo-600 transition cursor-pointer leading-snug"
+                                          >
+                                            {t.title}
+                                          </span>
+
+                                          {(() => {
+                                            const linkedTicket = getLinkedTicket(t);
+                                            const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                                            if (!isTicketTask) return null;
+                                            return (
+                                              <span
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 font-bold text-[10px] shadow-2xs"
+                                                title="Ticket yêu cầu liên team"
+                                              >
+                                                <TicketIcon className="w-3 h-3 text-purple-600 shrink-0" />
+                                                Ticket yêu cầu
+                                              </span>
+                                            );
+                                          })()}
+
+                                          {t.priority === 'High' && (
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 border border-red-200 text-red-700 font-bold text-[10px] shrink-0">
+                                              <Flame className="w-3 h-3 text-red-500 fill-red-500" /> Ưu tiên cao
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                          {milestone ? (
+                                            <span className="inline-flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                              <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> {milestone.title}
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                              <FolderOpen className="w-2.5 h-2.5 text-slate-400 shrink-0" /> Ngoài Milestone
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3 px-3 text-center">
+                                      <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold border border-slate-200">
+                                        {t.role}
+                                      </span>
+                                    </td>
+
+                                    <td className="py-3 px-3 text-center font-mono font-bold text-indigo-600">
+                                      {t.estimatedEffort}h
+                                    </td>
+
+                                    <td className="py-3 px-3">
+                                      <div className="flex items-center gap-1.5 text-xs">
+                                        <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                          {t.assigneeAccount.slice(0, 2)}
+                                        </div>
+                                        <span className={`font-semibold ${isMyTask ? 'text-indigo-700 font-bold' : 'text-slate-700'}`}>
+                                          {t.assigneeAccount} {isMyTask && '(Tôi)'}
+                                        </span>
+                                      </div>
+                                    </td>
+
+                                    <td className="py-3 px-3 text-center">
+                                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                                        Kế hoạch Tuần {nextWeek}
+                                      </span>
+                                    </td>
+
+                                    <td className="py-3 px-4 text-center">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <button
+                                          onClick={() => onOpenTaskModal(t)}
+                                          className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 transition"
+                                          title="Chỉnh sửa task"
+                                        >
+                                          <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        {isLeaderOrAdmin && (
+                                          <button
+                                            onClick={() => {
+                                              confirmDialog({
+                                                title: 'Xóa task',
+                                                message: `Bạn có chắc muốn xóa task "${t.title}" khỏi kế hoạch tuần tới?`,
+                                                type: 'danger',
+                                                onConfirm: () => deleteTask(t.id),
+                                              });
+                                            }}
+                                            className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:bg-red-100 hover:text-red-600 border border-slate-200 transition"
+                                            title="Xóa task"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </React.Fragment>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
             {/* MOBILE CARD VIEW */}
             <div className="md:hidden p-3 space-y-4">
-              {nextWeekTasksByRole.map(([roleCode, roleTasks]) => (
-                <div key={`mobile-role-${roleCode}`} className="space-y-2.5">
-                  <div className="bg-indigo-50/80 p-2.5 rounded-xl border border-indigo-100 flex items-center justify-between">
-                    <span className="font-bold text-indigo-900 text-xs uppercase">
-                      Role: {roleCode} ({roleTasks.length})
-                    </span>
-                    <span className="text-[11px] text-indigo-600 font-bold font-mono">
-                      {roleTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0)}h
-                    </span>
-                  </div>
+              {nextWeekTasksByRole.map(([roleCode, roleTasks]) => {
+                const tasksByAccountMap = new Map<string, Task[]>();
+                roleTasks.forEach((t) => {
+                  const acc = t.assigneeAccount || 'Unassigned';
+                  const list = tasksByAccountMap.get(acc) || [];
+                  list.push(t);
+                  tasksByAccountMap.set(acc, list);
+                });
 
-                  <div className="space-y-2">
-                    {roleTasks.map((t) => {
-                      const milestone = milestones.find((m) => m.id === t.milestoneId);
-                      const isMyTask = t.assigneeAccount === currentUser?.account;
+                const myAcc = (currentUser?.account || '').toLowerCase();
+                const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
+                  if (accA.toLowerCase() === myAcc) return -1;
+                  if (accB.toLowerCase() === myAcc) return 1;
+                  return accA.localeCompare(accB);
+                });
 
-                      return (
-                        <div
-                          key={`mobile-task-${t.id}`}
-                          onClick={() => handleTaskClick(t)}
-                          className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5 shadow-2xs cursor-pointer"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                              #{t.id.replace('tsk-', '')}
-                            </span>
-                            {(() => {
-                              const linkedTicket = getLinkedTicket(t);
-                              const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
-                              if (!isTicketTask) return null;
-                              return (
-                                <span
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-[10px]"
-                                  title="Ticket yêu cầu liên team"
-                                >
-                                  <TicketIcon className="w-3 h-3 text-purple-600" />
-                                  Ticket yêu cầu
+                return (
+                  <div key={`mobile-role-${roleCode}`} className="space-y-3">
+                    {/* Role Header */}
+                    <div className="bg-indigo-50/90 p-2.5 rounded-xl border border-indigo-200 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-300">
+                          {roleCode}
+                        </span>
+                        <span className="font-bold text-indigo-900 text-xs uppercase">
+                          Role: {roleCode} ({roleTasks.length})
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-indigo-600 font-bold font-mono">
+                        {roleTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0)}h
+                      </span>
+                    </div>
+
+                    {/* Member Account Sub-groups */}
+                    <div className="space-y-3 pl-1">
+                      {accountGroups.map(([acc, accTasks]) => {
+                        const userObj = users.find((u) => u.account.toLowerCase() === acc.toLowerCase());
+                        const displayName = userObj ? userObj.name : acc;
+                        const isMe = acc.toLowerCase() === myAcc;
+                        const totalEst = accTasks.reduce((sum, curr) => sum + (curr.estimatedEffort || 0), 0);
+
+                        return (
+                          <div key={`mobile-acc-${roleCode}-${acc}`} className="space-y-2">
+                            {/* Member Sub-Header */}
+                            <div className="bg-slate-100 p-2 rounded-xl border border-slate-200 flex items-center justify-between">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                                  {acc.slice(0, 2).toUpperCase()}
+                                </div>
+                                <span className="font-bold text-slate-800 text-xs truncate">
+                                  {displayName} (@{acc}) {isMe && '• (Tôi)'}
                                 </span>
-                              );
-                            })()}
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
-                              Kế hoạch Tuần {nextWeek}
-                            </span>
-                          </div>
-
-                          <h4 className="text-xs font-bold text-slate-800 leading-snug">
-                            {t.title}
-                          </h4>
-
-                          {milestone && (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
-                              <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> {milestone.title}
-                            </span>
-                          )}
-
-                          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 gap-2">
-                            <div className="text-[11px] text-slate-500">
-                              👤 <strong className={isMyTask ? 'text-indigo-600 font-bold' : 'text-slate-700'}>
-                                {t.assigneeAccount} {isMyTask && '(Tôi)'}
-                              </strong>
-                              <span className="mx-1.5">•</span>
-                              Est: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong>
+                                <span className="text-[10px] text-slate-500 font-semibold bg-white px-1.5 py-0.5 rounded border border-slate-200 shrink-0">
+                                  {accTasks.length} task
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-indigo-600 font-bold font-mono shrink-0 ml-2">
+                                {totalEst}h
+                              </span>
                             </div>
 
-                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTaskModal(t);
-                                }}
-                                className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95"
-                                title="Sửa task"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              {isLeaderOrAdmin && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    confirmDialog({
-                                      title: 'Xóa task',
-                                      message: `Bạn có chắc muốn xóa task "${t.title}" khỏi kế hoạch tuần tới?`,
-                                      type: 'danger',
-                                      onConfirm: () => deleteTask(t.id),
-                                    });
-                                  }}
-                                  className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:text-red-600 active:scale-95"
-                                  title="Xóa task"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
+                            {/* Task Cards */}
+                            <div className="space-y-2">
+                              {accTasks.map((t) => {
+                                const milestone = milestones.find((m) => m.id === t.milestoneId);
+                                const isMyTask = t.assigneeAccount === currentUser?.account;
+
+                                return (
+                                  <div
+                                    key={`mobile-task-${t.id}`}
+                                    onClick={() => handleTaskClick(t)}
+                                    className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5 shadow-2xs cursor-pointer"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        #{t.id.replace('tsk-', '')}
+                                      </span>
+                                      {(() => {
+                                        const linkedTicket = getLinkedTicket(t);
+                                        const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                                        if (!isTicketTask) return null;
+                                        return (
+                                          <span
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-[10px]"
+                                            title="Ticket yêu cầu liên team"
+                                          >
+                                            <TicketIcon className="w-3 h-3 text-purple-600" />
+                                            Ticket yêu cầu
+                                          </span>
+                                        );
+                                      })()}
+                                      <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+                                        Kế hoạch Tuần {nextWeek}
+                                      </span>
+                                    </div>
+
+                                    <h4 className="text-xs font-bold text-slate-800 leading-snug">
+                                      {t.title}
+                                    </h4>
+
+                                    {milestone && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                        <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> {milestone.title}
+                                      </span>
+                                    )}
+
+                                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 gap-2">
+                                      <div className="text-[11px] text-slate-500">
+                                        👤 <strong className={isMyTask ? 'text-indigo-600 font-bold' : 'text-slate-700'}>
+                                          {t.assigneeAccount} {isMyTask && '(Tôi)'}
+                                        </strong>
+                                        <span className="mx-1.5">•</span>
+                                        Est: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong>
+                                      </div>
+
+                                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onOpenTaskModal(t);
+                                          }}
+                                          className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95"
+                                          title="Sửa task"
+                                        >
+                                          <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                        {isLeaderOrAdmin && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              confirmDialog({
+                                                title: 'Xóa task',
+                                                message: `Bạn có chắc muốn xóa task "${t.title}" khỏi kế hoạch tuần tới?`,
+                                                type: 'danger',
+                                                onConfirm: () => deleteTask(t.id),
+                                              });
+                                            }}
+                                            className="p-1.5 rounded-lg bg-slate-100 text-slate-400 hover:text-red-600 active:scale-95"
+                                            title="Xóa task"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}

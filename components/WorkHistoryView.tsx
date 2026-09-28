@@ -146,6 +146,16 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     weeklyArchives.find((a) => a.id === selectedArchiveId) ||
     (weeklyArchives.length > 0 ? weeklyArchives[weeklyArchives.length - 1] : null);
 
+  // PO & Admin check: ONLY PO or Admin can finalize week & create archives
+  const isPOOrAdmin = (u?: any): boolean => {
+    if (!u) return false;
+    if (u.role === 'Admin' || u.role === 'PO') return true;
+    const specs = u.specializations || [];
+    return specs.some((s: string) => s.toUpperCase() === 'PO');
+  };
+
+  const canFinalizeWeek = isPOOrAdmin(currentUser);
+
   const handleRollover = () => {
     const range = getWeekDateRangeStr(selectedWeek, selectedYear);
     confirmDialog({
@@ -218,11 +228,11 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
   }, [filteredArchivedTasks, roles]);
 
   const completedCount = React.useMemo(() => {
-    return archivedTasksSnapshot.filter((t) => t.status === 'Done').length;
+    return archivedTasksSnapshot.filter((t) => (t.completionPercentage || 0) >= 100).length;
   }, [archivedTasksSnapshot]);
 
   const rolledOverCount = React.useMemo(() => {
-    return archivedTasksSnapshot.filter((t) => t.status !== 'Done').length;
+    return archivedTasksSnapshot.filter((t) => (t.completionPercentage || 0) < 100).length;
   }, [archivedTasksSnapshot]);
 
   const activeRangeStr = activeArchive
@@ -250,8 +260,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
             </p>
           </div>
 
-          {/* Action Button: End Current Week & Rollover */}
-          {(currentUser?.role === 'Leader' || currentUser?.role === 'Admin') && (
+          {/* Action Button: End Current Week & Rollover (Admin & PO only) */}
+          {canFinalizeWeek && (
             <button
               onClick={handleRollover}
               className="flex items-center gap-2 px-4 py-2 sm:py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0"
@@ -347,7 +357,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
             <History className="w-8 h-8 text-slate-300 mx-auto" />
             <p className="font-semibold text-slate-700">Chưa có bản lưu lịch sử tuần nào</p>
             <p className="text-[11px] max-w-md mx-auto text-slate-400">
-              Vào Chủ Nhật cuối tuần, sau khi thành viên hoàn tất báo cáo, Leader hoặc Admin hãy nhấn <strong>"Chốt Tuần & Lưu Lịch Sử"</strong> ở trên để tổng kết và lưu trữ vĩnh viễn.
+              Vào Chủ Nhật cuối tuần, sau khi thành viên hoàn tất báo cáo, PO hoặc Admin hãy nhấn <strong>"Chốt Tuần & Lưu Lịch Sử"</strong> ở trên để tổng kết và lưu trữ vĩnh viễn.
             </p>
           </div>
         ) : activeArchive ? (
@@ -421,7 +431,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                   Role: {roleCode} ({roleTasks.length} đầu việc)
                                 </span>
                                 <span className="text-[11px] text-indigo-600 font-semibold">
-                                  Tổng Effort: {roleTasks.reduce((acc, curr) => acc + (curr.actualEffort || 0), 0)}h
+                                  Tổng Effort: {roleTasks.reduce((acc, curr) => acc + (curr.completionPercentage === 0 ? 0 : (curr.actualEffort || 0)), 0)}h
                                 </span>
                               </div>
                             </td>
@@ -431,6 +441,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                           {roleTasks.map((t) => {
                             const milestone = milestones.find((m) => m.id === t.milestoneId);
                             const unreadNotes = hasUnreadNote(t);
+                            const effectiveEffort = t.completionPercentage === 0 ? 0 : (t.actualEffort || 0);
 
                             return (
                               <tr
@@ -498,7 +509,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                 </td>
 
                                 <td className="py-3 px-3 text-center font-mono font-bold text-indigo-600">
-                                  {t.actualEffort}h
+                                  {effectiveEffort}h
                                 </td>
 
                                 <td className="py-3 px-3 text-center">
@@ -605,7 +616,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                       <div className="bg-indigo-50/70 dark:bg-indigo-950/60 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-800 flex items-center justify-between text-xs font-bold text-indigo-900 dark:text-indigo-200">
                         <span>Role: {roleCode} ({roleTasks.length} task)</span>
                         <span className="font-mono text-indigo-600 dark:text-indigo-400">
-                          {roleTasks.reduce((acc, curr) => acc + (curr.actualEffort || 0), 0)}h
+                          {roleTasks.reduce((acc, curr) => acc + (curr.completionPercentage === 0 ? 0 : (curr.actualEffort || 0)), 0)}h
                         </span>
                       </div>
 
@@ -616,6 +627,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                           const assigneeAward = activeArchive.awards.find((a) => a.account === t.assigneeAccount);
                           const isTopEffort = assigneeAward?.isTopEffort || false;
                           const isLate = assigneeAward?.isLate || t.isSubmittedLate || false;
+                          const effectiveEffort = t.completionPercentage === 0 ? 0 : (t.actualEffort || 0);
 
                           return (
                             <div
@@ -680,7 +692,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
 
                                 <div className="flex items-center gap-2">
                                   <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                                    {t.actualEffort}h
+                                    {effectiveEffort}h
                                   </span>
                                   <span className="text-slate-400 font-mono">
                                     ({t.completionPercentage}%)

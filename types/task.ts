@@ -242,10 +242,8 @@ export interface WeeklyHistoryArchive {
 }
 
 export const isTaskUnworked = (t: Task): boolean => {
-  if (t.status === 'Done') return false;
   const pct = t.completionPercentage || 0;
-  const effort = t.actualEffort || 0;
-  return pct === 0 && effort === 0;
+  return pct === 0;
 };
 
 export type ResourceLevel =

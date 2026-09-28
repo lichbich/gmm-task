@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, TaskStatus } from '../types/task';
 import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare, Info } from 'lucide-react';
@@ -18,19 +18,50 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { submitTaskReport, simulatedTime, canReportTask, users } = useApp();
-  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
-
+  const { submitTaskReport, simulatedTime, canReportTask, users, confirmDialog } = useApp();
   const [actualEffort, setActualEffort] = useState<number | string>(0);
   const [completionPercentage, setCompletionPercentage] = useState<number>(0);
-  const [status, setStatus] = useState<TaskStatus>('In Progress');
   const [notes, setNotes] = useState<string>('');
+
+  const checkDirtyAndConfirmClose = useCallback((): boolean => {
+    if (!task) return true;
+    const origEffort = task.actualEffort !== undefined ? task.actualEffort : 0;
+    const origCompletion = task.completionPercentage || 0;
+    const origNotes = task.notes || '';
+
+    const parsedEffort =
+      typeof actualEffort === 'number'
+        ? actualEffort
+        : parseFloat(String(actualEffort).replace(',', '.')) || 0;
+
+    const isDirty =
+      parsedEffort !== origEffort ||
+      completionPercentage !== origCompletion ||
+      notes !== origNotes;
+
+    if (isDirty) {
+      confirmDialog({
+        title: 'Báo cáo đang điền dở dang',
+        message: 'Bạn đang điền dở thông tin tiến độ / giờ làm việc. Bạn có chắc chắn muốn hủy và thoát không? Các thay đổi vừa nhập sẽ không được lưu.',
+        confirmText: 'Rời khỏi & Không lưu',
+        cancelText: 'Tiếp tục báo cáo',
+        type: 'warning',
+        onConfirm: () => {
+          forceClose();
+        },
+      });
+      return false;
+    }
+    return true;
+  }, [task, actualEffort, completionPercentage, notes, confirmDialog]);
+
+  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
+    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
 
   useEffect(() => {
     if (!isOpen || !task) return;
     setActualEffort(task.actualEffort !== undefined ? task.actualEffort : 0);
     setCompletionPercentage(task.completionPercentage || 0);
-    setStatus(task.status || 'In Progress');
     setNotes(task.notes || '');
   }, [isOpen, task?.id]);
 
@@ -41,23 +72,55 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     (u) => u.account.toLowerCase() === (task.assigneeAccount || '').toLowerCase()
   );
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isMyTaskToReport) return;
-    const parsedEffort =
-      typeof actualEffort === 'number'
-        ? actualEffort
-        : parseFloat(String(actualEffort).replace(',', '.')) || 0;
-    submitTaskReport(task.id, parsedEffort, completionPercentage, status, notes);
-    handleClose();
-  };
-
   const sundayNoon = getWeekSundayNoon(task.weekNumber, task.year);
   const deadline = getWeekDeadline(task.weekNumber, task.year);
   const simDate = new Date(simulatedTime);
   const isBeforeSundayNoon = simDate.getTime() < sundayNoon.getTime();
   const isSundayReportOpen = simDate.getTime() >= sundayNoon.getTime() && simDate.getTime() <= deadline.getTime();
   const isLateSimulated = simDate.getTime() > deadline.getTime();
+  const isSundayOrLate = isSundayReportOpen || isLateSimulated;
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isMyTaskToReport) return;
+    let parsedEffort =
+      typeof actualEffort === 'number'
+        ? actualEffort
+        : parseFloat(String(actualEffort).replace(',', '.')) || 0;
+
+    // If progress > 0% but actual effort is not filled or is 0, default to estimated effort
+    if (completionPercentage > 0 && parsedEffort === 0) {
+      parsedEffort = task.estimatedEffort || 0;
+    }
+
+    if (parsedEffort > 0 && completionPercentage === 0) {
+      confirmDialog({
+        title: 'Nhắc nhở cập nhật % tiến độ',
+        message: `Bạn đang nhập ${parsedEffort}h làm việc nhưng phần trăm tiến độ vẫn để 0%.\n\n• Theo quy định, nếu tiến độ 0% (coi như chưa làm) thì số giờ làm việc thực tế sẽ tự động chuyển về 0h và trạng thái là "To do" (không thể đánh Done).\n• Bạn có muốn quay lại điều chỉnh % tiến độ không? Hoặc bấm "Vẫn lưu 0%" để lưu task chưa làm (số giờ sẽ tự động về 0h).`,
+        confirmText: 'Vẫn lưu 0% (Giờ = 0h)',
+        cancelText: 'Cập nhật lại tiến độ',
+        type: 'warning',
+        onConfirm: () => {
+          submitTaskReport(task.id, 0, 0, 'To do', notes);
+          forceClose();
+        },
+      });
+      return;
+    }
+
+    const finalEffort = completionPercentage === 0 ? 0 : parsedEffort;
+    const finalStatus: TaskStatus =
+      completionPercentage === 0
+        ? 'To do'
+        : completionPercentage === 100
+        ? 'Done'
+        : isSundayOrLate
+        ? 'Done'
+        : 'In Progress';
+
+    submitTaskReport(task.id, finalEffort, completionPercentage, finalStatus, notes);
+    forceClose();
+  };
 
   return (
     <div
@@ -95,7 +158,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
         <form onSubmit={handleSave} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 overscroll-contain">
             {/* Status Banners */}
-            {status === 'Done' || completionPercentage === 100 ? (
+            {completionPercentage === 100 ? (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5 text-xs text-emerald-700">
                 <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
@@ -108,7 +171,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 <Info className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold block text-blue-800">CẬP NHẬT TIẾN ĐỘ TRONG TUẦN</span>
-                  Bạn đang cập nhật tiến độ công việc. Cổng nộp báo cáo tuần chính thức sẽ mở từ <strong>12:00 trưa Chủ Nhật</strong> đến <strong>22:00 tối Chủ Nhật</strong>.
+                  Bạn đang cập nhật tiến độ công việc (Trạng thái: <strong>{completionPercentage === 0 ? 'To do' : 'In Progress'}</strong>). Cổng nộp báo cáo tuần chính thức sẽ mở từ <strong>12:00 trưa Chủ Nhật</strong> đến <strong>22:00 tối Chủ Nhật</strong>.
                 </div>
               </div>
             ) : isSundayReportOpen ? (
@@ -116,7 +179,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold block text-emerald-800">CỔNG BÁO CÁO ĐANG MỞ (12h - 22h Chủ Nhật)</span>
-                  Báo cáo của bạn được cập nhật đúng hạn trước 22:00 Chủ Nhật.
+                  Bấm &ldquo;Nộp Báo Cáo Tuần&rdquo; để xác nhận hoàn thành báo cáo tuần này. {completionPercentage > 0 && completionPercentage < 100 ? 'Task làm dở sẽ bảo toàn % tiến độ và số giờ đã làm để lưu lịch sử và tự động chuyển tiếp sang tuần tới.' : ''}
                 </div>
               </div>
             ) : isLateSimulated ? (
@@ -153,37 +216,6 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               <div>
                 <span className="text-slate-500 block text-[11px] mb-0.5">Mốc tuần (Week):</span>
                 <span className="font-semibold text-slate-800">Tuần {task.weekNumber <= 53 ? task.weekNumber + 55 : task.weekNumber} / {task.year}</span>
-              </div>
-            </div>
-
-            {/* Status Selection */}
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1.5">
-                Trạng Thái Công Việc (Status):
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['To do', 'In Progress', 'Done'] as TaskStatus[]).map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    disabled={!isMyTaskToReport}
-                    onClick={() => {
-                      setStatus(st);
-                      if (st === 'Done') setCompletionPercentage(100);
-                    }}
-                    className={`py-2 px-2 sm:px-3 rounded-xl border text-xs font-semibold transition cursor-pointer active:scale-95 ${
-                      status === st
-                        ? st === 'Done'
-                          ? 'bg-emerald-600 border-emerald-500 text-white shadow-sm'
-                          : st === 'In Progress'
-                          ? 'bg-blue-600 border-blue-500 text-white shadow-sm'
-                          : 'bg-slate-700 border-slate-600 text-white'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    {st}
-                  </button>
-                ))}
               </div>
             </div>
 
@@ -238,11 +270,28 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 onChange={(e) => {
                   const val = parseInt(e.target.value);
                   setCompletionPercentage(val);
-                  if (val === 100) setStatus('Done');
-                  else if (val > 0 && status === 'To do') setStatus('In Progress');
+                  if (val === 0) {
+                    setActualEffort(0);
+                  } else {
+                    setActualEffort((prev) => {
+                      const p = typeof prev === 'number' ? prev : parseFloat(String(prev).replace(',', '.')) || 0;
+                      return p > 0 ? prev : (task.estimatedEffort || 0);
+                    });
+                  }
                 }}
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 disabled:opacity-50"
               />
+
+              {/* Warning if effort > 0 but completion percentage is 0 */}
+              {(typeof actualEffort === 'number' ? actualEffort : parseFloat(String(actualEffort).replace(',', '.')) || 0) > 0 && completionPercentage === 0 && (
+                <div className="mt-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-800 animate-in fade-in duration-200">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-amber-900">Lưu ý: Tiến độ đang để 0%</span>
+                    Bạn đã nhập <strong>{typeof actualEffort === 'number' ? actualEffort : parseFloat(String(actualEffort).replace(',', '.')) || 0}h</strong> làm việc nhưng % tiến độ vẫn là <strong>0%</strong>. Hãy kéo thanh tiến độ lên nếu bạn đã làm. Nếu giữ 0% (chưa làm), hệ thống sẽ tự động đặt số giờ về <strong>0h</strong>.
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Leader Notes Input */}
@@ -275,7 +324,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               type="submit"
               disabled={!isMyTaskToReport}
               className={`flex items-center gap-1.5 px-4 sm:px-5 py-2 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition cursor-pointer disabled:opacity-50 active:scale-95 ${
-                status === 'Done' || completionPercentage === 100
+                completionPercentage === 100
                   ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
                   : isBeforeSundayNoon
                   ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20'
@@ -285,8 +334,8 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               }`}
             >
               <Save className="w-4 h-4" />
-              {status === 'Done' || completionPercentage === 100
-                ? 'Lưu & Hoàn Thành Báo Cáo'
+              {completionPercentage === 100
+                ? 'Lưu & Hoàn Thành Task (Done)'
                 : isBeforeSundayNoon
                 ? 'Lưu Cập Nhật Tiến Độ'
                 : isLateSimulated
