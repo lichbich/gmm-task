@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
-import { Task, TaskActivityLog } from '../types/task';
+import { Task, TaskActivityLog, getUserRoleColorClass } from '../types/task';
 import {
   X,
   MessageSquare,
@@ -910,11 +910,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     shape="circle"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold text-slate-800 dark:text-slate-100 text-xs leading-snug break-words">
+                    <div className={`font-bold text-xs leading-snug break-words ${getUserRoleColorClass(assigneeUser?.role)}`}>
                       {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
                     </div>
                     {task.assigneeAccount && (
-                      <div className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 font-mono">
+                      <div className={`text-[11px] font-medium font-mono ${getUserRoleColorClass(assigneeUser?.role)}`}>
                         @{task.assigneeAccount}
                       </div>
                     )}

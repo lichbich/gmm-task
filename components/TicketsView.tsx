@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Ticket, TicketStatus, TicketPriority } from '../types/task';
+import { Ticket, TicketStatus, TicketPriority, getUserRoleColorClass } from '../types/task';
 import { TicketCreateModal } from './TicketCreateModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown, DropdownOption } from './common/Dropdown';
@@ -639,18 +639,21 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
 
                     {/* Right: Assignee & Discussion Pill */}
                     <div className="flex items-center gap-2 shrink-0">
-                      {t.assignedTo ? (
-                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                          <UserAvatar
-                            user={users.find((u) => u.account.toLowerCase() === t.assignedTo!.toLowerCase())}
-                            account={t.assignedTo}
-                            name={t.assignedToName}
-                            size="xs"
-                            shape="circle"
-                          />
-                          <span>{t.assignedToName || t.assignedTo}</span>
-                        </div>
-                      ) : (
+                      {t.assignedTo ? (() => {
+                        const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assignedTo!.toLowerCase());
+                        return (
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                            <UserAvatar
+                              user={assigneeUser}
+                              account={t.assignedTo}
+                              name={t.assignedToName}
+                              size="xs"
+                              shape="circle"
+                            />
+                            <span className={getUserRoleColorClass(assigneeUser?.role)}>{t.assignedToName || t.assignedTo}</span>
+                          </div>
+                        );
+                      })() : (
                         <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium italic">
                           Chưa phân công
                         </span>

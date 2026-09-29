@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus } from '../types/task';
+import { Task, TaskStatus, getUserRoleColorClass } from '../types/task';
 import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare, Info } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
@@ -213,10 +213,10 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                     size="xs"
                     shape="circle"
                   />
-                  <div className="font-semibold text-indigo-600 dark:text-indigo-400 break-words text-xs">
+                  <div className={`font-semibold break-words text-xs ${getUserRoleColorClass(assigneeUser?.role)}`}>
                     {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
                     {task.assigneeAccount && (
-                      <span className="text-[10px] font-normal text-slate-500 block font-mono">
+                      <span className={`text-[10px] font-mono block ${getUserRoleColorClass(assigneeUser?.role)}`}>
                         @{task.assigneeAccount}
                       </span>
                     )}

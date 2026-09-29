@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, Ticket, getEffectiveTaskStatus } from '../types/task';
+import { Task, TaskStatus, Ticket, getEffectiveTaskStatus, getUserRoleColorClass } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
@@ -363,19 +363,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-xs">
           {/* Assignee & Effort */}
           <div className="flex items-center gap-2 min-w-0">
-            {t.assigneeAccount ? (
-              <div className="flex items-center gap-1.5 min-w-0" title={`Giao cho @${t.assigneeAccount}`}>
-                <UserAvatar
-                  user={users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase())}
-                  account={t.assigneeAccount}
-                  size="xs"
-                  shape="circle"
-                />
-                <span className="font-mono text-[10px] text-slate-600 dark:text-slate-300 truncate max-w-[70px]">
-                  {t.assigneeAccount}
-                </span>
-              </div>
-            ) : (
+            {t.assigneeAccount ? (() => {
+              const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+              return (
+                <div className="flex items-center gap-1.5 min-w-0" title={`Giao cho @${t.assigneeAccount}`}>
+                  <UserAvatar
+                    user={assigneeUser}
+                    account={t.assigneeAccount}
+                    size="xs"
+                    shape="circle"
+                  />
+                  <span className={`font-mono text-[10px] truncate max-w-[70px] ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                    {t.assigneeAccount}
+                  </span>
+                </div>
+              );
+            })() : (
               <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-0.5">
                 <UserX className="w-3 h-3" /> Trống
               </span>

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { UserRole, Specialization, User, RoleItem, validateRoleQuota } from '../types/task';
+import { UserRole, Specialization, User, RoleItem, validateRoleQuota, getUserRoleColorClass } from '../types/task';
 import {
   Users,
   Plus,
@@ -1794,7 +1794,7 @@ export const UserManagementView: React.FC = () => {
                               />
                               <button
                                 onClick={() => setSelectedUserForDetail(u)}
-                                className="hover:underline text-indigo-700 font-bold focus:outline-none"
+                                className={`hover:underline font-bold focus:outline-none ${getUserRoleColorClass(u.role)}`}
                                 title="Xem chi tiết & quản lý thành viên"
                               >
                                 {u.account}
@@ -1809,7 +1809,7 @@ export const UserManagementView: React.FC = () => {
                           <td className="py-3 px-4 font-bold text-slate-800">
                             <button
                               onClick={() => setSelectedUserForDetail(u)}
-                              className="text-left font-bold text-slate-800 hover:text-indigo-600 hover:underline transition focus:outline-none"
+                              className={`text-left font-bold hover:underline transition focus:outline-none ${getUserRoleColorClass(u.role)}`}
                               title="Xem chi tiết & quản lý thành viên"
                             >
                               {u.name}
@@ -1922,11 +1922,11 @@ export const UserManagementView: React.FC = () => {
                           <div>
                             <button
                               onClick={() => setSelectedUserForDetail(u)}
-                              className="font-bold text-xs text-slate-800 text-left hover:text-purple-600 block leading-tight cursor-pointer"
+                              className={`font-bold text-xs text-left block leading-tight cursor-pointer hover:underline ${getUserRoleColorClass(u.role)}`}
                             >
                               {u.name}
                             </button>
-                            <span className="font-mono text-[11px] text-indigo-600 font-bold">
+                            <span className={`font-mono text-[11px] font-bold ${getUserRoleColorClass(u.role)}`}>
                               @{u.account}
                             </span>
                           </div>

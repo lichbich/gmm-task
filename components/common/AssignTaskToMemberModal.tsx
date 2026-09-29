@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { Task, User } from '../../types/task';
+import { Task, User, getUserRoleColorClass } from '../../types/task';
 import { useModalAnimation } from '../../hooks/useModalAnimation';
 import { UserAvatar } from './UserAvatar';
 import {
@@ -82,9 +82,17 @@ export const AssignTaskToMemberModal: React.FC<AssignTaskToMemberModalProps> = (
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
-                  Phân công cho {targetUser.name}
+                  Phân công cho <span className={getUserRoleColorClass(targetUser.role)}>{targetUser.name}</span>
                 </h3>
-                <span className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-mono text-xs font-bold border border-indigo-200/80 dark:border-indigo-800">
+                <span className={`px-2 py-0.5 rounded-md font-mono text-xs font-bold border ${
+                  targetUser.role === 'Leader'
+                    ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700'
+                    : targetUser.role === 'Advisor'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                    : targetUser.role === 'Admin'
+                    ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700'
+                    : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700'
+                }`}>
                   @{targetUser.account}
                 </span>
               </div>

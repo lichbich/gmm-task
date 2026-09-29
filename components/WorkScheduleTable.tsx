@@ -10,6 +10,7 @@ import {
   getEffectiveTaskStatus,
   normalizeRoleToken,
   isSpecializationMatchingRole,
+  getUserRoleColorClass,
 } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
@@ -840,17 +841,20 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
         {/* Account */}
         <td className="py-3 px-3 font-medium">
-          {t.assigneeAccount ? (
-            <div className="flex items-center gap-1.5">
-              <UserAvatar
-                user={users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase())}
-                account={t.assigneeAccount}
-                size="xs"
-                shape="circle"
-              />
-              <span className="text-slate-700 dark:text-slate-200">{t.assigneeAccount}</span>
-            </div>
-          ) : (
+          {t.assigneeAccount ? (() => {
+            const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+            return (
+              <div className="flex items-center gap-1.5">
+                <UserAvatar
+                  user={assigneeUser}
+                  account={t.assigneeAccount}
+                  size="xs"
+                  shape="circle"
+                />
+                <span className={getUserRoleColorClass(assigneeUser?.role)}>{t.assigneeAccount}</span>
+              </div>
+            );
+          })() : (
             <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
               <UserX className="w-3.5 h-3.5" /> Task trống
             </span>
@@ -1118,19 +1122,22 @@ const getRoleOrderRank = (roleCode?: string): number => {
           <div className="flex items-center justify-between text-xs">
             {/* Assignee */}
             <div className="flex items-center gap-1.5">
-              {t.assigneeAccount ? (
-                <>
-                  <UserAvatar
-                    user={users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase())}
-                    account={t.assigneeAccount}
-                    size="xs"
-                    shape="circle"
-                  />
-                  <span className="font-semibold text-slate-700 dark:text-slate-200 text-xs">
-                    {t.assigneeAccount}
-                  </span>
-                </>
-              ) : (
+              {t.assigneeAccount ? (() => {
+                const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+                return (
+                  <>
+                    <UserAvatar
+                      user={assigneeUser}
+                      account={t.assigneeAccount}
+                      size="xs"
+                      shape="circle"
+                    />
+                    <span className={`text-xs ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                      {t.assigneeAccount}
+                    </span>
+                  </>
+                );
+              })() : (
                 <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
                   <UserX className="w-3 h-3" /> Chưa giao
                 </span>
@@ -1784,9 +1791,14 @@ const getRoleOrderRank = (roleCode?: string): number => {
                         <div key={`mobile-acc-${group.role}-${acc}`} className="space-y-2">
                           {accountGroups.length > 1 && (
                             <div className="flex items-center gap-2 pt-1">
-                              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
-                                👤 {acc} ({accTasks.length})
-                              </span>
+                              {(() => {
+                                const accUser = users.find((u) => u.account.toLowerCase() === acc.toLowerCase());
+                                return (
+                                  <span className={`text-[11px] font-bold bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 ${getUserRoleColorClass(accUser?.role)}`}>
+                                    👤 {acc} ({accTasks.length})
+                                  </span>
+                                );
+                              })()}
                               <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
                             </div>
                           )}

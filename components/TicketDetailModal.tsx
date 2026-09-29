@@ -3,7 +3,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useModalAnimation } from '../hooks/useModalAnimation';
-import { Ticket, TicketStatus, TicketPriority } from '../types/task';
+import { Ticket, TicketStatus, TicketPriority, getUserRoleColorClass } from '../types/task';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import {
   X,
@@ -704,16 +704,21 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                     size="sm"
                     shape="circle"
                   />
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                      {ticket.assignedToName || (ticket.assignedTo ? `@${ticket.assignedTo}` : 'Chưa phân công')}
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono truncate">
-                      {ticket.assignedTo
-                        ? `@${ticket.assignedTo} (Team ${ticket.toRole})`
-                        : `Chờ Leader/Advisor Team ${ticket.toRole} tiếp nhận`}
-                    </div>
-                  </div>
+                  {(() => {
+                    const assigneeUser = ticket.assignedTo ? users.find((u) => u.account.toLowerCase() === ticket.assignedTo!.toLowerCase()) : null;
+                    return (
+                      <div className="min-w-0">
+                        <div className={`text-xs font-bold truncate ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                          {ticket.assignedToName || (ticket.assignedTo ? `@${ticket.assignedTo}` : 'Chưa phân công')}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono truncate">
+                          {ticket.assignedTo
+                            ? `@${ticket.assignedTo} (Team ${ticket.toRole})`
+                            : `Chờ Leader/Advisor Team ${ticket.toRole} tiếp nhận`}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {canAssign ? (

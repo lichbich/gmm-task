@@ -519,7 +519,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Ước Tính Giờ (Effort):
+                  Ước Tính Giờ (Estimate):
                 </label>
                 <input
                   type="number"

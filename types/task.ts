@@ -349,3 +349,21 @@ export const isSpecializationMatchingRole = (spec?: string, roleCode?: string): 
   return sNorm === rNorm;
 };
 
+/**
+ * Return tailwind text color class matching the user's role level (Leader: yellow/amber, Advisor: emerald/green, Admin: purple, Member: blue)
+ */
+export const getUserRoleColorClass = (role?: UserRole | string): string => {
+  switch (role) {
+    case 'Leader':
+      return 'text-amber-600 dark:text-amber-400 font-bold';
+    case 'Advisor':
+      return 'text-emerald-600 dark:text-emerald-400 font-bold';
+    case 'Admin':
+      return 'text-purple-600 dark:text-purple-400 font-bold';
+    case 'Member':
+      return 'text-blue-600 dark:text-blue-400 font-semibold';
+    default:
+      return 'text-slate-700 dark:text-slate-200 font-semibold';
+  }
+};
+

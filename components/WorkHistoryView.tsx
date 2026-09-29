@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket } from '../types/task';
+import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket, getUserRoleColorClass } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
@@ -550,7 +550,14 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                       size="xs"
                                       shape="circle"
                                     />
-                                    <span className="truncate">{t.assigneeAccount || 'Chưa phân công'}</span>
+                                    {(() => {
+                                      const assigneeUser = users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase());
+                                      return (
+                                        <span className={`truncate ${t.assigneeAccount ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}`}>
+                                          {t.assigneeAccount || 'Chưa phân công'}
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
                                 </td>
 
@@ -710,7 +717,14 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                     size="xs"
                                     shape="circle"
                                   />
-                                  <span>{t.assigneeAccount || 'Chưa phân công'}</span>
+                                  {(() => {
+                                    const assigneeUser = users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase());
+                                    return (
+                                      <span className={t.assigneeAccount ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}>
+                                        {t.assigneeAccount || 'Chưa phân công'}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
 
                                 <div className="flex items-center gap-2">

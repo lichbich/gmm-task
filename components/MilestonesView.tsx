@@ -9,6 +9,7 @@ import {
   User,
   isSpecializationMatchingRole,
   normalizeRoleToken,
+  getUserRoleColorClass,
 } from '../types/task';
 import { TaskModal } from './TaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
@@ -831,9 +832,12 @@ export const MilestonesView: React.FC = () => {
                     </strong>
                   ) : isUnassigned ? (
                     <strong className="text-slate-400 italic ml-1 font-medium">Chưa gán</strong>
-                  ) : (
-                    <strong className="text-slate-600 ml-1">{t.assigneeAccount}</strong>
-                  )}
+                  ) : (() => {
+                    const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount?.toLowerCase());
+                    return (
+                      <strong className={`ml-1 ${getUserRoleColorClass(assigneeUser?.role)}`}>{t.assigneeAccount}</strong>
+                    );
+                  })()}
                 </span>
               </div>
             </div>
@@ -1113,9 +1117,12 @@ export const MilestonesView: React.FC = () => {
                 </span>
               ) : isUnassigned ? (
                 <strong className="text-slate-400 italic font-medium">Chưa gán</strong>
-              ) : (
-                <strong className="text-slate-700">{t.assigneeAccount}</strong>
-              )}
+              ) : (() => {
+                const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount?.toLowerCase());
+                return (
+                  <strong className={getUserRoleColorClass(assigneeUser?.role)}>{t.assigneeAccount}</strong>
+                );
+              })()}
               <span className="mx-1">•</span>
               <span>Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong></span>
             </div>

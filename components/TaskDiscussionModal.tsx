@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task } from '../types/task';
+import { Task, getUserRoleColorClass } from '../types/task';
 import {
   X,
   MessageSquare,
@@ -195,11 +195,13 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
 
             <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
               <span>Phụ trách:</span>
-              <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+              <span className={`font-semibold ${getUserRoleColorClass(assigneeUser?.role)}`}>
                 {assigneeUser?.name || activeTask.assigneeAccount || 'Chưa gán'}
               </span>
               {activeTask.assigneeAccount && (
-                <span className="font-mono text-slate-400">(@{activeTask.assigneeAccount})</span>
+                <span className={`font-mono ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                  (@{activeTask.assigneeAccount})
+                </span>
               )}
             </div>
           </div>
