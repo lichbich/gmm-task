@@ -43,6 +43,8 @@ import { ImageLightbox } from './common/ImageLightbox';
 import { DecryptedImage } from './common/DecryptedImage';
 import { DescriptionEditor } from './common/DescriptionEditor';
 import { UserAvatar } from './common/UserAvatar';
+import { MentionInput } from './common/MentionInput';
+import { renderFormattedMessage } from '../lib/notesHelper';
 
 interface TicketDetailModalProps {
   ticket: Ticket | null;
@@ -1140,7 +1142,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                           }
                           return (
                             <p key={cItem.id} className="whitespace-pre-wrap leading-relaxed">
-                              {cItem.text}
+                              {renderFormattedMessage(cItem.text, users)}
                             </p>
                           );
                         })}
@@ -1177,12 +1179,15 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
               className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5"
             >
               <div className="relative">
-                <textarea
+                <MentionInput
+                  as="textarea"
                   rows={2}
                   value={commentContent}
-                  onChange={(e) => setCommentContent(e.target.value)}
+                  onChange={setCommentContent}
                   onPaste={handlePasteComment}
-                  placeholder="Nhập nội dung phản hồi... (Hỗ trợ Paste Ctrl+V ảnh trực tiếp)"
+                  users={users}
+                  mentionPlacement="top"
+                  placeholder="Nhập nội dung phản hồi... (Gõ @ để tag thành viên, Paste ảnh trực tiếp)"
                   className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none leading-relaxed"
                 />
                 {isUploadingCommentImage && (

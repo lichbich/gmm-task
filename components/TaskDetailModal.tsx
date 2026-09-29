@@ -40,7 +40,8 @@ import {
   Download,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
-import { parseNoteLine, formatNewNoteLine, formatEditedNoteLine } from '../lib/notesHelper';
+import { parseNoteLine, formatNewNoteLine, formatEditedNoteLine, renderFormattedMessage } from '../lib/notesHelper';
+import { MentionInput } from './common/MentionInput';
 import {
   parseDescription,
   toggleDescriptionCheckbox,
@@ -415,7 +416,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     const updated = notesText ? `${notesText}\n${newEntry}` : newEntry;
 
     setNotesText(updated);
-    updateTaskNotes(task.id, updated);
+    updateTaskNotes(task.id, updated, { newCommentContent: quickComment.trim() });
     setQuickComment('');
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
@@ -440,7 +441,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     const updated = updatedLines.join('\n');
 
     setNotesText(updated);
-    updateTaskNotes(task.id, updated);
+    updateTaskNotes(task.id, updated, { isEdit: true, skipNotification: true });
     setEditingNoteIndex(null);
     setEditingNoteText('');
     setIsSaved(true);
@@ -457,7 +458,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         const updatedLines = noteLines.filter((_, idx) => idx !== index);
         const updated = updatedLines.join('\n');
         setNotesText(updated);
-        updateTaskNotes(task.id, updated);
+        updateTaskNotes(task.id, updated, { isRecall: true, skipNotification: true });
         if (editingNoteIndex === index) {
           setEditingNoteIndex(null);
           setEditingNoteText('');
@@ -1068,11 +1069,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                           {/* Message Body or Inline Editor */}
                           {isEditingThis ? (
                             <div className="pt-1 space-y-2">
-                              <textarea
+                              <MentionInput
+                                as="textarea"
                                 rows={2}
                                 value={editingNoteText}
-                                onChange={(e) => setEditingNoteText(e.target.value)}
-                                placeholder="Nhập nội dung ghi chú chỉnh sửa..."
+                                onChange={setEditingNoteText}
+                                users={users}
+                                mentionPlacement="top"
+                                placeholder="Nhập nội dung ghi chú chỉnh sửa (Gõ @ để tag)..."
                                 className="w-full bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none leading-relaxed"
                                 autoFocus
                               />
@@ -1097,7 +1101,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                             </div>
                           ) : (
                             <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed whitespace-pre-wrap pl-1 break-words">
-                              {parsed.messageBody}
+                              {renderFormattedMessage(parsed.messageBody, users)}
                             </p>
                           )}
                         </div>
@@ -1118,12 +1122,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
               {/* Collaborative Input Field for ANY team member */}
               <form onSubmit={handleSendComment} className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
+                <MentionInput
+                  as="input"
                   value={quickComment}
-                  onChange={(e) => setQuickComment(e.target.value)}
-                  placeholder={`Gửi ghi chú/trao đổi luồng (${currentUser?.name || 'thành viên'})...`}
-                  className="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                  onChange={setQuickComment}
+                  users={users}
+                  mentionPlacement="top"
+                  placeholder={`Gửi ghi chú/trao đổi luồng (${currentUser?.name || 'thành viên'} - Gõ @ để tag)...`}
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
                 />
                 <button
                   type="submit"

@@ -13,6 +13,14 @@ import {
   playNotificationChime,
   showLocalBrowserNotification,
 } from '../lib/notificationService';
+import { extractMentions, extractDiscussionParticipants, parseNoteLine } from '../lib/notesHelper';
+
+export interface UpdateTaskNotesOptions {
+  isRecall?: boolean;
+  isEdit?: boolean;
+  skipNotification?: boolean;
+  newCommentContent?: string;
+}
 
 export function getCurrentISOWeekAndYear(d: Date = new Date()): { week: number; year: number } {
   const date = new Date(d.valueOf());
@@ -221,7 +229,7 @@ interface AppContextType {
   reorderTasksInMilestone: (milestoneId: string, taskIds: string[]) => void;
   
   submitTaskReport: (taskId: string, actualEffort: number, completionPercentage: number, status: TaskStatus, notes?: string) => void;
-  updateTaskNotes: (taskId: string, notes: string) => void;
+  updateTaskNotes: (taskId: string, notes: string, options?: UpdateTaskNotesOptions) => void;
   
   canEditTask: (task: Task, user?: User | null) => boolean;
   canReportTask: (task: Task, user?: User | null) => boolean;
@@ -1892,48 +1900,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const updateTaskNotes = (taskId: string, notes: string) => {
+  const updateTaskNotes = (taskId: string, notes: string, options?: UpdateTaskNotesOptions) => {
     updateTask(taskId, { notes });
     markNoteAsRead(taskId, notes);
+
+    // If this is a recall, edit, or explicit skip -> DO NOT dispatch any notifications!
+    if (options?.skipNotification || options?.isRecall || options?.isEdit) {
+      return;
+    }
 
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
 
     const currentAccount = (authSession?.account || '').trim().toLowerCase();
-    const assigneeAccount = (task.assigneeAccount || '').trim().toLowerCase();
 
-    // Check creator account (e.g. from task.createdBy "Admin (@admin)" or similar)
-    const creatorMatch = task.createdBy?.match(/@([a-zA-Z0-9._-]+)/);
-    const creatorAccount = creatorMatch ? creatorMatch[1].trim().toLowerCase() : '';
+    // Determine the exact new comment content
+    let rawCommentText = '';
+    if (options?.newCommentContent && options.newCommentContent.trim()) {
+      rawCommentText = options.newCommentContent.trim();
+    } else {
+      const lastLine = notes.split('\n').filter(Boolean).pop() || '';
+      const parsed = parseNoteLine(lastLine, authSession);
+      // Safety check: only send notification if the last line was authored by the current user
+      const isAuthoredByMe =
+        parsed.isMyMessage ||
+        (authSession?.name && parsed.baseAuthor.toLowerCase().includes(authSession.name.toLowerCase())) ||
+        (authSession?.account && parsed.baseAuthor.toLowerCase().includes(authSession.account.toLowerCase()));
 
-    const lastLine = notes.split('\n').filter(Boolean).pop() || '';
-    const cleanLine = lastLine.replace(/^\[.*?\]\s*/, '').trim();
+      if (!isAuthoredByMe) {
+        return;
+      }
+      rawCommentText = parsed.messageBody.trim();
+    }
 
-    // 1. If someone else (e.g. Leader/colleague) wrote a note in the task -> notify Assignee
-    if (task.assigneeAccount && assigneeAccount !== currentAccount) {
+    if (!rawCommentText) return;
+
+    // Accounts newly tagged in this specific message
+    const currentLineMentions = new Set(
+      extractMentions(rawCommentText, users).map((a) => a.toLowerCase().trim())
+    );
+
+    // All participants in the discussion thread (assignee, creator, previous commenters, previously tagged)
+    const allParticipants = extractDiscussionParticipants(notes, task, users);
+
+    const alreadyNotified = new Set<string>();
+
+    allParticipants.forEach((participantAcc) => {
+      const lowerAcc = participantAcc.toLowerCase().trim();
+      if (lowerAcc === currentAccount) return; // Don't notify the sender themselves
+      if (alreadyNotified.has(lowerAcc)) return;
+
+      alreadyNotified.add(lowerAcc);
+
+      // If directly tagged in this latest message -> use mention notification style
+      const isDirectlyTagged = currentLineMentions.has(lowerAcc);
+
       sendPushNotification({
-        targetAccount: task.assigneeAccount,
-        title: `💬 @${authSession?.account || 'Thành viên'} vừa thảo luận trong task`,
-        body: `[${task.title}]: "${cleanLine.slice(0, 80)}"`,
+        targetAccount: participantAcc,
+        title: isDirectlyTagged
+          ? `🏷️ @${authSession?.account || 'Thành viên'} đã nhắc tên bạn trong task`
+          : `💬 @${authSession?.account || 'Thành viên'} vừa gửi phản hồi trong task`,
+        body: `[${task.title}]: "${rawCommentText.slice(0, 80)}"`,
         taskId: taskId,
         senderAccount: authSession?.account,
         senderName: authSession?.name,
         type: 'TASK_NOTE',
       });
-    }
-
-    // 2. If the Assignee (or another colleague) wrote a note in a task created by a Leader/Creator -> notify Creator
-    if (creatorAccount && creatorAccount !== currentAccount && creatorAccount !== assigneeAccount) {
-      sendPushNotification({
-        targetAccount: creatorAccount,
-        title: `💬 @${authSession?.account || 'Thành viên'} vừa thảo luận trong task`,
-        body: `[${task.title}]: "${cleanLine.slice(0, 80)}"`,
-        taskId: taskId,
-        senderAccount: authSession?.account,
-        senderName: authSession?.name,
-        type: 'TASK_NOTE',
-      });
-    }
+    });
   };
 
   const duplicateTask = (taskId: string): Task | undefined => {
@@ -2922,6 +2955,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
+    // Also notify any members tagged via @mention in the comment
+    const mentionedAccounts = extractMentions(content, users);
+    mentionedAccounts.forEach((targetAcc) => {
+      recipientAccounts.add(targetAcc);
+    });
+
     // Exclude the current commenter
     recipientAccounts.forEach((acc) => {
       if (acc.toLowerCase().trim() === authSession.account.toLowerCase().trim()) {
@@ -2929,10 +2968,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    const directlyTaggedAccounts = new Set(
+      mentionedAccounts.map((a) => a.toLowerCase().trim())
+    );
+
     recipientAccounts.forEach((acc) => {
+      const isDirectlyTagged = directlyTaggedAccounts.has(acc.toLowerCase().trim());
       sendPushNotification({
         targetAccount: acc,
-        title: `💬 [${ticket.code}] Phản hồi mới từ ${authSession.name}`,
+        title: isDirectlyTagged
+          ? `🏷️ [${ticket.code}] @${authSession.name} đã nhắc tên bạn trong ticket`
+          : `💬 [${ticket.code}] Phản hồi mới từ ${authSession.name}`,
         body: `"${content.slice(0, 100)}"`,
         ticketId: ticket.id,
         senderAccount: authSession.account,
