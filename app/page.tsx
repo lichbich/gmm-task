@@ -28,11 +28,13 @@ function MainApp() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState<boolean>(false);
   const [taskModalDefaultWeek, setTaskModalDefaultWeek] = useState<number | undefined>(undefined);
   const [taskModalDefaultAssignee, setTaskModalDefaultAssignee] = useState<string | undefined>(undefined);
+  const [taskModalDefaultRole, setTaskModalDefaultRole] = useState<string | undefined>(undefined);
 
-  const handleOpenTaskModal = (task?: Task, defaultWeek?: number, defaultAssignee?: string) => {
+  const handleOpenTaskModal = (task?: Task, defaultWeek?: number, defaultAssignee?: string, defaultRole?: string) => {
     setSelectedTaskForEdit(task || null);
     setTaskModalDefaultWeek(defaultWeek);
     setTaskModalDefaultAssignee(defaultAssignee);
+    setTaskModalDefaultRole(defaultRole);
     setIsTaskModalOpen(true);
   };
 
@@ -231,11 +233,13 @@ function MainApp() {
             isOpen={isTaskModalOpen}
             defaultWeek={taskModalDefaultWeek}
             defaultAssignee={taskModalDefaultAssignee}
+            initialRole={taskModalDefaultRole}
             onClose={() => {
               setIsTaskModalOpen(false);
               setSelectedTaskForEdit(null);
               setTaskModalDefaultWeek(undefined);
               setTaskModalDefaultAssignee(undefined);
+              setTaskModalDefaultRole(undefined);
             }}
           />
 

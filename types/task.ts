@@ -320,3 +320,32 @@ export interface Ticket {
   updatedAt?: string;
 }
 
+/**
+ * Standardize role name or specialization string to a canonical token (prevent substring false positives like "Back Office" matching "BA")
+ */
+export const normalizeRoleToken = (role?: string): string => {
+  if (!role) return '';
+  const r = role.toLowerCase().trim();
+  if (r === 'designer' || r === 'design' || r.includes('thiết kế')) return 'design';
+  if (r === 'fe' || r === 'frontend' || r.includes('front-end') || r.includes('giao diện')) return 'fe';
+  if (r === 'be' || r === 'backend' || r.includes('back-end') || r.includes('máy chủ')) return 'be';
+  if (r === 'ba' || r.includes('business analyst') || r.includes('nghiệp vụ')) return 'ba';
+  if (r === 'devops' || r.includes('hạ tầng') || r.includes('cloud')) return 'devops';
+  if (r === 'ai' || r.includes('trí tuệ') || r.includes('machine learning')) return 'ai';
+  if (r === 'po' || r.includes('product owner')) return 'po';
+  if (r === 'qa' || r.includes('qc') || r.includes('kiểm thử') || r.includes('tester')) return 'qa';
+  if (r === 'sa' || r.includes('kiến trúc')) return 'sa';
+  if (r === 'back office' || r === 'backoffice' || r.includes('hành chính') || r.includes('văn phòng')) return 'back office';
+  return r;
+};
+
+/**
+ * Check if a specialization string matches a target role code accurately
+ */
+export const isSpecializationMatchingRole = (spec?: string, roleCode?: string): boolean => {
+  if (!spec || !roleCode) return false;
+  const sNorm = normalizeRoleToken(spec);
+  const rNorm = normalizeRoleToken(roleCode);
+  return sNorm === rNorm;
+};
+

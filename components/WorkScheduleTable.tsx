@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, Specialization, Milestone, Ticket, getEffectiveTaskStatus } from '../types/task';
+import {
+  Task,
+  TaskStatus,
+  Specialization,
+  Milestone,
+  Ticket,
+  User,
+  getEffectiveTaskStatus,
+  normalizeRoleToken,
+  isSpecializationMatchingRole,
+} from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
@@ -32,11 +42,13 @@ import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
+import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
+import { AssignTaskToMemberModal } from './common/AssignTaskToMemberModal';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 
 interface WorkScheduleTableProps {
-  onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
+  onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string, defaultRole?: string) => void;
 }
 
 export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTaskModal }) => {
@@ -47,6 +59,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     currentUser,
     weeklyAwards,
     canReportTask,
+    updateTask,
     deleteTask,
     confirmDialog,
     hasUnreadNote,
@@ -82,6 +95,78 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
+  const [assigningMember, setAssigningMember] = useState<{
+    user: User;
+    roleCode: string;
+    roleLabel: string;
+    unassignedTasks: Task[];
+  } | null>(null);
+
+  // Check if a user belongs to a specific role/specialization (Admins are excluded from unassigned member alerts)
+  const isUserInRoleGroup = useCallback((u: User, roleCode: string): boolean => {
+    if (!u || u.disabled || u.status === 'disabled') return false;
+    // Admins are system administrators, excluded from unassigned member alerts
+    if (u.role === 'Admin') return false;
+    if (!roleCode || roleCode === 'ALL') return true;
+
+    // Check specializations with exact normalized matching
+    const hasSpec = (u.specializations || []).some((spec) => {
+      return isSpecializationMatchingRole(spec, roleCode);
+    });
+    return hasSpec;
+  }, []);
+
+  // Check if currentUser has permission to manage/assign tasks for a role
+  const canManageRoleGroup = useCallback(
+    (roleCode: string): boolean => {
+      if (!currentUser) return false;
+      if (currentUser.role === 'Admin') return true;
+      if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
+        if (!currentUser.specializations || currentUser.specializations.length === 0) return true;
+        return currentUser.specializations.some((spec) => {
+          return isSpecializationMatchingRole(spec, roleCode);
+        });
+      }
+      return false;
+    },
+    [currentUser]
+  );
+
+  // Compute unassigned members and unassigned tasks for a role in selectedWeek & selectedYear
+  const getRoleUnassignedData = useCallback(
+    (roleCode: string) => {
+      // Users belonging to this role (strictly exclude Admins and disabled accounts)
+      const roleMembers = users.filter((u) => u.role !== 'Admin' && isUserInRoleGroup(u, roleCode));
+
+      // Tasks in the selected week & year
+      const weekTasks = tasks.filter(
+        (t) =>
+          (t.weekNumber || selectedWeek) === selectedWeek && (t.year || selectedYear) === selectedYear
+      );
+
+      // Filter members who currently have 0 tasks assigned in this week
+      const unassignedMembers = roleMembers.filter((u) => {
+        const uAcc = u.account.trim().toLowerCase();
+        const hasAnyTask = weekTasks.some(
+          (t) => t.assigneeAccount && t.assigneeAccount.trim().toLowerCase() === uAcc
+        );
+        return !hasAnyTask;
+      });
+
+      // Unassigned tasks for this role in this week (no assignee or assignee is empty)
+      const unassignedTasksInRole = weekTasks.filter((t) => {
+        const isRoleMatch = isSpecializationMatchingRole(t.role, roleCode);
+        const isUnassigned = !t.assigneeAccount || t.assigneeAccount.trim() === '';
+        return isRoleMatch && isUnassigned;
+      });
+
+      return {
+        unassignedMembers,
+        unassignedTasks: unassignedTasksInRole,
+      };
+    },
+    [users, tasks, selectedWeek, selectedYear, isUserInRoleGroup]
+  );
 
   const getLinkedTicket = useCallback(
     (t: Task): Ticket | undefined => {
@@ -147,19 +232,17 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     (u: any, roleCode: string): boolean => {
       if (!u || u.disabled || u.status === 'disabled') return false;
       if (!roleCode || roleCode === 'ALL') return true;
-      const currentRoleCode = roleCode.toLowerCase();
 
-      // 1. Check specializations match
+      // 1. Check specializations match with normalized role
       const hasSpecMatch = (u.specializations || []).some((spec: string) => {
-        const s = spec.toLowerCase();
-        return s === currentRoleCode || s.includes(currentRoleCode) || currentRoleCode.includes(s);
+        return isSpecializationMatchingRole(spec, roleCode);
       });
       if (hasSpecMatch) return true;
 
       // 2. Check if user has any tasks assigned under this role
       const hasTaskInRole = tasks.some(
         (t) =>
-          t.role?.toLowerCase() === currentRoleCode &&
+          isSpecializationMatchingRole(t.role, roleCode) &&
           t.assigneeAccount?.toLowerCase() === u.account.toLowerCase()
       );
       if (hasTaskInRole) return true;
@@ -172,24 +255,17 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const isMilestoneInRole = useCallback(
     (m: Milestone, roleCode: string): boolean => {
       if (!roleCode || roleCode === 'ALL') return true;
-      const currentRoleCode = roleCode.toLowerCase();
 
       // 1. Check if milestone role matches
       if (m.role) {
-        const mRole = m.role.toLowerCase();
-        if (
-          mRole === 'all' ||
-          mRole === currentRoleCode ||
-          mRole.includes(currentRoleCode) ||
-          currentRoleCode.includes(mRole)
-        ) {
+        if (m.role.toLowerCase() === 'all' || isSpecializationMatchingRole(m.role, roleCode)) {
           return true;
         }
       }
 
       // 2. Check if any task in this milestone has the target role
       const hasTaskInRole = tasks.some(
-        (t) => t.milestoneId === m.id && t.role?.toLowerCase() === currentRoleCode
+        (t) => t.milestoneId === m.id && isSpecializationMatchingRole(t.role, roleCode)
       );
       if (hasTaskInRole) return true;
 
@@ -1519,6 +1595,29 @@ const getRoleOrderRank = (roleCode?: string): number => {
                                 <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-white/90 dark:bg-slate-800/90 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
                                   {group.tasks.length} đầu việc
                                 </span>
+                                {(() => {
+                                  const { unassignedMembers, unassignedTasks } = getRoleUnassignedData(group.role);
+                                  if (unassignedMembers.length === 0) return null;
+                                  return (
+                                    <RoleUnassignedMembersTag
+                                      roleCode={group.role}
+                                      roleLabel={cfg.label}
+                                      unassignedUsers={unassignedMembers}
+                                      unassignedTasksCount={unassignedTasks.length}
+                                      selectedWeek={selectedWeek}
+                                      selectedYear={selectedYear}
+                                      canManage={canManageRoleGroup(group.role)}
+                                      onOpenAssignModal={(targetUser) => {
+                                        setAssigningMember({
+                                          user: targetUser,
+                                          roleCode: group.role,
+                                          roleLabel: cfg.label,
+                                          unassignedTasks,
+                                        });
+                                      }}
+                                    />
+                                  );
+                                })()}
                               </div>
 
                               <div className="flex items-center gap-3 text-xs">
@@ -1636,15 +1735,38 @@ const getRoleOrderRank = (roleCode?: string): number => {
                     {/* Mobile Role Group Header */}
                     <div
                       id={`mobile-role-section-${group.role}`}
-                      className={`scroll-mt-16 ${cfg.bg} border ${cfg.border} p-2.5 sm:p-3 rounded-2xl flex items-center justify-between shadow-2xs gap-2`}
+                      className={`scroll-mt-16 ${cfg.bg} border ${cfg.border} p-2.5 sm:p-3 rounded-2xl flex items-center justify-between shadow-2xs gap-2 flex-wrap`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${cfg.badgeBg}`}>
                           {group.role}
                         </span>
                         <span className={`text-xs font-bold ${cfg.text} truncate`}>
                           {cfg.mobileLabel}
                         </span>
+                        {(() => {
+                          const { unassignedMembers, unassignedTasks } = getRoleUnassignedData(group.role);
+                          if (unassignedMembers.length === 0) return null;
+                          return (
+                            <RoleUnassignedMembersTag
+                              roleCode={group.role}
+                              roleLabel={cfg.mobileLabel}
+                              unassignedUsers={unassignedMembers}
+                              unassignedTasksCount={unassignedTasks.length}
+                              selectedWeek={selectedWeek}
+                              selectedYear={selectedYear}
+                              canManage={canManageRoleGroup(group.role)}
+                              onOpenAssignModal={(targetUser) => {
+                                setAssigningMember({
+                                  user: targetUser,
+                                  roleCode: group.role,
+                                  roleLabel: cfg.label,
+                                  unassignedTasks,
+                                });
+                              }}
+                            />
+                          );
+                        })()}
                       </div>
                       <div className="flex items-center gap-1.5 text-[11px] shrink-0">
                         <span className="bg-white/90 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap">
@@ -1874,6 +1996,30 @@ const getRoleOrderRank = (roleCode?: string): number => {
         isOpen={!!reportingTask}
         onClose={() => setReportingTask(null)}
       />
+
+      {/* Assign Task to Unassigned Member Modal */}
+      {assigningMember && (
+        <AssignTaskToMemberModal
+          isOpen={!!assigningMember}
+          targetUser={assigningMember.user}
+          roleCode={assigningMember.roleCode}
+          roleLabel={assigningMember.roleLabel}
+          unassignedTasks={assigningMember.unassignedTasks}
+          selectedWeek={selectedWeek}
+          selectedYear={selectedYear}
+          onClose={() => setAssigningMember(null)}
+          onAssignTask={(task, user) => {
+            updateTask(task.id, {
+              assigneeAccount: user.account,
+            });
+            setAssigningMember(null);
+          }}
+          onCreateNewTask={(user, roleCode) => {
+            setAssigningMember(null);
+            onOpenTaskModal?.(undefined, selectedWeek, user.account, roleCode);
+          }}
+        />
+      )}
     </div>
   );
 };

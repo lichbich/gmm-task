@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Milestone, Task, TaskStatus, Specialization, Ticket } from '../types/task';
+import {
+  Milestone,
+  Task,
+  TaskStatus,
+  Specialization,
+  Ticket,
+  User,
+  isSpecializationMatchingRole,
+  normalizeRoleToken,
+} from '../types/task';
 import { TaskModal } from './TaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
@@ -29,6 +38,8 @@ import {
   Ticket as TicketIcon,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
+import { AssignTaskToMemberModal } from './common/AssignTaskToMemberModal';
 
 // Helper to parse deliverable lines/bullets/commas into individual clean items
 const parseDeliverables = (raw?: string): string[] => {
@@ -143,6 +154,7 @@ export const MilestonesView: React.FC = () => {
     users,
     requestTaskAssignment,
     selectedWeek,
+    selectedYear,
   } = useApp();
 
   // Sub-tabs: Milestones vs Ad-hoc tasks (Default to ADHOC)
@@ -190,6 +202,8 @@ export const MilestonesView: React.FC = () => {
   }, [currentUser?.id, currentUser?.specializations?.join(','), roles]);
 
   const [modalInitialRole, setModalInitialRole] = useState<Specialization | undefined>(undefined);
+  const [modalDefaultAssignee, setModalDefaultAssignee] = useState<string | undefined>(undefined);
+  const [modalDefaultWeek, setModalDefaultWeek] = useState<number | undefined>(undefined);
 
   const [isAddMsOpen, setIsAddMsOpen] = useState(false);
   const [msTitle, setMsTitle] = useState('');
@@ -205,6 +219,67 @@ export const MilestonesView: React.FC = () => {
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
+  const [assigningMember, setAssigningMember] = useState<{
+    user: User;
+    roleCode: string;
+    roleLabel: string;
+    unassignedTasks: Task[];
+  } | null>(null);
+
+  // Check if a user belongs to a specific role/specialization (Admins are excluded from unassigned alerts)
+  const isUserInRoleGroup = (u: User, roleCode: string): boolean => {
+    if (!u || u.disabled || u.status === 'disabled') return false;
+    if (u.role === 'Admin') return false;
+    if (!roleCode || roleCode === 'ALL') return true;
+
+    return (u.specializations || []).some((spec) => {
+      return isSpecializationMatchingRole(spec, roleCode);
+    });
+  };
+
+  const canManageRoleGroup = (roleCode: string): boolean => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'Admin') return true;
+    if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
+      if (!currentUser.specializations || currentUser.specializations.length === 0) return true;
+      return currentUser.specializations.some((spec) => {
+        return isSpecializationMatchingRole(spec, roleCode);
+      });
+    }
+    return false;
+  };
+
+  const getRoleUnassignedData = (roleCode: string) => {
+    // Users belonging to this role (strictly exclude Admins and disabled accounts)
+    const roleMembers = users.filter((u) => u.role !== 'Admin' && isUserInRoleGroup(u, roleCode));
+
+    // Tasks in the selected week & year
+    const weekTasks = tasks.filter(
+      (t) =>
+        (t.weekNumber || selectedWeek) === selectedWeek && (t.year || selectedYear) === selectedYear
+    );
+
+    // Filter members who currently have 0 tasks assigned in this week
+    const unassignedMembers = roleMembers.filter((u) => {
+      const uAcc = u.account.trim().toLowerCase();
+      const hasAnyTask = weekTasks.some(
+        (t) => t.assigneeAccount && t.assigneeAccount.trim().toLowerCase() === uAcc
+      );
+      return !hasAnyTask;
+    });
+
+    // Unassigned tasks for this role in this week (no assignee or assignee is empty)
+    const unassignedTasksInRole = weekTasks.filter((t) => {
+      const isRoleMatch = isSpecializationMatchingRole(t.role, roleCode);
+      const isUnassigned = !t.assigneeAccount || t.assigneeAccount.trim() === '';
+      return isRoleMatch && isUnassigned;
+    });
+
+    return {
+      unassignedMembers,
+      unassignedTasks: unassignedTasksInRole,
+    };
+  };
 
   const { tickets } = useApp();
 
@@ -358,7 +433,7 @@ export const MilestonesView: React.FC = () => {
   // Role & Assignee filtering logic:
   const isTaskRoleMatch = (taskRole: Specialization): boolean => {
     const currentRole = adminSelectedRole || roles[0]?.code || 'BA';
-    return taskRole === currentRole;
+    return isSpecializationMatchingRole(taskRole, currentRole);
   };
 
   const isTaskAssigneeMatch = (t: Task): boolean => {
@@ -385,18 +460,16 @@ export const MilestonesView: React.FC = () => {
   // Check if a user member belongs to the active role (by specialization or assigned task)
   const isMemberInRole = (u: any, roleCode: string): boolean => {
     if (!u || u.disabled || u.status === 'disabled') return false;
-    const currentRoleCode = (roleCode || 'BA').toLowerCase();
     
     // 1. Check specializations match
     const hasSpecMatch = (u.specializations || []).some((spec: string) => {
-      const s = spec.toLowerCase();
-      return s === currentRoleCode || s.includes(currentRoleCode) || currentRoleCode.includes(s);
+      return isSpecializationMatchingRole(spec, roleCode);
     });
     if (hasSpecMatch) return true;
 
     // 2. Check if user has any tasks assigned under this role
     const hasTaskInRole = tasks.some(
-      (t) => t.role?.toLowerCase() === currentRoleCode && t.assigneeAccount?.toLowerCase() === u.account.toLowerCase()
+      (t) => isSpecializationMatchingRole(t.role, roleCode) && t.assigneeAccount?.toLowerCase() === u.account.toLowerCase()
     );
     if (hasTaskInRole) return true;
 
@@ -559,6 +632,8 @@ export const MilestonesView: React.FC = () => {
       (milestoneRole && milestoneRole !== 'ALL' ? milestoneRole : undefined) ||
       'BA';
     setModalInitialRole(effectiveRole as Specialization);
+    setModalDefaultAssignee(undefined);
+    setModalDefaultWeek(undefined);
     setIsTaskModalOpen(true);
   };
 
@@ -568,6 +643,8 @@ export const MilestonesView: React.FC = () => {
     const userRole = getInitialRoleForUser();
     const effectiveRole = (adminSelectedRole as Specialization) || (userRole as Specialization) || 'BA';
     setModalInitialRole(effectiveRole as Specialization);
+    setModalDefaultAssignee(undefined);
+    setModalDefaultWeek(undefined);
     setIsTaskModalOpen(true);
   };
 
@@ -1212,7 +1289,33 @@ export const MilestonesView: React.FC = () => {
           </div>
 
           {/* Role & Member Filter Controls */}
-          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 sm:gap-3">
+            {/* Unassigned Team Members Warning Tag */}
+            {(() => {
+              const { unassignedMembers, unassignedTasks } = getRoleUnassignedData(adminSelectedRole);
+              if (unassignedMembers.length === 0) return null;
+              const roleObj = roles.find((r) => isSpecializationMatchingRole(r.code, adminSelectedRole));
+              return (
+                <RoleUnassignedMembersTag
+                  roleCode={adminSelectedRole}
+                  roleLabel={roleObj?.name || adminSelectedRole}
+                  unassignedUsers={unassignedMembers}
+                  unassignedTasksCount={unassignedTasks.length}
+                  selectedWeek={selectedWeek}
+                  selectedYear={selectedYear}
+                  canManage={canManageRoleGroup(adminSelectedRole)}
+                  onOpenAssignModal={(targetUser) => {
+                    setAssigningMember({
+                      user: targetUser,
+                      roleCode: adminSelectedRole,
+                      roleLabel: roleObj?.name || adminSelectedRole,
+                      unassignedTasks,
+                    });
+                  }}
+                />
+              );
+            })()}
+
             {/* Member / Assignee Filter Dropdown */}
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-semibold text-slate-600 shrink-0 flex items-center gap-1">
@@ -1941,17 +2044,50 @@ export const MilestonesView: React.FC = () => {
         onClose={() => setViewingTicket(null)}
       />
 
+      {/* Assign Task to Unassigned Member Modal */}
+      {assigningMember && (
+        <AssignTaskToMemberModal
+          isOpen={!!assigningMember}
+          targetUser={assigningMember.user}
+          roleCode={assigningMember.roleCode}
+          roleLabel={assigningMember.roleLabel}
+          unassignedTasks={assigningMember.unassignedTasks}
+          selectedWeek={selectedWeek}
+          selectedYear={selectedYear}
+          onClose={() => setAssigningMember(null)}
+          onAssignTask={(task, user) => {
+            updateTask(task.id, {
+              assigneeAccount: user.account,
+            });
+            setAssigningMember(null);
+          }}
+          onCreateNewTask={(user, roleCode) => {
+            setAssigningMember(null);
+            setEditingTask(null);
+            setTargetMilestoneId('');
+            setModalInitialRole(roleCode as Specialization);
+            setModalDefaultAssignee(user.account);
+            setModalDefaultWeek(selectedWeek);
+            setIsTaskModalOpen(true);
+          }}
+        />
+      )}
+
       {/* Task Creation & Edit Modal with Strict Synchronization */}
       <TaskModal
-        key={`${targetMilestoneId}-${editingTask?.id || 'new'}-${modalInitialRole || 'def'}-${isTaskModalOpen}`}
+        key={`${targetMilestoneId}-${editingTask?.id || 'new'}-${modalInitialRole || 'def'}-${modalDefaultAssignee || 'none'}-${isTaskModalOpen}`}
         task={editingTask}
         isOpen={isTaskModalOpen}
         initialMilestoneId={targetMilestoneId}
         initialRole={modalInitialRole}
+        defaultWeek={modalDefaultWeek}
+        defaultAssignee={modalDefaultAssignee}
         onClose={() => {
           setIsTaskModalOpen(false);
           setEditingTask(null);
           setModalInitialRole(undefined);
+          setModalDefaultAssignee(undefined);
+          setModalDefaultWeek(undefined);
           setTargetMilestoneId('');
         }}
       />
