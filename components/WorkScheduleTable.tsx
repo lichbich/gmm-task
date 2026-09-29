@@ -11,6 +11,7 @@ import {
   normalizeRoleToken,
   isSpecializationMatchingRole,
   getUserRoleColorClass,
+  getUserLevelRank,
 } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
@@ -355,9 +356,11 @@ const getRoleOrderRank = (roleCode?: string): number => {
     if (rankA !== rankB) {
       return rankA - rankB;
     }
-    const idxA = tasks.findIndex((item) => item.id === a.id);
-    const idxB = tasks.findIndex((item) => item.id === b.id);
-    return idxA - idxB;
+    const titleA = a.title || '';
+    const titleB = b.title || '';
+    const cmpTitle = titleA.localeCompare(titleB, undefined, { sensitivity: 'base', numeric: true });
+    if (cmpTitle !== 0) return cmpTitle;
+    return (a.id || '').localeCompare(b.id || '');
   };
 
   // Filter & Sort Tasks by Priority (High -> Medium -> Low)
@@ -378,7 +381,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
         // Sub-tab filter: All Tasks only shows assigned tasks (tasks with an assignee)
         if (subTab === 'ALL_TASKS') {
-          if (!t.assigneeAccount || !t.assigneeAccount.trim()) {
+          const acc = (t.assigneeAccount || '').trim();
+          if (!acc || acc.toLowerCase() === 'unassigned') {
             return false;
           }
         }
@@ -1652,13 +1656,26 @@ const getRoleOrderRank = (roleCode?: string): number => {
                         {(() => {
                           const tasksByAccountMap = new Map<string, Task[]>();
                           group.tasks.forEach((t) => {
-                            const acc = t.assigneeAccount || 'Unassigned';
+                            const acc = (t.assigneeAccount || '').trim();
+                            if (!acc || acc.toLowerCase() === 'unassigned') return;
                             const list = tasksByAccountMap.get(acc) || [];
                             list.push(t);
                             tasksByAccountMap.set(acc, list);
                           });
 
-                          const accountGroups = Array.from(tasksByAccountMap.entries());
+                          const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
+                            const userA = users.find((u) => u.account.toLowerCase() === accA.toLowerCase());
+                            const userB = users.find((u) => u.account.toLowerCase() === accB.toLowerCase());
+
+                            const rankA = getUserLevelRank(userA?.role);
+                            const rankB = getUserLevelRank(userB?.role);
+
+                            if (rankA !== rankB) {
+                              return rankA - rankB;
+                            }
+
+                            return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
+                          });
 
                           return accountGroups.map(([acc, accTasks], accIdx) => (
                             <React.Fragment key={`acc-group-${group.role}-${acc}`}>
@@ -1730,12 +1747,25 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
                 const tasksByAccountMap = new Map<string, Task[]>();
                 group.tasks.forEach((t) => {
-                  const acc = t.assigneeAccount || 'Unassigned';
+                  const acc = (t.assigneeAccount || '').trim();
+                  if (!acc || acc.toLowerCase() === 'unassigned') return;
                   const list = tasksByAccountMap.get(acc) || [];
                   list.push(t);
                   tasksByAccountMap.set(acc, list);
                 });
-                const accountGroups = Array.from(tasksByAccountMap.entries());
+                const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
+                  const userA = users.find((u) => u.account.toLowerCase() === accA.toLowerCase());
+                  const userB = users.find((u) => u.account.toLowerCase() === accB.toLowerCase());
+
+                  const rankA = getUserLevelRank(userA?.role);
+                  const rankB = getUserLevelRank(userB?.role);
+
+                  if (rankA !== rankB) {
+                    return rankA - rankB;
+                  }
+
+                  return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
+                });
 
                 return (
                   <div key={`mobile-role-${group.role}`} className="space-y-2.5">

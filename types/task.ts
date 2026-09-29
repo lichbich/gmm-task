@@ -367,3 +367,17 @@ export const getUserRoleColorClass = (role?: UserRole | string): string => {
   }
 };
 
+/**
+ * Return numeric rank for sorting users by role level:
+ * Admin (1) -> Leader (2) -> Advisor (3) -> Member (4)
+ */
+export const getUserLevelRank = (role?: UserRole | string): number => {
+  if (!role) return 99;
+  const r = role.trim().toLowerCase();
+  if (r === 'admin') return 1;
+  if (r === 'leader') return 2;
+  if (r === 'advisor') return 3;
+  if (r === 'member') return 4;
+  return 10;
+};
+

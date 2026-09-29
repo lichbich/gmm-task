@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Milestone, User as UserType, isTaskUnworked, Ticket } from '../types/task';
+import { Task, Milestone, User as UserType, isTaskUnworked, Ticket, getUserLevelRank } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
@@ -904,7 +904,12 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                     const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
                       if (accA.toLowerCase() === myAcc) return -1;
                       if (accB.toLowerCase() === myAcc) return 1;
-                      return accA.localeCompare(accB);
+                      const userA = users.find((u) => u.account.toLowerCase() === accA.toLowerCase());
+                      const userB = users.find((u) => u.account.toLowerCase() === accB.toLowerCase());
+                      const rankA = getUserLevelRank(userA?.role);
+                      const rankB = getUserLevelRank(userB?.role);
+                      if (rankA !== rankB) return rankA - rankB;
+                      return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
                     });
 
                     return (
@@ -1112,7 +1117,12 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                 const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
                   if (accA.toLowerCase() === myAcc) return -1;
                   if (accB.toLowerCase() === myAcc) return 1;
-                  return accA.localeCompare(accB);
+                  const userA = users.find((u) => u.account.toLowerCase() === accA.toLowerCase());
+                  const userB = users.find((u) => u.account.toLowerCase() === accB.toLowerCase());
+                  const rankA = getUserLevelRank(userA?.role);
+                  const rankB = getUserLevelRank(userB?.role);
+                  if (rankA !== rankB) return rankA - rankB;
+                  return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
                 });
 
                 return (
