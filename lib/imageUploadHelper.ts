@@ -1,13 +1,77 @@
 import { encryptImageFile } from './imageCryptoHelper';
 
+async function compressImageIfNeeded(file: File): Promise<File> {
+  // If not image or is gif / svg or already under 2MB, keep original
+  if (
+    !file.type.startsWith('image/') ||
+    file.type === 'image/gif' ||
+    file.type === 'image/svg+xml' ||
+    file.size <= 2 * 1024 * 1024
+  ) {
+    return file;
+  }
+
+  return new Promise<File>((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      const maxDim = 2048;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return resolve(file);
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob && blob.size < file.size) {
+            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '.webp', {
+              type: 'image/webp',
+              lastModified: Date.now(),
+            });
+            resolve(newFile);
+          } else {
+            resolve(file);
+          }
+        },
+        'image/webp',
+        0.88
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+}
+
 /**
  * Encrypt and upload an image file through our internal Next.js API route
  */
 export async function uploadImageToCatbox(file: File): Promise<{ url: string; fileName: string }> {
-  // 1. Encrypt image buffer with internal Secret Key (AES-256-GCM)
-  const { encryptedBlob, encryptedFileName } = await encryptImageFile(file);
+  // 1. Optimize oversized images before upload to stay within payload limits
+  const processedFile = await compressImageIfNeeded(file);
 
-  // 2. Send encrypted binary blob to server upload proxy
+  // 2. Encrypt image buffer with internal Secret Key (AES-256-GCM)
+  const { encryptedBlob, encryptedFileName } = await encryptImageFile(processedFile);
+
+  // 3. Send encrypted binary blob to server upload proxy
   const formData = new FormData();
   formData.append('file', encryptedBlob, encryptedFileName);
 

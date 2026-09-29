@@ -6,15 +6,18 @@ export const dynamic = 'force-dynamic';
 const BROWSER_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+const DEFAULT_CATBOX_USERHASH = 'e929b9d0999c3be251207c5a9';
+
 /**
- * Upload to primary Catbox host
+ * Upload to primary Catbox host with authenticated userhash
  */
 async function uploadToCatbox(file: Blob, fileName: string): Promise<string | null> {
   try {
+    const userhash = process.env.CATBOX_USERHASH || DEFAULT_CATBOX_USERHASH;
     const catboxFormData = new FormData();
     catboxFormData.append('reqtype', 'fileupload');
-    if (process.env.CATBOX_USERHASH) {
-      catboxFormData.append('userhash', process.env.CATBOX_USERHASH);
+    if (userhash) {
+      catboxFormData.append('userhash', userhash);
     }
     catboxFormData.append('fileToUpload', file, fileName);
 
@@ -37,7 +40,7 @@ async function uploadToCatbox(file: Blob, fileName: string): Promise<string | nu
       console.warn(`Catbox upload returned HTTP ${catboxResponse.status}: ${errText}`);
     }
   } catch (err) {
-    console.warn('Catbox upload request error, attempting fallback:', err);
+    console.warn('Catbox upload request error:', err);
   }
   return null;
 }
