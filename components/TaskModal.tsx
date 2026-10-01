@@ -83,6 +83,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [description, setDescription] = useState('');
   const [role, setRole] = useState<Specialization>(defaultRole);
   const [estimatedEffort, setEstimatedEffort] = useState<number | string>(2);
+  const [actualEffort, setActualEffort] = useState<number | string>(0);
+  const [completionPercentage, setCompletionPercentage] = useState<number>(0);
   const [assigneeAccount, setAssigneeAccount] = useState<string>('');
   const [milestoneId, setMilestoneId] = useState<string>('');
   const [status, setStatus] = useState<TaskStatus>('To do');
@@ -91,6 +93,65 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleProgressChange = (newPct: number) => {
+    const boundedPct = Math.max(0, Math.min(100, Math.round(newPct)));
+    setCompletionPercentage(boundedPct);
+    const currActual =
+      typeof actualEffort === 'number'
+        ? actualEffort
+        : parseFloat(String(actualEffort).replace(',', '.')) || 0;
+    const parsedEst =
+      typeof estimatedEffort === 'number'
+        ? estimatedEffort
+        : parseFloat(String(estimatedEffort).replace(',', '.')) || 0;
+
+    if (boundedPct >= 100) {
+      setStatus('Done');
+      if (currActual === 0 && parsedEst > 0) {
+        setActualEffort(parsedEst);
+      }
+    } else if (boundedPct > 0) {
+      setStatus('In Progress');
+      if (currActual === 0 && parsedEst > 0) {
+        setActualEffort(parsedEst);
+      }
+    } else {
+      setStatus('To do');
+      setActualEffort(0);
+    }
+  };
+
+  const handleStatusChange = (newStatus: TaskStatus) => {
+    setStatus(newStatus);
+    if (currentUser?.role === 'Admin') {
+      const currActual =
+        typeof actualEffort === 'number'
+          ? actualEffort
+          : parseFloat(String(actualEffort).replace(',', '.')) || 0;
+      const parsedEst =
+        typeof estimatedEffort === 'number'
+          ? estimatedEffort
+          : parseFloat(String(estimatedEffort).replace(',', '.')) || 0;
+
+      if (newStatus === 'Done') {
+        setCompletionPercentage(100);
+        if (currActual === 0 && parsedEst > 0) {
+          setActualEffort(parsedEst);
+        }
+      } else if (newStatus === 'To do') {
+        setCompletionPercentage(0);
+        setActualEffort(0);
+      } else if (newStatus === 'In Progress') {
+        if (completionPercentage === 0 || completionPercentage === 100) {
+          setCompletionPercentage(50);
+        }
+        if (currActual === 0 && parsedEst > 0) {
+          setActualEffort(parsedEst);
+        }
+      }
+    }
+  };
 
   const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -135,6 +196,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const checkDirtyAndConfirmClose = useCallback((): boolean => {
     let isDirty = false;
+    const parsedActual =
+      typeof actualEffort === 'number'
+        ? actualEffort
+        : parseFloat(String(actualEffort).replace(',', '.')) || 0;
+
     if (!task) {
       // Creating new task
       const defaultAssigneeVal =
@@ -150,6 +216,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         description.trim() !== '' ||
         notes.trim() !== '' ||
         (estimatedEffort !== 2 && estimatedEffort !== '2') ||
+        (currentUser?.role === 'Admin' && (parsedActual !== 0 || completionPercentage !== 0)) ||
         assigneeAccount !== defaultAssigneeVal ||
         milestoneId !== defaultMilestoneVal;
     } else {
@@ -158,6 +225,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       const origDesc = task.description || '';
       const origNotes = task.notes || '';
       const origEffort = task.estimatedEffort !== undefined ? task.estimatedEffort : 2;
+      const origActualEffort = task.actualEffort !== undefined ? task.actualEffort : 0;
+      const origCompletion =
+        task.completionPercentage !== undefined
+          ? task.completionPercentage
+          : task.status === 'Done'
+          ? 100
+          : 0;
       const origAssignee =
         task.assigneeAccount ||
         task.assignmentRequestedBy ||
@@ -176,7 +250,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         milestoneId !== origMilestone ||
         role !== origRole ||
         status !== origStatus ||
-        priority !== origPriority;
+        priority !== origPriority ||
+        (currentUser?.role === 'Admin' &&
+          (parsedActual !== origActualEffort || completionPercentage !== origCompletion));
     }
 
     if (isDirty) {
@@ -199,6 +275,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     description,
     notes,
     estimatedEffort,
+    actualEffort,
+    completionPercentage,
     assigneeAccount,
     milestoneId,
     role,
@@ -222,6 +300,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDescription(task.description || '');
       setRole(task.role || defaultRole);
       setEstimatedEffort(task.estimatedEffort !== undefined ? task.estimatedEffort : 2);
+      setActualEffort(task.actualEffort !== undefined ? task.actualEffort : 0);
+      setCompletionPercentage(
+        task.completionPercentage !== undefined
+          ? task.completionPercentage
+          : task.status === 'Done'
+          ? 100
+          : 0
+      );
       // Auto-select assignee: use existing assignee, or fallback to member requesting task, or defaultAssignee
       const initialAssignee =
         task.assigneeAccount ||
@@ -237,6 +323,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setDescription('');
       setRole(defaultRole);
       setEstimatedEffort(2);
+      setActualEffort(0);
+      setCompletionPercentage(0);
       setAssigneeAccount(
         defaultAssignee !== undefined
           ? defaultAssignee
@@ -285,6 +373,34 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         ? estimatedEffort
         : parseFloat(String(estimatedEffort).replace(',', '.')) || 0;
 
+    let parsedActualEffort =
+      typeof actualEffort === 'number'
+        ? actualEffort
+        : parseFloat(String(actualEffort).replace(',', '.')) || 0;
+
+    const isAdmin = currentUser?.role === 'Admin';
+    if (isAdmin && completionPercentage > 0 && parsedActualEffort === 0) {
+      parsedActualEffort = parsedEffort;
+    }
+
+    const finalActualEffort = isAdmin
+      ? completionPercentage === 0
+        ? 0
+        : parsedActualEffort
+      : task
+      ? task.actualEffort || 0
+      : 0;
+
+    const finalCompletionPercentage = isAdmin
+      ? completionPercentage
+      : task
+      ? task.completionPercentage !== undefined
+        ? task.completionPercentage
+        : task.status === 'Done'
+        ? 100
+        : 0
+      : 0;
+
     if (task) {
       const isAssigned = Boolean(assigneeAccount && assigneeAccount.trim() !== '');
       const reqBy = task.assignmentRequestedBy;
@@ -301,6 +417,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         status,
         priority,
         notes,
+        ...(isAdmin
+          ? {
+              actualEffort: finalActualEffort,
+              completionPercentage: finalCompletionPercentage,
+              ...(finalCompletionPercentage === 100 || status === 'Done'
+                ? { lastSubmittedAt: task.lastSubmittedAt || new Date().toISOString() }
+                : {}),
+            }
+          : {}),
         ...(isApprovingRequested || (isAssigned && task.assignmentRequestedBy)
           ? { assignmentRequestStatus: 'APPROVED' }
           : {}),
@@ -314,15 +439,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         description,
         role,
         estimatedEffort: parsedEffort,
-        actualEffort: 0,
+        actualEffort: finalActualEffort,
         status,
         priority,
         assigneeAccount,
         milestoneId,
-        completionPercentage: 0,
+        completionPercentage: finalCompletionPercentage,
         weekNumber: defaultWeek || selectedWeek,
         year: selectedYear,
         notes,
+        ...(isAdmin && (finalCompletionPercentage === 100 || status === 'Done')
+          ? { lastSubmittedAt: new Date().toISOString() }
+          : {}),
       });
     }
     forceClose();
@@ -575,11 +703,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Trạng Thái Ban Đầu:
+                  Trạng Thái:
                 </label>
                 <Dropdown
                   value={status}
-                  onChange={(newStatus) => setStatus(newStatus as TaskStatus)}
+                  onChange={(newStatus) => handleStatusChange(newStatus as TaskStatus)}
                   options={[
                     { value: 'To do', label: 'To do (Cần làm)' },
                     { value: 'In Progress', label: 'In Progress (Đang làm)' },
@@ -607,6 +735,109 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 />
               </div>
             </div>
+
+            {/* Admin-only Progress & Actual Effort Control Box */}
+            {currentUser?.role === 'Admin' && (
+              <div className="p-3.5 sm:p-4 bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/90 dark:border-purple-800/80 rounded-2xl space-y-3 shadow-2xs animate-in fade-in duration-150">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/60 dark:text-purple-200 dark:border-purple-700">
+                      👑 Admin Override
+                    </span>
+                    <span className="text-xs font-bold text-purple-950 dark:text-purple-200">
+                      Quản Lý Tiến Độ & Giờ Thực Tế
+                    </span>
+                  </div>
+                  <span className="text-[10.5px] text-purple-700 dark:text-purple-300 font-medium">
+                    Đồng bộ thời gian thực cho người được phân công
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                  {/* Actual Effort Input */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Số Giờ Làm Thực Tế (Actual Effort):
+                      </label>
+                      <span className="text-xs font-bold text-purple-700 dark:text-purple-300 font-mono">
+                        {typeof actualEffort === 'number'
+                          ? actualEffort
+                          : parseFloat(String(actualEffort).replace(',', '.')) || 0}{' '}
+                        giờ
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={actualEffort}
+                      onChange={(e) => setActualEffort(e.target.value)}
+                      placeholder="0.0"
+                      className="w-full bg-white dark:bg-slate-900 border border-purple-300/80 dark:border-purple-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 text-xs font-mono font-bold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
+                    />
+                  </div>
+
+                  {/* Completion Percentage Slider & Quick Buttons */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Phần Trăm Tiến Độ (%):
+                      </label>
+                      <span className="text-xs font-bold text-purple-700 dark:text-purple-300 font-mono">
+                        {completionPercentage}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={completionPercentage}
+                      onChange={(e) => handleProgressChange(Number(e.target.value))}
+                      className="w-full accent-purple-600 cursor-pointer h-2 bg-purple-200 dark:bg-purple-900 rounded-lg"
+                    />
+                    <div className="flex justify-between text-[10px] text-purple-700 dark:text-purple-400 font-mono font-semibold mt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleProgressChange(0)}
+                        className="hover:underline cursor-pointer"
+                      >
+                        0%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleProgressChange(25)}
+                        className="hover:underline cursor-pointer"
+                      >
+                        25%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleProgressChange(50)}
+                        className="hover:underline cursor-pointer"
+                      >
+                        50%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleProgressChange(75)}
+                        className="hover:underline cursor-pointer"
+                      >
+                        75%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleProgressChange(100)}
+                        className="hover:underline cursor-pointer"
+                      >
+                        100%
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Dedicated Note & Discussion Field for All Task Management */}
             <div>
