@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { User, getUserRoleColorClass } from '../../types/task';
+import { User, getUserRoleColorClass, getUserRoleInSpec } from '../../types/task';
 import { UserAvatar } from './UserAvatar';
 import {
   AlertCircle,
@@ -197,44 +197,47 @@ export const RoleUnassignedMembersTag: React.FC<RoleUnassignedMembersTagProps> =
 
         {/* Member List */}
         <div className="space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar pr-0.5">
-          {unassignedUsers.map((u) => (
-            <div
-              key={u.id}
-              className="p-2 bg-slate-50 dark:bg-slate-800/80 hover:bg-amber-50/70 dark:hover:bg-slate-800 rounded-xl border border-slate-200/70 dark:border-slate-700/70 transition-all flex items-center justify-between gap-2 group"
-            >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <UserAvatar user={u} account={u.account} size="xs" shape="circle" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-xs font-semibold truncate ${getUserRoleColorClass(u.role)}`}>
-                      {u.name}
-                    </span>
-                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-slate-200/80 dark:bg-slate-700 shrink-0 ${getUserRoleColorClass(u.role)}`}>
-                      @{u.account}
+          {unassignedUsers.map((u) => {
+            const uRoleInThisSpec = getUserRoleInSpec(u, roleCode);
+            return (
+              <div
+                key={u.id}
+                className="p-2 bg-slate-50 dark:bg-slate-800/80 hover:bg-amber-50/70 dark:hover:bg-slate-800 rounded-xl border border-slate-200/70 dark:border-slate-700/70 transition-all flex items-center justify-between gap-2 group"
+              >
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <UserAvatar user={u} account={u.account} size="xs" shape="circle" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs font-semibold truncate ${getUserRoleColorClass(uRoleInThisSpec)}`}>
+                        {u.name}
+                      </span>
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-slate-200/80 dark:bg-slate-700 shrink-0 ${getUserRoleColorClass(uRoleInThisSpec)}`}>
+                        @{u.account}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium block truncate">
+                      0 đầu việc trong tuần
                     </span>
                   </div>
-                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium block truncate">
-                    0 đầu việc trong tuần
-                  </span>
                 </div>
-              </div>
 
-              {canManage && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsOpen(false);
-                    onOpenAssignModal(u);
-                  }}
-                  className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] rounded-lg shadow-2xs transition active:scale-95 cursor-pointer flex items-center gap-1 shrink-0"
-                  title={`Phân công task cho @${u.account}`}
-                >
-                  <Zap className="w-3 h-3 fill-white text-white" />
-                  <span>Giao việc</span>
-                </button>
-              )}
-            </div>
-          ))}
+                {canManage && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsOpen(false);
+                      onOpenAssignModal(u);
+                    }}
+                    className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] rounded-lg shadow-2xs transition active:scale-95 cursor-pointer flex items-center gap-1 shrink-0"
+                    title={`Phân công task cho @${u.account}`}
+                  >
+                    <Zap className="w-3 h-3 fill-white text-white" />
+                    <span>Giao việc</span>
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 text-[10px] text-slate-400 dark:text-slate-500 text-center">

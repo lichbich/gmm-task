@@ -16,8 +16,9 @@ export interface User {
   id: string;
   name: string; // Họ và tên đầy đủ
   account: string; // Staff Code (Username dùng để đăng nhập, e.g. "QuynhNV", "ThanhNDT")
-  role: UserRole; // Level / Vai trò trong hệ thống (Admin, Leader, Member, Advisor)
-  specializations: Specialization[]; // Multi-specialization (e.g. ['PO'], ['BA'], ['FE'], ['BE'])
+  role: UserRole; // Level / Vai trò cao nhất trong hệ thống (Admin, Leader, Member, Advisor)
+  specializations: Specialization[]; // Multi-specialization (e.g. ['PO'], ['BA'], ['FE'], ['BE'], ['PM'])
+  specializationRoles?: Record<Specialization, UserRole>; // Vai trò chi tiết theo từng chuyên môn (e.g. { 'PM': 'Leader', 'BA': 'Advisor' })
   cccd?: string; // Số Căn cước công dân
   bankAccount?: string; // Tài khoản ngân hàng
   email?: string; // Địa chỉ Gmail / Email
@@ -32,6 +33,54 @@ export interface User {
   disabled?: boolean; // Set to true when user account is disabled/hidden
   status?: 'active' | 'disabled';
 }
+
+/**
+ * Lấy vai trò của người dùng trong một nghiệp vụ chuyên môn cụ thể.
+ * Ưu tiên specializationRoles[spec], nếu không có thì lấy role tổng thể của user.
+ */
+export const getUserRoleInSpec = (user?: User | null, spec?: string): UserRole => {
+  if (!user) return 'Member';
+  if (user.role === 'Admin') return 'Admin';
+  if (!spec || spec === 'ALL') return user.role;
+
+  const normalizedSpec = spec.trim().toLowerCase().replace(/^team\s+/i, '');
+
+  if (user.specializationRoles) {
+    // 1. Exact key match
+    if (user.specializationRoles[spec]) {
+      return user.specializationRoles[spec];
+    }
+    // 2. Case-insensitive or alias key match (e.g. Design vs Designer)
+    for (const [key, roleVal] of Object.entries(user.specializationRoles)) {
+      const normalizedKey = key.trim().toLowerCase().replace(/^team\s+/i, '');
+      if (
+        normalizedKey === normalizedSpec ||
+        ((normalizedKey === 'design' || normalizedKey === 'designer') &&
+          (normalizedSpec === 'design' || normalizedSpec === 'designer'))
+      ) {
+        return roleVal;
+      }
+    }
+  }
+
+  return user.role;
+};
+
+/**
+ * Tính toán vai trò tổng thể cao nhất của user dựa trên các vai trò từng nghiệp vụ.
+ * Leader > Advisor > Member (Admin giữ nguyên)
+ */
+export const calculateHighestRole = (
+  specRoles?: Record<Specialization, UserRole>,
+  defaultRole: UserRole = 'Member'
+): UserRole => {
+  if (defaultRole === 'Admin') return 'Admin';
+  if (!specRoles || Object.keys(specRoles).length === 0) return defaultRole;
+  const rolesList = Object.values(specRoles);
+  if (rolesList.includes('Leader')) return 'Leader';
+  if (rolesList.includes('Advisor')) return 'Advisor';
+  return 'Member';
+};
 
 export interface RoleLevelRule {
   role: UserRole;
@@ -105,9 +154,10 @@ export const validateRoleQuota = (
   targetRole: UserRole,
   specializations: Specialization[],
   users: User[],
-  editingUserId?: string
+  editingUserId?: string,
+  specializationRoles?: Record<Specialization, UserRole>
 ): { valid: boolean; error?: string; warning?: string } => {
-  if (targetRole === 'Member' || targetRole === 'Admin') {
+  if (targetRole === 'Admin') {
     return { valid: true };
   }
 
@@ -116,10 +166,14 @@ export const validateRoleQuota = (
   const targetSpecs = specializations && specializations.length > 0 ? specializations : ['BA'];
 
   for (const spec of targetSpecs) {
-    if (targetRole === 'Leader') {
-      const existingLeadersInSpec = otherUsers.filter(
-        (u) => u.role === 'Leader' && u.specializations?.includes(spec)
-      );
+    // Determine the exact role assigned for this specific specialization
+    const roleInThisSpec = specializationRoles?.[spec] || targetRole;
+
+    if (roleInThisSpec === 'Leader') {
+      const existingLeadersInSpec = otherUsers.filter((u) => {
+        const uRoleInSpec = getUserRoleInSpec(u, spec);
+        return uRoleInSpec === 'Leader' && u.specializations?.includes(spec);
+      });
       if (existingLeadersInSpec.length >= 1) {
         const leaderNames = existingLeadersInSpec.map((u) => `${u.name} (@${u.account})`).join(', ');
         return {
@@ -129,10 +183,11 @@ export const validateRoleQuota = (
       }
     }
 
-    if (targetRole === 'Advisor') {
-      const existingAdvisorsInSpec = otherUsers.filter(
-        (u) => u.role === 'Advisor' && u.specializations?.includes(spec)
-      );
+    if (roleInThisSpec === 'Advisor') {
+      const existingAdvisorsInSpec = otherUsers.filter((u) => {
+        const uRoleInSpec = getUserRoleInSpec(u, spec);
+        return uRoleInSpec === 'Advisor' && u.specializations?.includes(spec);
+      });
       if (existingAdvisorsInSpec.length >= 3) {
         const advisorNames = existingAdvisorsInSpec.map((u) => `${u.name} (@${u.account})`).join(', ');
         return {

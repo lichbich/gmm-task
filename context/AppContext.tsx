@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, update, remove, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
@@ -1192,11 +1192,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Permission Checks:
-  // Leader/Admin can edit task structure, but ONLY the specific assignee can submit progress/report for that task!
+  // Leader/Advisor of task's specific team, Admin, or the task's assignee can edit task
   const canEditTask = (task: Task, user: User | null = authSession): boolean => {
     if (!user) return false;
-    if (user.role === 'Admin' || user.role === 'Leader' || user.role === 'Advisor') return true;
-    return task.assigneeAccount.toLowerCase() === user.account.toLowerCase();
+    if (user.role === 'Admin') return true;
+    const roleInTaskSpec = getUserRoleInSpec(user, task.role);
+    if (roleInTaskSpec === 'Leader' || roleInTaskSpec === 'Advisor') return true;
+    return Boolean(task.assigneeAccount && task.assigneeAccount.toLowerCase() === user.account.toLowerCase());
   };
 
   // STRICT REPORT PERMISSION: ONLY ASSIGNEE CAN REPORT THIS TASK!

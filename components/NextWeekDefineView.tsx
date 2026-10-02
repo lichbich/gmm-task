@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Milestone, User as UserType, isTaskUnworked, Ticket, getUserLevelRank } from '../types/task';
+import { Task, Milestone, User as UserType, isTaskUnworked, Ticket, getUserLevelRank, getUserRoleInSpec } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
@@ -132,27 +132,13 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
 
-    if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
-      const leaderSpecs = currentUser.specializations || [];
-      if (leaderSpecs.length === 0) return true;
-
-      // 1. Direct role match on task
-      if (leaderSpecs.includes(t.role)) return true;
-
-      // 2. Or assignee user belongs to leader's team specialization
-      if (t.assigneeAccount) {
-        const assigneeUser = users.find(
-          (u) => u.account.toLowerCase() === t.assigneeAccount.toLowerCase()
-        );
-        if (assigneeUser && assigneeUser.specializations?.some((s) => leaderSpecs.includes(s))) {
-          return true;
-        }
-      }
-      return false;
+    const myRoleInTask = getUserRoleInSpec(currentUser, t.role);
+    if (myRoleInTask === 'Leader' || myRoleInTask === 'Advisor') {
+      return true;
     }
 
     // Member: only own tasks
-    return t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
+    return Boolean(t.assigneeAccount && t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase());
   };
 
   // 1. Pending Assignment Requests

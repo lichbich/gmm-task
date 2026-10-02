@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
-import { Task, TaskActivityLog, getUserRoleColorClass } from '../types/task';
+import { Task, TaskActivityLog, getUserRoleColorClass, getUserRoleInSpec } from '../types/task';
 import {
   X,
   MessageSquare,
@@ -359,11 +359,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const isTopEffort = isWeekFinalized && (award?.isTopEffort || false);
   const isLate = isWeekFinalized && task.isSubmittedLate;
 
+  const userRoleInTask = getUserRoleInSpec(currentUser, task.role);
   const isLeaderOrAdmin =
-    currentUser?.role === 'Leader' ||
-    currentUser?.role === 'Advisor' ||
+    userRoleInTask === 'Leader' ||
+    userRoleInTask === 'Advisor' ||
     currentUser?.role === 'Admin';
-  const isMember = currentUser?.role === 'Member';
+  const isMember = !isLeaderOrAdmin;
   const isUnassigned = !task.assigneeAccount || task.assigneeAccount.trim() === '';
   const isRequested = Boolean(task.assignmentRequestedBy && task.assignmentRequestStatus === 'PENDING');
   const isMyPendingRequest =
@@ -910,16 +911,21 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     size="sm"
                     shape="circle"
                   />
-                  <div className="min-w-0 flex-1">
-                    <div className={`font-bold text-xs leading-snug break-words ${getUserRoleColorClass(assigneeUser?.role)}`}>
-                      {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
-                    </div>
-                    {task.assigneeAccount && (
-                      <div className={`text-[11px] font-medium font-mono ${getUserRoleColorClass(assigneeUser?.role)}`}>
-                        @{task.assigneeAccount}
+                  {(() => {
+                    const assigneeRoleInTask = assigneeUser ? getUserRoleInSpec(assigneeUser, task.role) : 'Member';
+                    return (
+                      <div className="min-w-0 flex-1">
+                        <div className={`font-bold text-xs leading-snug break-words ${getUserRoleColorClass(assigneeRoleInTask)}`}>
+                          {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
+                        </div>
+                        {task.assigneeAccount && (
+                          <div className={`text-[11px] font-medium font-mono ${getUserRoleColorClass(assigneeRoleInTask)}`}>
+                            @{task.assigneeAccount}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1225,7 +1231,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
         {/* Fixed Footer */}
         <div className="flex items-center justify-between gap-3 p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900 rounded-b-3xl">
-          {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') ? (
+          {(userRoleInTask === 'Leader' || userRoleInTask === 'Advisor' || currentUser?.role === 'Admin') ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"

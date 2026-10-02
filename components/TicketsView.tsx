@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Ticket, TicketStatus, TicketPriority, getUserRoleColorClass } from '../types/task';
+import { Ticket, TicketStatus, TicketPriority, getUserRoleColorClass, getUserRoleInSpec } from '../types/task';
 import { TicketCreateModal } from './TicketCreateModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown, DropdownOption } from './common/Dropdown';
@@ -641,6 +641,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
                     <div className="flex items-center gap-2 shrink-0">
                       {t.assignedTo ? (() => {
                         const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assignedTo!.toLowerCase());
+                        const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.toRole) : 'Member';
                         return (
                           <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium text-slate-700 dark:text-slate-300">
                             <UserAvatar
@@ -650,7 +651,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
                               size="xs"
                               shape="circle"
                             />
-                            <span className={getUserRoleColorClass(assigneeUser?.role)}>{t.assignedToName || t.assignedTo}</span>
+                            <span className={getUserRoleColorClass(assigneeRole)}>{t.assignedToName || t.assignedTo}</span>
                           </div>
                         );
                       })() : (

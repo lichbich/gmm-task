@@ -11,6 +11,7 @@ import {
   normalizeRoleToken,
   isSpecializationMatchingRole,
   getUserRoleColorClass,
+  getUserRoleInSpec,
   getUserLevelRank,
 } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
@@ -847,6 +848,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
         <td className="py-3 px-3 font-medium">
           {t.assigneeAccount ? (() => {
             const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+            const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.role) : 'Member';
             return (
               <div className="flex items-center gap-1.5">
                 <UserAvatar
@@ -855,7 +857,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                   size="xs"
                   shape="circle"
                 />
-                <span className={getUserRoleColorClass(assigneeUser?.role)}>{t.assigneeAccount}</span>
+                <span className={getUserRoleColorClass(assigneeRole)}>{t.assigneeAccount}</span>
               </div>
             );
           })() : (
@@ -1128,6 +1130,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
             <div className="flex items-center gap-1.5">
               {t.assigneeAccount ? (() => {
                 const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+                const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.role) : 'Member';
                 return (
                   <>
                     <UserAvatar
@@ -1136,7 +1139,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                       size="xs"
                       shape="circle"
                     />
-                    <span className={`text-xs ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                    <span className={`text-xs ${getUserRoleColorClass(assigneeRole)}`}>
                       {t.assigneeAccount}
                     </span>
                   </>
@@ -1823,8 +1826,9 @@ const getRoleOrderRank = (roleCode?: string): number => {
                             <div className="flex items-center gap-2 pt-1">
                               {(() => {
                                 const accUser = users.find((u) => u.account.toLowerCase() === acc.toLowerCase());
+                                const accRole = accUser ? getUserRoleInSpec(accUser, group.role) : 'Member';
                                 return (
-                                  <span className={`text-[11px] font-bold bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 ${getUserRoleColorClass(accUser?.role)}`}>
+                                  <span className={`text-[11px] font-bold bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 ${getUserRoleColorClass(accRole)}`}>
                                     👤 {acc} ({accTasks.length})
                                   </span>
                                 );

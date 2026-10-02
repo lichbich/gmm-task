@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { User, UserRole, Specialization, validateRoleQuota } from '../types/task';
+import { User, UserRole, Specialization, validateRoleQuota, calculateHighestRole, getUserRoleInSpec } from '../types/task';
 import {
   X,
   User as UserIcon,
@@ -62,6 +62,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   // Form Fields (Admin updates role, specializations, and personal info)
   const [userRole, setUserRole] = useState<UserRole>('Member');
   const [selectedSpecs, setSelectedSpecs] = useState<Specialization[]>(['BA']);
+  const [specRoles, setSpecRoles] = useState<Record<Specialization, UserRole>>({});
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [userName, setUserName] = useState('');
   const [userPhone, setUserPhone] = useState('');
@@ -100,8 +101,21 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   // Sync state when user prop changes or modal opens
   useEffect(() => {
     if (!isOpen || !user) return;
-    setUserRole(user.role || 'Member');
-    setSelectedSpecs(user.specializations && user.specializations.length > 0 ? user.specializations : ['BA']);
+    const initialRole = user.role || 'Member';
+    setUserRole(initialRole);
+    const initialSpecs = user.specializations && user.specializations.length > 0 ? user.specializations : ['BA'];
+    setSelectedSpecs(initialSpecs);
+
+    const initialSpecRoles: Record<Specialization, UserRole> = user.specializationRoles
+      ? { ...user.specializationRoles }
+      : {};
+    initialSpecs.forEach((s) => {
+      if (!initialSpecRoles[s]) {
+        initialSpecRoles[s] = initialRole === 'Admin' ? 'Member' : initialRole;
+      }
+    });
+    setSpecRoles(initialSpecRoles);
+
     setUserName(user.name || '');
     setUserPhone(user.phone || '');
     setUserEmail(user.email || '');
@@ -133,13 +147,49 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const totalEffortCumulative =
     Math.round(((user.totalEffort || 0) + currentWeekEffort) * 100) / 100;
 
+  const handleUserRoleChange = (newRole: UserRole) => {
+    setUserRole(newRole);
+    if (newRole !== 'Admin') {
+      const updated: Record<Specialization, UserRole> = { ...specRoles };
+      selectedSpecs.forEach((s) => {
+        updated[s] = newRole;
+      });
+      setSpecRoles(updated);
+    }
+  };
+
+  const handleSpecRoleChange = (specCode: Specialization, newRole: UserRole) => {
+    const updated: Record<Specialization, UserRole> = { ...specRoles, [specCode]: newRole };
+    setSpecRoles(updated);
+    if (userRole !== 'Admin') {
+      const highest = calculateHighestRole(updated, newRole);
+      setUserRole(highest);
+    }
+  };
+
   const toggleSpec = (specCode: Specialization) => {
     if (!isAdmin) return;
     if (selectedSpecs.includes(specCode)) {
       if (selectedSpecs.length === 1) return; // Must keep at least 1 role
-      setSelectedSpecs(selectedSpecs.filter((s) => s !== specCode));
+      const nextSpecs = selectedSpecs.filter((s) => s !== specCode);
+      setSelectedSpecs(nextSpecs);
+      const nextSpecRoles = { ...specRoles };
+      delete nextSpecRoles[specCode];
+      setSpecRoles(nextSpecRoles);
+      if (userRole !== 'Admin') {
+        setUserRole(calculateHighestRole(nextSpecRoles, 'Member'));
+      }
     } else {
-      setSelectedSpecs([...selectedSpecs, specCode]);
+      const nextSpecs = [...selectedSpecs, specCode];
+      setSelectedSpecs(nextSpecs);
+      const nextSpecRoles = {
+        ...specRoles,
+        [specCode]: userRole === 'Admin' ? 'Member' : userRole || 'Member',
+      };
+      setSpecRoles(nextSpecRoles);
+      if (userRole !== 'Admin') {
+        setUserRole(calculateHighestRole(nextSpecRoles, userRole));
+      }
     }
   };
 
@@ -186,11 +236,13 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     }
 
     // Validate Role Level Quota per specialization when changing role or specs
-    const quotaCheck = validateRoleQuota(userRole, selectedSpecs, users, user.id);
+    const quotaCheck = validateRoleQuota(userRole, selectedSpecs, users, user.id, specRoles);
     if (!quotaCheck.valid && quotaCheck.error) {
       setErrorMsg(quotaCheck.error);
       return;
     }
+
+    const effectiveRole = userRole === 'Admin' ? 'Admin' : calculateHighestRole(specRoles, userRole);
 
     setErrorMsg('');
     setSuccessMsg('');
@@ -199,8 +251,9 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     setTimeout(() => {
       updateUser(user.id, {
         name: userName.trim(),
-        role: userRole,
+        role: effectiveRole,
         specializations: selectedSpecs,
+        specializationRoles: specRoles,
         phone: userPhone.trim(),
         email: userEmail.trim(),
         cccd: userCccd.trim(),
@@ -300,18 +353,38 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                   </span>
                   <span
                     className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${roleTheme.badge}`}
+                    title={`Cấp hệ thống cao nhất: ${userRole}`}
                   >
                     {roleTheme.icon}
                     {userRole}
                   </span>
-                  {selectedSpecs.map((spec) => (
-                    <span
-                      key={spec}
-                      className="px-2 py-0.5 bg-purple-500/25 text-purple-200 border border-purple-400/40 rounded-md text-[10px] font-bold font-mono"
-                    >
-                      {spec}
-                    </span>
-                  ))}
+                  {selectedSpecs.map((spec) => {
+                    const sRole = specRoles[spec] || (userRole === 'Admin' ? 'Admin' : userRole);
+                    const isL = sRole === 'Leader';
+                    const isA = sRole === 'Advisor';
+                    const isM = sRole === 'Member';
+                    const pillClass =
+                      isL
+                        ? 'bg-amber-500/25 text-amber-200 border-amber-400/50'
+                        : isA
+                        ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
+                        : isM
+                        ? 'bg-blue-500/25 text-blue-200 border-blue-400/50'
+                        : 'bg-purple-500/25 text-purple-200 border-purple-400/50';
+
+                    return (
+                      <span
+                        key={spec}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1 font-mono ${pillClass}`}
+                        title={`Nghiệp vụ ${spec}: ${sRole}`}
+                      >
+                        <span>{spec}</span>
+                        <span className="opacity-90 font-normal">
+                          • {isL ? '👑 Leader' : isA ? '🎖️ Advisor' : isM ? '👥 Member' : sRole}
+                        </span>
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -428,12 +501,12 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                 {/* Level / Quyền */}
                 <div>
                   <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Cấp Phân Quyền (Level System):
+                    Cấp Phân Quyền Tổng Thể (System Level):
                   </label>
                   {isAdmin ? (
                     <Dropdown
                       value={userRole}
-                      onChange={(newRole) => setUserRole(newRole as UserRole)}
+                      onChange={(newRole) => handleUserRoleChange(newRole as UserRole)}
                       options={[
                         { value: 'Leader', label: '👑 Leader (Trưởng nhóm)' },
                         { value: 'Advisor', label: '🎖️ Advisor (Cố vấn)' },
@@ -493,6 +566,103 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                     })}
                   </div>
                 </div>
+
+                {/* Granular Role per Specialization Selector Matrix */}
+                {selectedSpecs.length > 0 && userRole !== 'Admin' && (
+                  <div className="sm:col-span-2 pt-3 space-y-2.5 border-t border-purple-200/80">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-xs font-bold text-purple-950 block flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                        Phân Quyền Vai Trò Cho Từng Nghiệp Vụ Chuyên Môn:
+                      </label>
+                      <span className="text-[11px] text-purple-700 font-medium italic">
+                        (Thiết lập riêng vai trò Leader / Advisor / Member cho từng team)
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {selectedSpecs.map((spec) => {
+                        const currentSpecRole = specRoles[spec] || userRole || 'Member';
+                        const rObj = roles.find((r) => r.code === spec);
+                        return (
+                          <div
+                            key={spec}
+                            className="bg-white border border-purple-200/90 rounded-xl p-3 shadow-2xs space-y-2.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
+                                <span className="font-mono text-purple-800 bg-purple-100 px-2 py-0.5 rounded text-xs font-black">
+                                  {spec}
+                                </span>
+                                {rObj?.name && rObj.name !== spec && (
+                                  <span className="text-[11px] text-slate-500 font-normal truncate max-w-[130px]">
+                                    ({rObj.name})
+                                  </span>
+                                )}
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  currentSpecRole === 'Leader'
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : currentSpecRole === 'Advisor'
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : 'bg-blue-100 text-blue-800 border-blue-300'
+                                }`}
+                              >
+                                {currentSpecRole === 'Leader'
+                                  ? '👑 Leader'
+                                  : currentSpecRole === 'Advisor'
+                                  ? '🎖️ Advisor'
+                                  : '👥 Member'}
+                              </span>
+                            </div>
+
+                            {isAdmin ? (
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {(['Leader', 'Advisor', 'Member'] as UserRole[]).map((rOption) => {
+                                  const isSelected = currentSpecRole === rOption;
+                                  const optColor =
+                                    rOption === 'Leader'
+                                      ? isSelected
+                                        ? 'bg-amber-500 text-white font-bold border-amber-500 shadow-xs'
+                                        : 'bg-amber-50/60 text-amber-800 hover:bg-amber-100 border-amber-200'
+                                      : rOption === 'Advisor'
+                                      ? isSelected
+                                        ? 'bg-emerald-600 text-white font-bold border-emerald-600 shadow-xs'
+                                        : 'bg-emerald-50/60 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
+                                      : isSelected
+                                      ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-xs'
+                                      : 'bg-blue-50/60 text-blue-800 hover:bg-blue-100 border-blue-200';
+
+                                  return (
+                                    <button
+                                      key={rOption}
+                                      type="button"
+                                      onClick={() => handleSpecRoleChange(spec, rOption)}
+                                      className={`py-1 px-1 rounded-lg text-[11px] border transition flex items-center justify-center gap-1 cursor-pointer active:scale-95 font-semibold ${optColor}`}
+                                    >
+                                      <span>
+                                        {rOption === 'Leader'
+                                          ? '👑 Leader'
+                                          : rOption === 'Advisor'
+                                          ? '🎖️ Advisor'
+                                          : '👥 Member'}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="text-[11px] font-medium text-slate-600">
+                                Vai trò: <span className="font-bold">{currentSpecRole}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

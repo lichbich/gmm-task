@@ -3,7 +3,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useModalAnimation } from '../hooks/useModalAnimation';
-import { Ticket, TicketStatus, TicketPriority, getUserRoleColorClass } from '../types/task';
+import { Ticket, TicketStatus, TicketPriority, getUserRoleColorClass, getUserRoleInSpec } from '../types/task';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import {
   X,
@@ -238,11 +238,14 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
   // Can edit content (Title, Description, Priority, Attachments): Creator or Admin
   const canEdit = isCreator || currentUser.role === 'Admin';
 
-  // Can assign: Destination team members/leaders/advisors, assignee, or uninvolved Admin
-  const canAssign = isTargetTeam || isAssignee || (currentUser.role === 'Admin' && !isCreator && !isSendingTeam);
+  const userRoleInTarget = getUserRoleInSpec(currentUser, ticket.toRole);
+  const isLeaderOrAdvisorInTarget = userRoleInTarget === 'Leader' || userRoleInTarget === 'Advisor';
+
+  // Can assign: Destination team leaders/advisors, assignee, or uninvolved Admin
+  const canAssign = isLeaderOrAdvisorInTarget || isAssignee || (currentUser.role === 'Admin' && !isCreator && !isSendingTeam);
 
   // Can manage processing status (In Progress, Resolved, Rejected):
-  // ONLY destination team (toRole), assignee, or uninvolved Admin. Requester/Sending Team CANNOT update destination team's status!
+  // Destination team, assignee, or uninvolved Admin. Requester/Sending Team CANNOT update destination team's status!
   const canManageStatus = isTargetTeam || isAssignee || (currentUser.role === 'Admin' && !isCreator && !isSendingTeam);
 
   const canDelete = isCreator || currentUser.role === 'Admin';
@@ -261,16 +264,30 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
       value: '',
       label: '-- Chưa phân công --',
     },
-    ...candidateAssignees.map((u) => ({
-      value: u.account,
-      label: `${u.name} (@${u.account})`,
-      subLabel: `${u.role} • ${u.specializations?.join(', ') || ''}`,
-      badge: (
-        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-          {u.role}
-        </span>
-      ),
-    })),
+    ...candidateAssignees.map((u) => {
+      const uRoleInTarget = getUserRoleInSpec(u, ticket.toRole);
+      const isL = uRoleInTarget === 'Leader';
+      const isA = uRoleInTarget === 'Advisor';
+      const isAdm = uRoleInTarget === 'Admin';
+      const badgeClass = isL
+        ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700'
+        : isA
+        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+        : isAdm
+        ? 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 border-purple-300 dark:border-purple-700'
+        : 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700';
+
+      return {
+        value: u.account,
+        label: `${u.name} (@${u.account})`,
+        subLabel: `${uRoleInTarget} • ${ticket.toRole}`,
+        badge: (
+          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${badgeClass}`}>
+            {isL ? '👑 Leader' : isA ? '🎖️ Advisor' : isAdm ? '🛡️ Admin' : 'Member'}
+          </span>
+        ),
+      };
+    }),
   ];
 
   const statusOptions: DropdownOption<TicketStatus>[] = [
@@ -708,14 +725,15 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                   />
                   {(() => {
                     const assigneeUser = ticket.assignedTo ? users.find((u) => u.account.toLowerCase() === ticket.assignedTo!.toLowerCase()) : null;
+                    const assigneeRoleInTarget = assigneeUser ? getUserRoleInSpec(assigneeUser, ticket.toRole) : 'Member';
                     return (
                       <div className="min-w-0">
-                        <div className={`text-xs font-bold truncate ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                        <div className={`text-xs font-bold truncate ${getUserRoleColorClass(assigneeRoleInTarget)}`}>
                           {ticket.assignedToName || (ticket.assignedTo ? `@${ticket.assignedTo}` : 'Chưa phân công')}
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono truncate">
                           {ticket.assignedTo
-                            ? `@${ticket.assignedTo} (Team ${ticket.toRole})`
+                            ? `@${ticket.assignedTo} • ${assigneeRoleInTarget} (Team ${ticket.toRole})`
                             : `Chờ Leader/Advisor Team ${ticket.toRole} tiếp nhận`}
                         </div>
                       </div>
