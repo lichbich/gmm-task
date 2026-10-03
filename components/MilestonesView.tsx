@@ -39,6 +39,7 @@ import {
   Ticket as TicketIcon,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+import { DatePicker } from './common/DatePicker';
 import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
 import { AssignTaskToMemberModal } from './common/AssignTaskToMemberModal';
 
@@ -1402,18 +1403,13 @@ export const MilestonesView: React.FC = () => {
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
               />
             </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                <span>Deadline (Hạn chót xong):</span>
-              </label>
-              <input
-                type="date"
+              <DatePicker
+                label="Deadline (Hạn chót xong):"
                 value={msDeadline}
-                onChange={(e) => setMsDeadline(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+                onChange={(dateStr) => setMsDeadline(dateStr)}
+                placeholder="Chọn hạn chót..."
+                size="md"
               />
-            </div>
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">Module Code (Mã module):</label>
               <input
@@ -1587,18 +1583,13 @@ export const MilestonesView: React.FC = () => {
                                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-600 focus:outline-none focus:border-amber-400"
                                 />
                               </div>
-                              <div>
-                                <label className="text-[11px] font-semibold text-slate-600 block mb-0.5 flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 text-amber-600" />
-                                  <span>Hạn chót xong:</span>
-                                </label>
-                                <input
-                                  type="date"
-                                  value={editMsDeadline}
-                                  onChange={(e) => setEditMsDeadline(e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:border-amber-400"
-                                />
-                              </div>
+                              <DatePicker
+                                label="Hạn chót xong:"
+                                value={editMsDeadline}
+                                onChange={(dateStr) => setEditMsDeadline(dateStr)}
+                                placeholder="Chọn hạn chót..."
+                                size="sm"
+                              />
                               <div>
                                 <label className="text-[11px] font-semibold text-slate-600 block mb-0.5">Mã module:</label>
                                 <input

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, Ticket, getEffectiveTaskStatus, getUserRoleColorClass } from '../types/task';
+import { Task, TaskStatus, Ticket, getEffectiveTaskStatus, getUserRoleColorClass, formatDateOnlyDisplay } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
@@ -23,6 +23,7 @@ import {
   FileText,
   Flame,
   Ticket as TicketIcon,
+  Calendar,
 } from 'lucide-react';
 
 interface KanbanBoardProps {
@@ -358,6 +359,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
             />
           </div>
         </div>
+
+        {/* Start / End Date Badge */}
+        {(t.startDate || t.endDate) && (
+          <div className="flex items-center gap-1.5 text-[9.5px] font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60 w-fit">
+            <Calendar className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+            <span>
+              {t.startDate ? formatDateOnlyDisplay(t.startDate) : '...'}
+              {t.endDate ? ` ➔ ${formatDateOnlyDisplay(t.endDate)}` : ''}
+            </span>
+          </div>
+        )}
 
         {/* Card Footer: Assignee, Effort & Quick Actions */}
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-xs">

@@ -108,19 +108,28 @@ export async function POST(req: Request) {
         );
       }
 
-      const systemInstruction = `Bạn là một AI Tech Lead & Scrum Master chuyên nghiệp, hỗ trợ bóc tách tính năng thành các task con rõ ràng, thực tế và điều chỉnh linh hoạt theo phản hồi của người dùng.
+      const systemInstruction = `Bạn là một AI Tech Lead, Cố vấn Nghiệp vụ & Scrum Master chuyên nghiệp trong phát triển phần mềm. Bạn vừa có khả năng tư vấn, giải đáp mọi câu hỏi nghiệp vụ/kỹ thuật, vừa có khả năng bóc tách, gợi ý và điều chỉnh task chuyên sâu:
+
+1. 💡 HỎI ĐÁP & TƯ VẤN NGHIỆP VỤ / KỸ THUẬT:
+   - Khi người dùng hỏi đáp (ví dụ: giải thích luồng nghiệp vụ, tư vấn giải pháp kỹ thuật, chia sẻ best practices, hỏi về phân quyền, kiến trúc, chào hỏi...):
+     + Viết câu trả lời chi tiết, mạch lạc, dễ hiểu, logic và thực tế vào trường "message".
+     + Nếu người dùng KHÔNG yêu cầu bóc tách hay tạo task: Mảng "tasks" trả về rỗng [] để tránh làm phiền người dùng với các task thừa.
+     + Nếu câu hỏi có liên quan đến việc triển khai và bạn muốn gợi ý các đầu việc khả thi: Có thể đề xuất một vài task con mẫu trong mảng "tasks".
+
+2. 📋 BÓC TÁCH, GỢI Ý & ĐIỀU CHỈNH TASK THÔNG MINH:
+   - Khi người dùng yêu cầu bóc tách task, lập kế hoạch công việc, chia nhỏ tính năng, chỉnh sửa giờ làm (estimate), thêm/bớt role hoặc bổ sung checklist:
+     + "message": Phản hồi ngắn gọn, súc tích bằng tiếng Việt giải thích những gì bạn đã bóc tách hoặc vừa chỉnh sửa theo yêu cầu.
+     + "tasks": Danh sách các task con mới nhất đầy đủ sau các lượt chỉnh sửa.
 ${roleInstruction}
 
-Quy định xử lý:
-1. "message": Viết phản hồi ngắn gọn, thân thiện, súc tích bằng tiếng Việt giải thích những gì bạn đã phân tích, bóc tách hoặc vừa chỉnh sửa theo yêu cầu của user.
-2. "tasks": Danh sách các task con mới nhất đầy đủ sau các lượt chỉnh sửa.
-   - Mỗi task con gồm:
-     + taskName: Tên đầu việc ngắn gọn, rõ nghĩa.
-     + role: Vai trò phụ trách (${VALID_ROLES.map((r) => `"${r}"`).join(' | ')}). ${isSingleRoleScope ? `(Phải là "${targetRole}")` : ''}
-     + estimatedEffort: Số giờ làm việc hợp lý (number từ 0.5 đến 40).
-     + description: Mô tả chi tiết nội dung, checklist hoặc tiêu chí hoàn thành.
-3. Khi người dùng yêu cầu chỉnh sửa (VD: "chỉnh lại giờ", "chia nhỏ task hơn", "thêm checklist..."), bạn cập nhật danh sách "tasks" tương ứng và giải thích trong "message".
-${context?.milestoneTitle ? `\nMốc cột mốc hiện tại: ${context.milestoneTitle}` : ''}`;
+Quy định cấu trúc task trong mảng "tasks" (khi có task):
+- taskName: Tên đầu việc ngắn gọn, rõ nghĩa, hành động cụ thể.
+- role: Vai trò phụ trách (${VALID_ROLES.map((r) => `"${r}"`).join(' | ')}). ${isSingleRoleScope ? `(Bắt buộc phải là "${targetRole}")` : ''}
+- estimatedEffort: Số giờ làm việc hợp lý (number từ 0.5 đến 40).
+- description: Mô tả chi tiết nội dung cần làm, checklist gạch đầu dòng hoặc tiêu chí hoàn thành (Acceptance Criteria).
+
+${context?.milestoneTitle ? `\nMốc cột mốc hiện tại: ${context.milestoneTitle}` : ''}
+${context?.currentTaskTitle ? `\nTask đang thao tác: ${context.currentTaskTitle}` : ''}`;
 
       // Build formatted multi-turn history for Gemini
       const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];

@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, getUserRoleColorClass } from '../types/task';
-import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare, Info } from 'lucide-react';
+import { Task, TaskStatus, getUserRoleColorClass, getTodayDateOnlyString, formatDateOnlyDisplay } from '../types/task';
+import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare, Info, Calendar } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { UserAvatar } from './common/UserAvatar';
+import { DatePicker } from './common/DatePicker';
 
 interface WeeklyReportModalProps {
   task: Task | null;
@@ -22,13 +23,24 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   const { submitTaskReport, simulatedTime, canReportTask, users, confirmDialog } = useApp();
   const [actualEffort, setActualEffort] = useState<number | string>(0);
   const [completionPercentage, setCompletionPercentage] = useState<number>(0);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+
+  // Track state before user transitioned to Done/100% via End Date
+  const prevBeforeDoneRef = React.useRef<{
+    percentage: number;
+    effort: number | string;
+    startDate: string;
+  } | null>(null);
 
   const checkDirtyAndConfirmClose = useCallback((): boolean => {
     if (!task) return true;
     const origEffort = task.actualEffort !== undefined ? task.actualEffort : 0;
     const origCompletion = task.completionPercentage || 0;
     const origNotes = task.notes || '';
+    const origStartDate = task.startDate || '';
+    const origEndDate = task.endDate || '';
 
     const parsedEffort =
       typeof actualEffort === 'number'
@@ -38,7 +50,9 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     const isDirty =
       parsedEffort !== origEffort ||
       completionPercentage !== origCompletion ||
-      notes !== origNotes;
+      notes !== origNotes ||
+      startDate !== origStartDate ||
+      endDate !== origEndDate;
 
     if (isDirty) {
       confirmDialog({
@@ -54,16 +68,29 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
       return false;
     }
     return true;
-  }, [task, actualEffort, completionPercentage, notes, confirmDialog]);
+  }, [task, actualEffort, completionPercentage, notes, startDate, endDate, confirmDialog]);
 
   const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
     useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
 
   useEffect(() => {
     if (!isOpen || !task) return;
-    setActualEffort(task.actualEffort !== undefined ? task.actualEffort : 0);
-    setCompletionPercentage(task.completionPercentage || 0);
+    const initialPct = task.completionPercentage || 0;
+    const initialEffort = task.actualEffort !== undefined ? task.actualEffort : 0;
+    const initialStartDate = task.startDate || '';
+    const initialEndDate = task.endDate || '';
+
+    setActualEffort(initialEffort);
+    setCompletionPercentage(initialPct);
     setNotes(task.notes || '');
+    setStartDate(initialStartDate);
+    setEndDate(initialEndDate);
+
+    prevBeforeDoneRef.current = {
+      percentage: initialPct,
+      effort: initialEffort,
+      startDate: initialStartDate,
+    };
   }, [isOpen, task?.id]);
 
   if (!isRendered || !task) return null;
@@ -80,6 +107,81 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   const isSundayReportOpen = simDate.getTime() >= sundayNoon.getTime() && simDate.getTime() <= deadline.getTime();
   const isLateSimulated = simDate.getTime() > deadline.getTime();
   const isSundayOrLate = isSundayReportOpen || isLateSimulated;
+  const todayStr = getTodayDateOnlyString(simulatedTime);
+
+  const handleStartDateChange = (newStartDate: string) => {
+    setStartDate(newStartDate);
+    if (newStartDate && endDate && endDate < newStartDate) {
+      setEndDate(newStartDate);
+    }
+  };
+
+  const handleEndDateChange = (newEndDate: string) => {
+    setEndDate(newEndDate);
+    if (newEndDate) {
+      if (newEndDate <= todayStr) {
+        // Ngày kết thúc là HÔM NAY hoặc TRONG QUÁ KHỨ -> Task ĐÃ hoàn thành thực tế (Done 100%)
+        if (!prevBeforeDoneRef.current || completionPercentage < 100) {
+          prevBeforeDoneRef.current = {
+            percentage: completionPercentage,
+            effort: actualEffort,
+            startDate: startDate,
+          };
+        }
+
+        // 1. Tự động kéo thanh tiến trình lên 100%
+        setCompletionPercentage(100);
+
+        // 2. Số giờ làm việc tự động được lấy theo Est nếu hiện tại là 0
+        setActualEffort((prev) => {
+          const p = typeof prev === 'number' ? prev : parseFloat(String(prev).replace(',', '.')) || 0;
+          return p > 0 ? prev : (task.estimatedEffort || 0);
+        });
+
+        // 3. Tự động điền start date nếu chưa có
+        setStartDate((prev) => {
+          if (prev) {
+            if (prev > newEndDate) return newEndDate;
+            return prev;
+          }
+          return newEndDate;
+        });
+      } else {
+        // Ngày kết thúc là TRONG TƯƠNG LAI (sau hôm nay, VD: 04/10 khi hôm nay là 03/10)
+        // -> Đây là hạn chót / kế hoạch dự kiến, hôm nay CHƯA THỂ Done được!
+        if (completionPercentage === 100) {
+          if (prevBeforeDoneRef.current && prevBeforeDoneRef.current.percentage < 100 && prevBeforeDoneRef.current.percentage > 0) {
+            setCompletionPercentage(prevBeforeDoneRef.current.percentage);
+            setActualEffort(prevBeforeDoneRef.current.effort);
+          } else {
+            setCompletionPercentage(50);
+          }
+        } else if (completionPercentage === 0) {
+          setCompletionPercentage(25);
+        }
+
+        // Tự động điền start date hôm nay nếu chưa có
+        setStartDate((prev) => prev || todayStr);
+      }
+    } else {
+      // Khi XOÁ end date: khôi phục lại trạng thái trước đó của task
+      if (prevBeforeDoneRef.current) {
+        const prevPct = prevBeforeDoneRef.current.percentage;
+        if (prevPct < 100) {
+          setCompletionPercentage(prevPct);
+          setActualEffort(prevBeforeDoneRef.current.effort);
+          if (prevPct === 0) {
+            setStartDate(prevBeforeDoneRef.current.startDate);
+          }
+        } else {
+          // Nếu ban đầu task đã là 100% và người dùng xoá End Date -> chuyển về In Progress (50%)
+          setCompletionPercentage(50);
+        }
+      } else {
+        setCompletionPercentage(50);
+      }
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,7 +204,10 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
         cancelText: 'Cập nhật lại tiến độ',
         type: 'warning',
         onConfirm: () => {
-          submitTaskReport(task.id, 0, 0, 'To do', notes);
+          submitTaskReport(task.id, 0, 0, 'To do', notes, {
+            startDate: undefined,
+            endDate: undefined,
+          });
           forceClose();
         },
       });
@@ -119,7 +224,10 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
         ? 'Done'
         : 'In Progress';
 
-    submitTaskReport(task.id, finalEffort, completionPercentage, finalStatus, notes);
+    submitTaskReport(task.id, finalEffort, completionPercentage, finalStatus, notes, {
+      startDate: startDate.trim() || undefined,
+      endDate: endDate.trim() || undefined,
+    });
     forceClose();
   };
 
@@ -280,13 +388,38 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 onChange={(e) => {
                   const val = parseInt(e.target.value);
                   setCompletionPercentage(val);
+                  const todayStr = getTodayDateOnlyString(simulatedTime);
+
                   if (val === 0) {
                     setActualEffort(0);
-                  } else {
+                    // Clear auto-filled dates when 0%
+                    setStartDate('');
+                    setEndDate('');
+                    prevBeforeDoneRef.current = { percentage: 0, effort: 0, startDate: '' };
+                  } else if (val === 100) {
+                    if (completionPercentage < 100) {
+                      prevBeforeDoneRef.current = { percentage: completionPercentage, effort: actualEffort, startDate: startDate };
+                    }
                     setActualEffort((prev) => {
                       const p = typeof prev === 'number' ? prev : parseFloat(String(prev).replace(',', '.')) || 0;
                       return p > 0 ? prev : (task.estimatedEffort || 0);
                     });
+                    // Auto-fill Start Date if not already set, and set End Date to today if not set or was in future
+                    setStartDate((prev) => prev || todayStr);
+                    setEndDate((prev) => (!prev || prev > todayStr ? todayStr : prev));
+                  } else {
+                    // 0 < val < 100
+                    prevBeforeDoneRef.current = { percentage: val, effort: actualEffort, startDate: startDate || todayStr };
+                    setActualEffort((prev) => {
+                      const p = typeof prev === 'number' ? prev : parseFloat(String(prev).replace(',', '.')) || 0;
+                      return p > 0 ? prev : (task.estimatedEffort || 0);
+                    });
+                    // Auto-fill Start Date if not already set
+                    setStartDate((prev) => prev || todayStr);
+                    // Clear End Date if previously marked 100% with today/past date
+                    if (completionPercentage === 100 && endDate && endDate <= todayStr) {
+                      setEndDate('');
+                    }
                   }
                 }}
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 disabled:opacity-50"
@@ -302,6 +435,39 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Start Date & End Date (Custom DatePicker matching Dropdown) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200 text-xs">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span>Ngày bắt đầu (Start Date):</span>
+                </label>
+                <DatePicker
+                  value={startDate}
+                  onChange={handleStartDateChange}
+                  disabled={!isMyTaskToReport}
+                  placeholder="Chọn ngày bắt đầu..."
+                  maxDate={(endDate && endDate < todayStr) ? endDate : todayStr}
+                  icon={<Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1.5 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Ngày hoàn thành (End Date):</span>
+                </label>
+                <DatePicker
+                  value={endDate}
+                  onChange={handleEndDateChange}
+                  disabled={!isMyTaskToReport}
+                  placeholder="Chọn ngày hoàn thành..."
+                  minDate={startDate || undefined}
+                  icon={<Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                />
+              </div>
             </div>
 
             {/* Leader Notes Input */}

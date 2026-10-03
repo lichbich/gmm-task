@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   UserRole,
@@ -504,6 +504,27 @@ export const UserManagementView: React.FC = () => {
   const [isImportingBatch, setIsImportingBatch] = useState(false);
   const [batchFilterTab, setBatchFilterTab] = useState<'ALL' | 'NEW' | 'UPDATE'>('ALL');
 
+  const checkBatchImportDirtyAndConfirmClose = () => {
+    if (multiParsedList.length > 0 && !isImportingBatch) {
+      confirmDialog({
+        title: 'Đóng xem trước nhập dữ liệu',
+        message: 'Bạn có danh sách nhân sự đã trích xuất từ Sheet chưa được nhập vào hệ thống. Bạn có chắc chắn muốn hủy và đóng không?',
+        confirmText: 'Đóng & Hủy',
+        cancelText: 'Tiếp tục xem',
+        type: 'warning',
+        onConfirm: () => setIsBatchImportModalOpen(false),
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const handleCloseBatchImportModal = () => {
+    if (checkBatchImportDirtyAndConfirmClose()) {
+      setIsBatchImportModalOpen(false);
+    }
+  };
+
   // Column management methods
   const saveColumns = (newCols: SheetColumnItem[]) => {
     setSheetColumns(newCols);
@@ -905,6 +926,71 @@ export const UserManagementView: React.FC = () => {
     setIsUserFormOpen(false);
   };
 
+  const checkUserDirtyAndConfirmClose = useCallback((): boolean => {
+    let isDirty = false;
+    if (editingUserId) {
+      const orig = users.find((u) => u.id === editingUserId);
+      if (orig) {
+        isDirty =
+          userName.trim() !== orig.name ||
+          userAccount.trim() !== orig.account ||
+          userRole !== orig.role ||
+          userCccd.trim() !== (orig.cccd || '') ||
+          userBankAccount.trim() !== (orig.bankAccount || '') ||
+          userEmail.trim() !== (orig.email || '') ||
+          userPhone.trim() !== (orig.phone || '') ||
+          userTechnologies.trim() !== (orig.technologies || '') ||
+          userBirthDate.trim() !== (orig.birthDate ? String(orig.birthDate) : '') ||
+          JSON.stringify(selectedSpecs) !== JSON.stringify(orig.specializations || ['BA']);
+      }
+    } else {
+      isDirty =
+        userName.trim() !== '' ||
+        userAccount.trim() !== '' ||
+        userCccd.trim() !== '' ||
+        userBankAccount.trim() !== '' ||
+        userEmail.trim() !== '' ||
+        userPhone.trim() !== '' ||
+        userTechnologies.trim() !== '' ||
+        userBirthDate.trim() !== '';
+    }
+
+    if (isDirty) {
+      confirmDialog({
+        title: 'Thông tin nhân viên chưa được lưu',
+        message: 'Bạn đang nhập dở thông tin thành viên. Bạn có chắc chắn muốn hủy và thoát không? Mọi thông tin vừa nhập sẽ bị mất.',
+        confirmText: 'Rời khỏi & Hủy',
+        cancelText: 'Tiếp tục điền',
+        type: 'warning',
+        onConfirm: () => {
+          setIsUserFormOpen(false);
+        },
+      });
+      return false;
+    }
+    return true;
+  }, [
+    editingUserId,
+    users,
+    userName,
+    userAccount,
+    userRole,
+    userCccd,
+    userBankAccount,
+    userEmail,
+    userPhone,
+    userTechnologies,
+    userBirthDate,
+    selectedSpecs,
+    confirmDialog,
+  ]);
+
+  const handleCloseUserForm = () => {
+    if (checkUserDirtyAndConfirmClose()) {
+      setIsUserFormOpen(false);
+    }
+  };
+
   const [isLockedUsersModalOpen, setIsLockedUsersModalOpen] = useState(false);
   const [lockedUsersSearchQuery, setLockedUsersSearchQuery] = useState('');
 
@@ -1014,6 +1100,79 @@ export const UserManagementView: React.FC = () => {
     setIsRoleFormOpen(false);
   };
 
+  const checkRoleDirtyAndConfirmClose = useCallback((): boolean => {
+    let isDirty = false;
+    if (editingRoleId) {
+      const orig = roles.find((r) => r.id === editingRoleId);
+      if (orig) {
+        isDirty =
+          roleCode.trim().toUpperCase() !== orig.code.toUpperCase() ||
+          roleName.trim() !== orig.name ||
+          roleDesc.trim() !== (orig.description || '') ||
+          roleColor !== (orig.color || 'purple');
+      }
+    } else {
+      isDirty =
+        roleCode.trim() !== '' ||
+        roleName.trim() !== '' ||
+        roleDesc.trim() !== '';
+    }
+
+    if (isDirty) {
+      confirmDialog({
+        title: 'Thông tin Role chưa được lưu',
+        message: 'Bạn đang nhập dở thông tin vai trò / chuyên môn. Bạn có chắc chắn muốn hủy và thoát không? Mọi thông tin vừa nhập sẽ bị mất.',
+        confirmText: 'Rời khỏi & Hủy',
+        cancelText: 'Tiếp tục điền',
+        type: 'warning',
+        onConfirm: () => {
+          setIsRoleFormOpen(false);
+        },
+      });
+      return false;
+    }
+    return true;
+  }, [editingRoleId, roles, roleCode, roleName, roleDesc, roleColor, confirmDialog]);
+
+  const handleCloseRoleModal = () => {
+    if (checkRoleDirtyAndConfirmClose()) {
+      setIsRoleFormOpen(false);
+    }
+  };
+
+  const checkAddColDirtyAndConfirmClose = useCallback((): boolean => {
+    if (newColName.trim() !== '') {
+      confirmDialog({
+        title: 'Cột mới chưa được lưu',
+        message: 'Bạn đang nhập dở tên cột mới. Bạn có chắc chắn muốn hủy và đóng không?',
+        confirmText: 'Rời khỏi & Hủy',
+        cancelText: 'Tiếp tục điền',
+        type: 'warning',
+        onConfirm: () => setIsAddColumnOpen(false),
+      });
+      return false;
+    }
+    return true;
+  }, [newColName, confirmDialog]);
+
+  const checkEditColDirtyAndConfirmClose = useCallback((): boolean => {
+    if (editingColIdx !== null) {
+      const orig = sheetColumns[editingColIdx];
+      if (orig && (editColName.trim() !== orig.label || editColKey !== orig.key)) {
+        confirmDialog({
+          title: 'Thay đổi cột chưa được lưu',
+          message: 'Bạn đang chỉnh sửa cấu hình cột dở dang. Bạn có chắc chắn muốn hủy không?',
+          confirmText: 'Rời khỏi & Hủy',
+          cancelText: 'Tiếp tục sửa',
+          type: 'warning',
+          onConfirm: () => setEditingColIdx(null),
+        });
+        return false;
+      }
+    }
+    return true;
+  }, [editingColIdx, sheetColumns, editColName, editColKey, confirmDialog]);
+
   const handleDeleteRole = (roleItem: RoleItem) => {
     if (roles.length <= 1) {
       confirmDialog({
@@ -1027,7 +1186,7 @@ export const UserManagementView: React.FC = () => {
       return;
     }
 
-    const usersWithRole = users.filter((u) => u.specializations?.includes(roleItem.code));
+    const usersWithRole = users.filter((u) => !u.disabled && u.status !== 'disabled' && u.specializations?.includes(roleItem.code));
     const tasksWithRole = tasks.filter((t) => t.role === roleItem.code);
 
     let warningText = `Bạn có chắc chắn muốn xóa Role "${roleItem.code} - ${roleItem.name}"?`;
@@ -1727,8 +1886,8 @@ export const UserManagementView: React.FC = () => {
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setIsUserFormOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 text-xs rounded-xl hover:bg-slate-200 transition"
+                  onClick={handleCloseUserForm}
+                  className="px-4 py-2 bg-slate-100 text-slate-600 text-xs rounded-xl hover:bg-slate-200 transition cursor-pointer"
                 >
                   Hủy
                 </button>
@@ -2205,113 +2364,6 @@ export const UserManagementView: React.FC = () => {
       {/* ========================================================================= */}
       {activeSubTab === 'ROLES' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Add / Edit Role Form */}
-          {isRoleFormOpen && (
-            <form
-              onSubmit={handleSubmitRole}
-              className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4"
-            >
-              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <Tag className="w-4 h-4 text-indigo-500" />
-                {editingRoleId ? `Chỉnh Sửa Role: ${roleCode}` : 'Thêm Role / Chuyên Môn Mới'}
-              </h3>
-
-              {roleError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-medium flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{roleError}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Mã Role (Code):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: BA, Design, Mobile..."
-                    value={roleCode}
-                    onChange={(e) => setRoleCode(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 uppercase font-bold focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    required
-                  />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Mã viết hoa đại diện cho vai trò (ngắn gọn)
-                  </span>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Tên Hiển Thị Role:
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: Business Analyst (Phân tích nghiệp vụ)"
-                    value={roleName}
-                    onChange={(e) => setRoleName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    required
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Mô Tả Nhiệm Vụ & Phạm Vi:
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: Phân tích yêu cầu, quy trình nghiệp vụ & viết đặc tả..."
-                    value={roleDesc}
-                    onChange={(e) => setRoleDesc(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Màu Sắc Đại Diện:
-                  </label>
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    {COLOR_OPTIONS.map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => setRoleColor(c.id)}
-                        className={`w-7 h-7 rounded-xl flex items-center justify-center transition ${c.preview} ${
-                          roleColor === c.id
-                            ? 'ring-2 ring-offset-2 ring-indigo-500 scale-110 shadow-sm'
-                            : 'opacity-70 hover:opacity-100 hover:scale-105'
-                        }`}
-                        title={c.name}
-                      >
-                        {roleColor === c.id && (
-                          <span className="w-2 h-2 rounded-full bg-white" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRoleFormOpen(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 text-xs rounded-xl hover:bg-slate-200 transition"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition"
-                >
-                  {editingRoleId ? 'Lưu Thay Đổi' : 'Tạo Role'}
-                </button>
-              </div>
-            </form>
-          )}
-
           {/* Roles Table */}
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -2339,7 +2391,7 @@ export const UserManagementView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {roles.map((r) => {
                     const style = getRoleStyle(r.color);
-                    const members = users.filter((u) => u.specializations?.includes(r.code));
+                    const members = users.filter((u) => !u.disabled && u.status !== 'disabled' && u.specializations?.includes(r.code));
                     const roleTasks = tasks.filter((t) => t.role === r.code);
 
                     return (
@@ -2959,6 +3011,7 @@ export const UserManagementView: React.FC = () => {
       <Modal
         isOpen={isAddColumnOpen}
         onClose={() => setIsAddColumnOpen(false)}
+        onRequestClose={checkAddColDirtyAndConfirmClose}
         size="md"
         icon={
           <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shadow-xs shrink-0">
@@ -2971,7 +3024,11 @@ export const UserManagementView: React.FC = () => {
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
-              onClick={() => setIsAddColumnOpen(false)}
+              onClick={() => {
+                if (checkAddColDirtyAndConfirmClose()) {
+                  setIsAddColumnOpen(false);
+                }
+              }}
               className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
             >
               Hủy
@@ -3047,6 +3104,7 @@ export const UserManagementView: React.FC = () => {
       <Modal
         isOpen={editingColIdx !== null}
         onClose={() => setEditingColIdx(null)}
+        onRequestClose={checkEditColDirtyAndConfirmClose}
         size="md"
         icon={
           <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shadow-xs shrink-0">
@@ -3071,7 +3129,11 @@ export const UserManagementView: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setEditingColIdx(null)}
+                onClick={() => {
+                  if (checkEditColDirtyAndConfirmClose()) {
+                    setEditingColIdx(null);
+                  }
+                }}
                 className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
               >
                 Hủy
@@ -3142,6 +3204,7 @@ export const UserManagementView: React.FC = () => {
       <Modal
         isOpen={isBatchImportModalOpen && multiParsedList.length > 0}
         onClose={() => setIsBatchImportModalOpen(false)}
+        onRequestClose={checkBatchImportDirtyAndConfirmClose}
         size="full"
         className="max-w-5xl"
         icon={
@@ -3176,7 +3239,7 @@ export const UserManagementView: React.FC = () => {
             <div className="flex items-center gap-2.5 w-full sm:w-auto">
               <button
                 type="button"
-                onClick={() => setIsBatchImportModalOpen(false)}
+                onClick={handleCloseBatchImportModal}
                 className="flex-1 sm:flex-initial px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-xl border border-slate-300 transition cursor-pointer"
               >
                 Hủy / Đóng
@@ -3396,6 +3459,134 @@ export const UserManagementView: React.FC = () => {
             </table>
           </div>
         </div>
+      </Modal>
+
+      {/* MODAL: TẠO / CHỈNH SỬA ROLE */}
+      <Modal
+        isOpen={isRoleFormOpen}
+        onClose={handleCloseRoleModal}
+        onRequestClose={checkRoleDirtyAndConfirmClose}
+        size="xl"
+        className="max-w-xl sm:max-w-2xl min-h-[480px] sm:min-h-[500px]"
+        bodyClassName="overflow-visible py-2"
+        icon={
+          <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-xs border border-indigo-100">
+            <Tag className="w-5 h-5" />
+          </div>
+        }
+        title={
+          <div className="flex items-center gap-2 flex-wrap text-base font-bold text-slate-800">
+            <span>{editingRoleId ? `Chỉnh Sửa Role: ${roleCode || ''}` : 'Thêm Role / Chuyên Môn Mới'}</span>
+            {editingRoleId && (
+              <span className="text-xs px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 font-mono font-bold border border-indigo-200">
+                {roleCode}
+              </span>
+            )}
+          </div>
+        }
+        description={
+          editingRoleId
+            ? 'Cập nhật thông tin mã role, tên hiển thị, mô tả nhiệm vụ và màu sắc đại diện.'
+            : 'Tạo mới vai trò / chuyên môn để phân công công việc và quản lý cột mốc milestone trong dự án.'
+        }
+        footer={
+          <div className="flex items-center justify-end gap-2.5 pt-1">
+            <button
+              type="button"
+              onClick={handleCloseRoleModal}
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              form="role-modal-form"
+              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition cursor-pointer active:scale-95"
+            >
+              {editingRoleId ? 'Lưu Thay Đổi' : 'Tạo Role'}
+            </button>
+          </div>
+        }
+      >
+        <form id="role-modal-form" onSubmit={handleSubmitRole} className="space-y-5 pb-3">
+          {roleError && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-medium flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{roleError}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+                Mã Role (Code): <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="VD: BA, Design..."
+                value={roleCode}
+                onChange={(e) => setRoleCode(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-700 uppercase font-bold focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
+                required
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Mã viết hoa ngắn gọn
+              </span>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+                Tên Hiển Thị Role: <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="VD: Business Analyst (Phân tích nghiệp vụ)"
+                value={roleName}
+                onChange={(e) => setRoleName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-700 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition font-medium"
+                required
+              />
+            </div>
+
+            <div className="sm:col-span-3">
+              <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+                Mô Tả Nhiệm Vụ & Phạm Vi:
+              </label>
+              <input
+                type="text"
+                placeholder="VD: Phân tích yêu cầu, quy trình nghiệp vụ & viết đặc tả..."
+                value={roleDesc}
+                onChange={(e) => setRoleDesc(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-700 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
+              />
+            </div>
+
+            <div className="sm:col-span-3">
+              <label className="text-xs font-semibold text-slate-700 block mb-2">
+                Màu Sắc Đại Diện:
+              </label>
+              <div className="flex flex-wrap items-center gap-3 py-2 px-1">
+                {COLOR_OPTIONS.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setRoleColor(c.id)}
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer ${c.preview} ${
+                      roleColor === c.id
+                        ? 'ring-2 ring-offset-2 ring-indigo-500 scale-110 shadow-sm'
+                        : 'opacity-70 hover:opacity-100 hover:scale-105'
+                    }`}
+                    title={c.name}
+                  >
+                    {roleColor === c.id && (
+                      <span className="w-2.5 h-2.5 rounded-full bg-white shadow-xs" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </form>
       </Modal>
 
       {/* User Detail & Edit Modal */}

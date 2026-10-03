@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, TicketActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, update, remove, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
@@ -228,7 +228,14 @@ interface AppContextType {
   deleteTasks: (ids: string[]) => void;
   reorderTasksInMilestone: (milestoneId: string, taskIds: string[]) => void;
   
-  submitTaskReport: (taskId: string, actualEffort: number, completionPercentage: number, status: TaskStatus, notes?: string) => void;
+  submitTaskReport: (
+    taskId: string,
+    actualEffort: number,
+    completionPercentage: number,
+    status: TaskStatus,
+    notes?: string,
+    extraDates?: { startDate?: string; endDate?: string }
+  ) => void;
   updateTaskNotes: (taskId: string, notes: string, options?: UpdateTaskNotesOptions) => void;
   
   canEditTask: (task: Task, user?: User | null) => boolean;
@@ -322,17 +329,76 @@ export const getLocalTasksCache = (): Task[] => {
       if (Array.isArray(arr) && arr.length > 0) return arr;
     }
   } catch (e) {
-    console.error('Failed to parse local tasks cache', e);
+    console.warn('Failed to parse local tasks cache', e);
   }
   return [];
 };
 
+const sanitizeTasksForLocalCache = (taskList: Task[], ultraLight: boolean = false): any[] => {
+  return taskList.map((t) => {
+    let cleanDesc = t.description || '';
+    // Strip heavy base64 image strings from description in local cache to save localStorage MBs
+    if (cleanDesc.includes('data:image/')) {
+      cleanDesc = cleanDesc.replace(/data:image\/[a-zA-Z]+;base64,[^)"'\s]+/g, '[cached_image]');
+    }
+    if (ultraLight) {
+      if (cleanDesc.length > 300) {
+        cleanDesc = cleanDesc.substring(0, 300) + '...';
+      }
+      return {
+        id: t.id,
+        title: t.title,
+        role: t.role,
+        status: t.status,
+        priority: t.priority,
+        estimatedEffort: t.estimatedEffort,
+        actualEffort: t.actualEffort,
+        completionPercentage: t.completionPercentage,
+        assigneeAccount: t.assigneeAccount,
+        milestoneId: t.milestoneId,
+        weekNumber: t.weekNumber,
+        year: t.year,
+        startDate: t.startDate,
+        endDate: t.endDate,
+        orderInMilestone: t.orderInMilestone,
+        description: cleanDesc,
+      };
+    }
+    if (cleanDesc.length > 3000) {
+      cleanDesc = cleanDesc.substring(0, 3000) + '...';
+    }
+    return {
+      ...t,
+      description: cleanDesc,
+      activityLogs: Array.isArray(t.activityLogs) ? t.activityLogs.slice(-5) : undefined,
+    };
+  });
+};
+
 export const saveLocalTasksCache = (taskList: Task[]) => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !Array.isArray(taskList)) return;
   try {
-    localStorage.setItem(LOCAL_STORAGE_TASKS_CACHE, JSON.stringify(taskList));
-  } catch (e) {
-    console.error('Failed to save local tasks cache', e);
+    const sanitized = sanitizeTasksForLocalCache(taskList, false);
+    localStorage.setItem(LOCAL_STORAGE_TASKS_CACHE, JSON.stringify(sanitized));
+  } catch (err: any) {
+    // Quota exceeded: clean legacy keys and save ultra-lightweight version
+    try {
+      const legacyKeys = ['saho_tasks_cache_backup_v1', 'saho_tasks_cache', 'gmm_task_auth_session_v1'];
+      legacyKeys.forEach((k) => {
+        try {
+          localStorage.removeItem(k);
+        } catch (_) {}
+      });
+
+      const ultraLight = sanitizeTasksForLocalCache(taskList, true);
+      localStorage.setItem(LOCAL_STORAGE_TASKS_CACHE, JSON.stringify(ultraLight));
+    } catch (innerErr) {
+      // If still exceeded, clear the tasks cache key to preserve browser storage
+      try {
+        localStorage.removeItem(LOCAL_STORAGE_TASKS_CACHE);
+      } catch (_) {}
+      console.warn('LocalStorage quota exceeded for tasks cache backup, cleared to preserve storage.');
+    }
   }
 };
 
@@ -569,7 +635,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const localDeletedSet = getLocalDeletedTaskIds();
           Object.keys(remoteDeletedTasks).forEach((id) => localDeletedSet.add(id));
           if (typeof window !== 'undefined') {
-            localStorage.setItem(LOCAL_STORAGE_DELETED_TASKS, JSON.stringify(Array.from(localDeletedSet)));
+            try {
+              localStorage.setItem(LOCAL_STORAGE_DELETED_TASKS, JSON.stringify(Array.from(localDeletedSet)));
+            } catch (_) {}
           }
 
           // 2. Process remote tasks from Firebase
@@ -1798,6 +1866,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       updates.status = nextStatus;
 
+      // Auto start date / end date handling when not explicitly provided
+      const todayStr = getTodayDateOnlyString(simulatedTime);
+      if (effectivePct > 0 || nextStatus === 'In Progress') {
+        if (updates.startDate === undefined && !t.startDate) {
+          updates.startDate = todayStr;
+        }
+      }
+      if (effectivePct >= 100 || nextStatus === 'Done') {
+        if (updates.startDate === undefined && !t.startDate) {
+          updates.startDate = todayStr;
+        }
+        if (updates.endDate === undefined && !t.endDate) {
+          updates.endDate = todayStr;
+        }
+      }
+
       if (options?.skipLog) {
         targetTaskUpdated = {
           ...t,
@@ -1820,6 +1904,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (updates.estimatedEffort !== undefined && updates.estimatedEffort !== t.estimatedEffort) {
         changes.push(`Effort ước tính: ${t.estimatedEffort}h ➔ ${updates.estimatedEffort}h`);
+      }
+      if (updates.startDate !== undefined && updates.startDate !== t.startDate) {
+        changes.push(`Ngày bắt đầu: "${formatDateOnlyDisplay(t.startDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(updates.startDate) || 'Chưa đặt'}"`);
+      }
+      if (updates.endDate !== undefined && updates.endDate !== t.endDate) {
+        changes.push(`Ngày hoàn thành: "${formatDateOnlyDisplay(t.endDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(updates.endDate) || 'Chưa đặt'}"`);
       }
       if (updates.assigneeAccount !== undefined && updates.assigneeAccount !== t.assigneeAccount) {
         changes.push(`Người phụ trách: ${t.assigneeAccount || 'Chưa gán'} ➔ ${updates.assigneeAccount || 'Chưa gán'}`);
@@ -2065,7 +2155,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     actualEffort: number,
     completionPercentage: number,
     status: TaskStatus,
-    notes?: string
+    notes?: string,
+    extraDates?: { startDate?: string; endDate?: string }
   ) => {
     const targetTask = tasks.find((t) => t.id === taskId);
     const weekNo = targetTask?.weekNumber || selectedWeek;
@@ -2074,6 +2165,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const deadline = getWeekDeadline(weekNo, year);
     const now = new Date(simulatedTime);
     const nowIso = new Date().toISOString();
+    const todayStr = getTodayDateOnlyString(simulatedTime);
 
     const estEffort = targetTask?.estimatedEffort || 0;
     // If completion percentage is 0%, actualEffort is automatically 0h and status is To do (cannot be Done)
@@ -2108,6 +2200,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updated = tasks.map((t) => {
       if (t.id !== taskId) return t;
 
+      // Determine final start & end dates
+      let finalStartDate = t.startDate;
+      if (extraDates?.startDate !== undefined) {
+        finalStartDate = extraDates.startDate;
+      } else if (completionPercentage > 0 && !finalStartDate) {
+        finalStartDate = todayStr;
+      } else if (completionPercentage === 0 && !extraDates) {
+        finalStartDate = '';
+      }
+
+      let finalEndDate = t.endDate;
+      if (extraDates?.endDate !== undefined) {
+        finalEndDate = extraDates.endDate;
+      } else if (isDone && !finalEndDate) {
+        finalEndDate = todayStr;
+      } else if (!isDone && extraDates?.endDate === undefined && completionPercentage < 100) {
+        finalEndDate = completionPercentage === 0 ? '' : t.endDate;
+      }
+
       const changes: string[] = [];
       if (finalStatus !== t.status) {
         changes.push(`Trạng thái: "${t.status}" ➔ "${finalStatus}"`);
@@ -2117,6 +2228,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (finalActualEffort !== t.actualEffort) {
         changes.push(`Effort: ${t.actualEffort}h ➔ ${finalActualEffort}h`);
+      }
+      if (finalStartDate !== t.startDate) {
+        changes.push(`Ngày bắt đầu: "${formatDateOnlyDisplay(t.startDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(finalStartDate) || 'Chưa đặt'}"`);
+      }
+      if (finalEndDate !== t.endDate) {
+        changes.push(`Ngày hoàn thành: "${formatDateOnlyDisplay(t.endDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(finalEndDate) || 'Chưa đặt'}"`);
       }
       if (notes !== undefined && notes !== t.notes) {
         changes.push(`Kèm ghi chú báo cáo`);
@@ -2143,6 +2260,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         actualEffort: finalActualEffort,
         completionPercentage,
         status: finalStatus,
+        startDate: finalStartDate,
+        endDate: finalEndDate,
         notes: notes !== undefined ? notes : t.notes,
         lastSubmittedAt: isOfficialReport ? now.toISOString() : t.lastSubmittedAt,
         isSubmittedLate: isOfficialReport ? (isDone ? false : isLate) : t.isSubmittedLate,
@@ -2551,18 +2670,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Ticket Management Operations
   const createTicket = async (
-    ticketData: Omit<Ticket, 'id' | 'code' | 'createdAt' | 'comments'>
+    ticketData: Omit<Ticket, 'id' | 'code' | 'createdAt' | 'comments' | 'activityLogs'>
   ): Promise<Ticket> => {
     const newId = `ticket-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const nextNum = tickets.length + 1;
     const code = `REQ-${String(nextNum).padStart(3, '0')}`;
     const now = new Date().toISOString();
 
+    const initialLog: TicketActivityLog = {
+      id: `log-ticket-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: now,
+      authorName: ticketData.fromName,
+      authorAccount: ticketData.fromAccount,
+      authorRole: ticketData.fromUserRole || 'Member',
+      actionType: 'CREATE',
+      summary: `Khởi tạo yêu cầu hỗ trợ liên team (From Team ${ticketData.fromRole} ➔ Team ${ticketData.toRole})`,
+    };
+
     const newTicket: Ticket = {
       ...ticketData,
       id: newId,
       code,
       comments: [],
+      activityLogs: [initialLog],
       createdAt: now,
       updatedAt: now,
       attachments: ticketData.attachments || [],
@@ -2624,14 +2754,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newTicket;
   };
 
-  const updateTicket = async (id: string, updates: Partial<Ticket>): Promise<void> => {
+  const updateTicket = async (
+    id: string,
+    updates: Partial<Ticket>,
+    options?: { logActionType?: TicketActivityLog['actionType']; logSummary?: string; skipLog?: boolean }
+  ): Promise<void> => {
     const currentTicket = tickets.find((t) => t.id === id);
     if (!currentTicket) return;
 
     const now = new Date().toISOString();
+    const authorName = authSession?.name || 'Người dùng';
+    const authorAccount = authSession?.account || 'member';
+    const authorRole = authSession?.role || 'Member';
+
+    let activityLogs = currentTicket.activityLogs || [];
+
+    if (!options?.skipLog) {
+      const changes: string[] = [];
+      let actionType: TicketActivityLog['actionType'] = options?.logActionType || 'GENERAL_UPDATE';
+
+      if (options?.logSummary) {
+        changes.push(options.logSummary);
+      } else {
+        if (updates.status && updates.status !== currentTicket.status) {
+          actionType = 'STATUS_CHANGE';
+          changes.push(`Trạng thái: "${currentTicket.status}" ➔ "${updates.status}"`);
+        }
+        if (updates.assignedTo !== undefined && updates.assignedTo !== currentTicket.assignedTo) {
+          actionType = 'ASSIGNEE_CHANGE';
+          changes.push(
+            `Phân công: ${currentTicket.assignedTo ? `@${currentTicket.assignedTo}` : 'Chưa phân công'} ➔ ${
+              updates.assignedTo ? `@${updates.assignedTo}` : 'Chưa phân công'
+            }`
+          );
+        }
+        if (updates.priority && updates.priority !== currentTicket.priority) {
+          actionType = 'PRIORITY_CHANGE';
+          changes.push(`Mức độ ưu tiên: "${currentTicket.priority}" ➔ "${updates.priority}"`);
+        }
+        if (updates.title && updates.title !== currentTicket.title) {
+          actionType = 'DESC_UPDATE';
+          changes.push(`Đổi tiêu đề: "${updates.title}"`);
+        }
+        if (updates.description !== undefined && updates.description !== currentTicket.description) {
+          actionType = 'DESC_UPDATE';
+          changes.push(`Cập nhật nội dung yêu cầu chi tiết`);
+        }
+        if (updates.resolutionNote !== undefined && updates.resolutionNote !== currentTicket.resolutionNote) {
+          actionType = 'RESOLVE';
+          changes.push(`Cập nhật giải pháp / kết quả xử lý`);
+        }
+      }
+
+      if (changes.length > 0) {
+        const logEntry: TicketActivityLog = {
+          id: `log-ticket-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          timestamp: now,
+          authorName,
+          authorAccount,
+          authorRole,
+          actionType,
+          summary: changes.join(' • '),
+        };
+        activityLogs = [logEntry, ...activityLogs];
+      }
+    }
+
     const updatedTicket: Ticket = {
       ...currentTicket,
       ...updates,
+      activityLogs,
       updatedAt: now,
     };
 
@@ -2805,7 +2997,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: now,
     };
 
-    await updateTicket(ticketId, updates);
+    await updateTicket(ticketId, updates, {
+      logActionType: 'ASSIGNEE_CHANGE',
+      logSummary: assigneeAccount
+        ? `Phân công xử lý cho @${assigneeAccount} (${assignee?.name || ''})`
+        : 'Hủy phân công người xử lý',
+    });
 
     if (assignee && assignee.account.toLowerCase() !== authSession?.account.toLowerCase()) {
       sendPushNotification({
@@ -2835,7 +3032,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: now,
     };
 
-    await updateTicket(ticketId, updates);
+    await updateTicket(ticketId, updates, {
+      logActionType: 'RESOLVE',
+      logSummary: `Đánh dấu đã giải quyết yêu cầu. Giải pháp: "${resolutionNote}"`,
+    });
 
     // Also mark linked task as Done if exists
     const linkedTaskIndex = tasks.findIndex(
@@ -2882,7 +3082,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: now,
     };
 
-    await updateTicket(ticketId, updates);
+    await updateTicket(ticketId, updates, {
+      logActionType: 'CLOSE',
+      logSummary: 'Xác nhận hoàn thành & đóng yêu cầu hỗ trợ',
+    });
 
     if (ticket.fromAccount.toLowerCase() !== authSession?.account.toLowerCase()) {
       sendPushNotification({
@@ -2909,7 +3112,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedAt: now,
     };
 
-    await updateTicket(ticketId, updates);
+    await updateTicket(ticketId, updates, {
+      logActionType: 'REOPEN',
+      logSummary: 'Mở lại yêu cầu để tiếp tục xử lý / sửa đổi',
+    });
   };
 
   const addTicketComment = async (
@@ -2933,12 +3139,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       attachments: attachments || [],
     };
 
+    const logEntry: TicketActivityLog = {
+      id: `log-ticket-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: now,
+      authorName: authSession.name,
+      authorAccount: authSession.account,
+      authorRole: authSession.role,
+      actionType: 'COMMENT_ADD',
+      summary: `Gửi phản hồi trao đổi: "${content.replace(/\n/g, ' ').slice(0, 80)}${
+        content.length > 80 ? '...' : ''
+      }"`,
+    };
+
     const updatedComments = [...(ticket.comments || []), newComment];
+    const updatedActivityLogs = [logEntry, ...(ticket.activityLogs || [])];
+
     const cleanTicket = JSON.parse(
       JSON.stringify(
         {
           ...ticket,
           comments: updatedComments,
+          activityLogs: updatedActivityLogs,
           updatedAt: now,
         },
         (_, v) => (v === undefined ? null : v)

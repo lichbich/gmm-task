@@ -155,54 +155,54 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
     return 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-700';
   };
 
-  // Dynamic sample prompts based on currentRole and scope
+  // Dynamic sample prompts based on currentRole and scope (Supports both Domain Q&A and Task Breakdown)
   const getSamplePrompts = () => {
     if (scope === 'all_roles') {
       return [
-        'Phân tích toàn diện: Luồng quét mã QR thanh toán',
-        'Phân tích toàn diện: Đăng nhập 2FA qua OTP SMS/Email',
-        'Phân tích toàn diện: Dashboard thống kê tiến độ tuần',
-        'Phân tích toàn diện: Quản lý phân quyền tài khoản',
+        '💡 Tư vấn nghiệp vụ: Thiết kế luồng xử lý và duyệt đơn hàng đa cấp',
+        '💡 Hỏi đáp: Phương án phân quyền user theo từng team chuyên môn',
+        '📋 Bóc tách toàn diện: Luồng quét mã QR thanh toán',
+        '📋 Bóc tách toàn diện: Đăng nhập 2FA qua OTP SMS/Email',
       ];
     }
     const r = (currentRole || '').toLowerCase();
     if (r.includes('design')) {
       return [
-        'Thiết kế UI/UX: Dashboard thống kê tiến độ theo tuần',
-        'Thiết kế màn hình & UI Flow: Quét mã QR thanh toán',
-        'Thiết kế Wireframe & Prototype: Cài đặt bảo mật 2FA',
-        'Thiết kế Design System: Bộ icons & biểu đồ thống kê',
+        '💡 Tư vấn UX: Gợi ý luồng UX tối ưu khi chuyển từ Web sang Mobile',
+        '💡 Tiêu chuẩn UI: Quy chuẩn spacing & typography cho Design System',
+        '📋 Thiết kế UI/UX: Dashboard thống kê tiến độ theo tuần',
+        '📋 Thiết kế màn hình & UI Flow: Quét mã QR thanh toán',
       ];
     }
     if (r.includes('back') || r === 'be') {
       return [
-        'Xây dựng Database & API: Dashboard thống kê tiến độ tuần',
-        'Phát triển API: Xác thực 2FA OTP qua SMS/Email',
-        'Xây dựng API: Xử lý webhook & thanh toán mã QR',
-        'Tối ưu hóa Database: Indexing & Cache Redis cho báo cáo',
+        '💡 Tư vấn kiến trúc: Phương án phân quyền đa vai trò cho user theo từng team',
+        '💡 Hỏi đáp kỹ thuật: Cách thiết kế API idempotent cho thanh toán QR',
+        '📋 Xây dựng Database & API: Dashboard thống kê tiến độ tuần',
+        '📋 Phát triển API: Xác thực 2FA OTP qua SMS/Email',
       ];
     }
     if (r.includes('front') || r === 'fe') {
       return [
-        'Phát triển UI Component: Dashboard biểu đồ thống kê tuần',
-        'Ghép API & State: Màn hình xác thực 2FA OTP',
-        'Xây dựng giao diện: Quét mã QR thanh toán Responsive',
-        'Tối ưu hiệu năng FE: Lazy loading & Client Cache',
+        '💡 Tư vấn kỹ thuật: Phương án tối ưu render & virtual scroll cho danh sách lớn',
+        '💡 Hỏi đáp: Quản lý cache client và đồng bộ state realtime',
+        '📋 Phát triển UI Component: Dashboard biểu đồ thống kê tuần',
+        '📋 Ghép API & State: Màn hình xác thực 2FA OTP',
       ];
     }
     if (r.includes('test') || r.includes('qa')) {
       return [
-        'Kế hoạch kiểm thử: Dashboard thống kê tiến độ theo tuần',
-        'Kiểm thử bảo mật & Tải: Luồng xác thực 2FA OTP',
-        'Viết Test Cases: Thanh toán mã QR & các mã lỗi',
-        'Kiểm thử hồi quy: Tính năng phân quyền tài khoản',
+        '💡 Tư vấn QC: Các test cases biên quan trọng khi test tích hợp thanh toán',
+        '💡 Hỏi đáp: Tiêu chuẩn viết Test Matrix cho hệ thống phân quyền phức tạp',
+        '📋 Kế hoạch kiểm thử: Dashboard thống kê tiến độ theo tuần',
+        '📋 Kiểm thử bảo mật & Tải: Luồng xác thực 2FA OTP',
       ];
     }
     return [
-      `Phân tích các đầu việc chuyên môn cho team ${currentRole}`,
-      'Phân tích tính năng: Dashboard thống kê tiến độ theo tuần',
-      'Phân tích tính năng: Xác thực 2FA qua OTP SMS/Email',
-      'Phân tích tính năng: Quét mã QR thanh toán',
+      `💡 Hỏi nghiệp vụ & quy trình phù hợp cho team ${currentRole}`,
+      `📋 Phân tích các đầu việc chuyên môn cho team ${currentRole}`,
+      '📋 Phân tích tính năng: Dashboard thống kê tiến độ theo tuần',
+      '📋 Phân tích tính năng: Xác thực 2FA qua OTP SMS/Email',
     ];
   };
 
@@ -215,7 +215,7 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
           '🎨 Thêm task UI Wireframe & Prototype',
           '📱 Bổ sung giao diện Mobile Responsive',
           '⏱️ Tối ưu lại số giờ Designer',
-          '📋 Chi tiết checklist thiết kế',
+          '💡 Giải thích thêm logic trải nghiệm UX',
         ];
       }
       if (r.includes('back') || r === 'be') {
@@ -223,7 +223,7 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
           '🗄️ Thêm task Database Schema & Migrations',
           '🔐 Thêm task API Bảo mật & Xác thực',
           '⏱️ Tối ưu lại số giờ Backend',
-          '📋 Chi tiết checklist API & Swagger',
+          '💡 Phân tích thêm các case lỗi API',
         ];
       }
       if (r.includes('front') || r === 'fe') {
@@ -231,7 +231,7 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
           '⚛️ Thêm task ghép API & State Management',
           '🎨 Căn chỉnh giao diện Responsive & Animation',
           '⏱️ Tối ưu lại số giờ Frontend',
-          '📋 Chi tiết checklist FE Component',
+          '💡 Tư vấn xử lý state loading/error',
         ];
       }
       if (r.includes('test') || r.includes('qa')) {
@@ -239,7 +239,7 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
           '🧪 Thêm task Test Cases & Test Matrix',
           '🐞 Thêm task Test Tải & Bảo Mật',
           '⏱️ Tối ưu lại số giờ Tester',
-          '📋 Chi tiết checklist kiểm thử',
+          '💡 Gợi ý thêm các edge cases',
         ];
       }
     }
@@ -247,7 +247,7 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
       '⏱️ Tối ưu lại số giờ thực tế hơn',
       '➕ Thêm task kiểm thử bảo mật & tải',
       '🛠️ Chia nhỏ hơn các task phức tạp',
-      '📋 Viết checklist kỹ thuật chi tiết hơn',
+      '💡 Giải thích chi tiết hơn về luồng nghiệp vụ',
     ];
   };
 
@@ -269,7 +269,7 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
               </span>
             </div>
             <p className="text-[10px] text-slate-500 dark:text-slate-400">
-              Phân rã & trao đổi đa vòng (Multi-turn chat)
+              Tư vấn nghiệp vụ & Bóc tách task đa vòng
             </p>
           </div>
         </div>
@@ -329,18 +329,19 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
                 <Bot className="w-4 h-4 text-indigo-600" />
                 <span>
                   {scope === 'current_role'
-                    ? `AI đang hỗ trợ chuyên biệt cho team ${currentRole}`
-                    : 'AI đang hỗ trợ bóc tách cho toàn bộ team'}
+                    ? `AI Co-pilot hỗ trợ chuyên môn cho team ${currentRole}`
+                    : 'AI Co-pilot hỗ trợ đa nhiệm cho toàn bộ team'}
                 </span>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Bạn có thể <b>hỏi đáp nghiệp vụ / tư vấn kỹ thuật</b> hoặc <b>nhập mô tả tính năng để AI tự động bóc tách task</b>{' '}
                 {scope === 'current_role' ? (
                   <>
-                    Nhập tính năng cần thực hiện. AI sẽ tập trung bóc tách các task con và ước tính số giờ riêng cho vai trò <b className="text-indigo-600 dark:text-indigo-400 font-bold">{currentRole}</b>.
+                    dành riêng cho vai trò <b className="text-indigo-600 dark:text-indigo-400 font-bold">{currentRole}</b>.
                   </>
                 ) : (
                   <>
-                    Nhập tính năng lớn cần triển khai. AI sẽ bóc tách đầy đủ các vai trò <b>Designer, Frontend, Backend, Tester</b>.
+                    phân chia đầy đủ cho các team <b>Designer, Frontend, Backend, Tester</b>.
                   </>
                 )}
               </p>
@@ -380,10 +381,10 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
           </div>
         ) : (
           messages.map((msg) => (
-            <div key={msg.id} className="space-y-2 animate-in fade-in duration-150">
+            <div key={msg.id} className="space-y-2 animate-fade-in-down">
               {msg.role === 'user' ? (
                 /* User Message Bubble */
-                <div className="flex items-start justify-end gap-2">
+                <div className="flex items-start justify-end gap-2 animate-fade-in-down">
                   <div className="max-w-[85%] bg-indigo-600 text-white p-3 rounded-2xl rounded-tr-xs text-xs shadow-xs space-y-1 leading-relaxed">
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                     <div className="text-[9.5px] text-indigo-200 text-right font-mono">
@@ -395,8 +396,8 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
                   </div>
                 </div>
               ) : (
-                /* AI Response Bubble */
-                <div className="flex items-start gap-2">
+                /* AI Response Bubble with Smooth Reveal */
+                <div className="flex items-start gap-2 animate-fade-in-down">
                   <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-[10px] shrink-0 mt-1 shadow-xs">
                     <Sparkles className="w-3 h-3" />
                   </div>
@@ -407,7 +408,7 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
 
                     {/* Generated Subtasks Preview List */}
                     {msg.tasks && msg.tasks.length > 0 && (
-                      <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800 animate-fade-in-down">
                         <div className="flex items-center justify-between gap-1 flex-wrap">
                           <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
                             <Layers className="w-3 h-3 text-indigo-600" />
@@ -415,7 +416,7 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
                           </span>
                         </div>
 
-                        {/* Task Cards */}
+                        {/* Task Cards with Staggered Cascading Reveal */}
                         <div className="space-y-1.5 max-h-56 overflow-y-auto custom-scrollbar pr-0.5">
                           {msg.tasks.map((st, sIdx) => {
                             const itemKey = `${msg.id}-${sIdx}`;
@@ -423,7 +424,8 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
                             return (
                               <div
                                 key={sIdx}
-                                className="p-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl space-y-1 text-xs hover:border-indigo-300 transition shadow-2xs"
+                                style={{ animationDelay: `${Math.min(sIdx * 45, 300)}ms` }}
+                                className="p-2.5 bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 rounded-xl space-y-1 text-xs hover:border-indigo-300 transition shadow-2xs animate-task-card-reveal"
                               >
                                 <div className="flex items-start justify-between gap-1.5">
                                   <div className="font-semibold text-slate-800 dark:text-slate-100 flex-1 min-w-0">
@@ -555,20 +557,20 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
 
         {/* Loading Spinner Indicator */}
         {isLoading && (
-          <div className="flex items-start gap-2 animate-in fade-in">
+          <div className="flex items-start gap-2 animate-fade-in-down">
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-[10px] shrink-0 mt-1 shadow-xs">
               <Sparkles className="w-3 h-3 animate-spin" />
             </div>
             <div className="bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 p-3 rounded-2xl rounded-tl-xs text-xs text-indigo-900 dark:text-indigo-200 flex items-center gap-2 shadow-2xs">
               <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-              <span>Gemini đang suy nghĩ và điều chỉnh danh sách task...</span>
+              <span>Gemini đang suy nghĩ câu trả lời...</span>
             </div>
           </div>
         )}
 
         {/* Error notice */}
         {error && (
-          <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/80 rounded-xl flex items-start gap-2 text-xs text-red-700 dark:text-red-300 animate-in fade-in">
+          <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/80 rounded-xl flex items-start gap-2 text-xs text-red-700 dark:text-red-300 animate-fade-in-down">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div className="flex-1 leading-relaxed">{error}</div>
           </div>
@@ -579,8 +581,8 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
 
       {/* Quick Follow-up Adjustment Chips */}
       {messages.length > 0 && !isLoading && (
-        <div className="px-3 py-1.5 bg-white/60 dark:bg-slate-900/60 border-t border-slate-200/80 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto custom-scrollbar shrink-0">
-          <span className="text-[10px] text-slate-400 shrink-0 font-medium">Gợi ý phản hồi:</span>
+        <div className="px-3 py-1.5 bg-white/60 dark:bg-slate-900/60 border-t border-slate-200/80 dark:border-slate-800 flex items-center gap-1.5 overflow-x-auto custom-scrollbar shrink-0 animate-fade-in-down">
+          <span className="text-[10px] text-slate-400 shrink-0 font-medium">Gợi ý:</span>
           {getQuickFollowUps().map((qf, idx) => (
             <button
               key={idx}
@@ -617,8 +619,8 @@ export const AITaskChatBox: React.FC<AITaskChatBoxProps> = ({
               }}
               placeholder={
                 messages.length === 0
-                  ? 'Nhập mô tả tính năng cần bóc tách (VD: Luồng xác thực 2FA, thanh toán QR...)'
-                  : 'Nhập phản hồi tiếp theo (VD: Tăng giờ FE lên 4h, thêm task Swagger...)'
+                  ? 'Hỏi đáp nghiệp vụ (VD: Phân quyền theo team...) hoặc bóc tách task...'
+                  : 'Nhập câu hỏi nghiệp vụ hoặc yêu cầu chỉnh sửa tiếp theo...'
               }
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300/90 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950 transition resize-none leading-relaxed"
             />

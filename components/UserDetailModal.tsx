@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { User, UserRole, Specialization, validateRoleQuota, calculateHighestRole, getUserRoleInSpec } from '../types/task';
 import {
@@ -57,8 +57,6 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     confirmDialog,
   } = useApp();
 
-  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
-
   // Form Fields (Admin updates role, specializations, and personal info)
   const [userRole, setUserRole] = useState<UserRole>('Member');
   const [selectedSpecs, setSelectedSpecs] = useState<Specialization[]>(['BA']);
@@ -71,6 +69,56 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const [userBirthDate, setUserBirthDate] = useState('');
   const [userBankAccount, setUserBankAccount] = useState('');
   const [userTechnologies, setUserTechnologies] = useState('');
+
+  const checkDirtyAndConfirmClose = useCallback((): boolean => {
+    if (!user) return true;
+    let isDirty = false;
+    if (isEditingProfile) {
+      isDirty =
+        userName.trim() !== (user.name || '') ||
+        userPhone.trim() !== (user.phone || '') ||
+        userEmail.trim() !== (user.email || '') ||
+        userCccd.trim() !== (user.cccd || '') ||
+        userBirthDate.trim() !== (user.birthDate ? String(user.birthDate) : '') ||
+        userBankAccount.trim() !== (user.bankAccount || '') ||
+        userTechnologies.trim() !== (user.technologies || '');
+    }
+
+    const origRole = user.role || 'Member';
+    const origSpecs = user.specializations && user.specializations.length > 0 ? user.specializations : ['BA'];
+    if (userRole !== origRole || JSON.stringify(selectedSpecs) !== JSON.stringify(origSpecs)) {
+      isDirty = true;
+    }
+
+    if (isDirty) {
+      confirmDialog({
+        title: 'Thay đổi chưa được lưu',
+        message: 'Bạn đang chỉnh sửa thông tin thành viên chưa lưu. Bạn có chắc chắn muốn hủy và đóng không?',
+        confirmText: 'Rời khỏi & Hủy',
+        cancelText: 'Tiếp tục chỉnh sửa',
+        type: 'warning',
+        onConfirm: () => forceClose(),
+      });
+      return false;
+    }
+    return true;
+  }, [
+    user,
+    isEditingProfile,
+    userName,
+    userPhone,
+    userEmail,
+    userCccd,
+    userBirthDate,
+    userBankAccount,
+    userTechnologies,
+    userRole,
+    selectedSpecs,
+    confirmDialog,
+  ]);
+
+  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
+    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -700,17 +748,41 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                       <button
                         type="button"
                         onClick={() => {
-                          setUserName(user.name || '');
-                          setUserPhone(user.phone || '');
-                          setUserEmail(user.email || '');
-                          setUserCccd(user.cccd || '');
-                          setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
-                          setUserBankAccount(user.bankAccount || '');
-                          setUserTechnologies(user.technologies || '');
-                          setIsEditingProfile(false);
-                          setErrorMsg('');
+                          const isProfileDirty =
+                            userName.trim() !== (user.name || '') ||
+                            userPhone.trim() !== (user.phone || '') ||
+                            userEmail.trim() !== (user.email || '') ||
+                            userCccd.trim() !== (user.cccd || '') ||
+                            userBirthDate.trim() !== (user.birthDate ? String(user.birthDate) : '') ||
+                            userBankAccount.trim() !== (user.bankAccount || '') ||
+                            userTechnologies.trim() !== (user.technologies || '');
+
+                          const resetFields = () => {
+                            setUserName(user.name || '');
+                            setUserPhone(user.phone || '');
+                            setUserEmail(user.email || '');
+                            setUserCccd(user.cccd || '');
+                            setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
+                            setUserBankAccount(user.bankAccount || '');
+                            setUserTechnologies(user.technologies || '');
+                            setIsEditingProfile(false);
+                            setErrorMsg('');
+                          };
+
+                          if (isProfileDirty) {
+                            confirmDialog({
+                              title: 'Hủy chỉnh sửa hồ sơ',
+                              message: 'Các thông tin bạn vừa nhập sẽ không được lưu. Bạn có chắc chắn muốn hủy chỉnh sửa không?',
+                              confirmText: 'Hủy thay đổi',
+                              cancelText: 'Tiếp tục sửa',
+                              type: 'warning',
+                              onConfirm: resetFields,
+                            });
+                          } else {
+                            resetFields();
+                          }
                         }}
-                        className="flex items-center gap-1 px-2.5 py-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs font-semibold rounded-lg border border-slate-200 transition active:scale-95"
+                        className="flex items-center gap-1 px-2.5 py-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs font-semibold rounded-lg border border-slate-200 transition active:scale-95 cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" />
                         <span>Hủy Chỉnh Sửa</span>

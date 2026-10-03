@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Specialization, TaskStatus, getUserRoleInSpec } from '../types/task';
-import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles } from 'lucide-react';
+import { Task, Specialization, TaskStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay } from '../types/task';
+import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown, DropdownOption } from './common/Dropdown';
+import { DatePicker } from './common/DatePicker';
 import { insertCheckboxToText, removeImageFromDescription } from '../lib/descriptionHelper';
 import { uploadAndInsertImage, getImageFilesFromClipboard, getImageFilesFromDrop } from '../lib/imageUploadHelper';
 import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
@@ -31,7 +32,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   defaultWeek,
   defaultAssignee,
 }) => {
-  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear } = useApp();
+  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime } = useApp();
 
   // AI features are exclusively enabled for account LichDT for initial testing
   const canUseAI = isAIFeatureEnabled(currentUser);
@@ -94,6 +95,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [milestoneId, setMilestoneId] = useState<string>('');
   const [status, setStatus] = useState<TaskStatus>('To do');
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -246,17 +249,21 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       typeof estimatedEffort === 'number'
         ? estimatedEffort
         : parseFloat(String(estimatedEffort).replace(',', '.')) || 0;
+    const todayStr = getTodayDateOnlyString(simulatedTime);
 
     if (boundedPct >= 100) {
       setStatus('Done');
       if (currActual === 0 && parsedEst > 0) {
         setActualEffort(parsedEst);
       }
+      if (!startDate) setStartDate(todayStr);
+      if (!endDate) setEndDate(todayStr);
     } else if (boundedPct > 0) {
       setStatus('In Progress');
       if (currActual === 0 && parsedEst > 0) {
         setActualEffort(parsedEst);
       }
+      if (!startDate) setStartDate(todayStr);
     } else {
       setStatus('To do');
       setActualEffort(0);
@@ -265,6 +272,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleStatusChange = (newStatus: TaskStatus) => {
     setStatus(newStatus);
+    const todayStr = getTodayDateOnlyString(simulatedTime);
+    if (newStatus === 'In Progress') {
+      if (!startDate) setStartDate(todayStr);
+    } else if (newStatus === 'Done') {
+      if (!startDate) setStartDate(todayStr);
+      if (!endDate) setEndDate(todayStr);
+    }
+
     if (currentUser?.role === 'Admin') {
       const currActual =
         typeof actualEffort === 'number'
@@ -284,13 +299,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         setCompletionPercentage(0);
         setActualEffort(0);
       } else if (newStatus === 'In Progress') {
-        if (completionPercentage === 0 || completionPercentage === 100) {
-          setCompletionPercentage(50);
-        }
+        const nextPct = (completionPercentage === 0 || completionPercentage === 100) ? 50 : completionPercentage;
+        setCompletionPercentage(nextPct);
         if (currActual === 0 && parsedEst > 0) {
           setActualEffort(parsedEst);
         }
       }
+    }
+  };
+
+  const handleStartDateChange = (newStartDate: string) => {
+    setStartDate(newStartDate);
+    if (newStartDate && endDate && endDate < newStartDate) {
+      setEndDate(newStartDate);
+    }
+  };
+
+  const handleEndDateChange = (newEndDate: string) => {
+    setEndDate(newEndDate);
+    if (newEndDate && startDate && newEndDate < startDate) {
+      setStartDate(newEndDate);
     }
   };
 
@@ -392,6 +420,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         role !== origRole ||
         status !== origStatus ||
         priority !== origPriority ||
+        startDate !== (task.startDate || '') ||
+        endDate !== (task.endDate || '') ||
         (currentUser?.role === 'Admin' &&
           (parsedActual !== origActualEffort || completionPercentage !== origCompletion));
     }
@@ -418,6 +448,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     estimatedEffort,
     actualEffort,
     completionPercentage,
+    startDate,
+    endDate,
     assigneeAccount,
     milestoneId,
     role,
@@ -437,18 +469,23 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!isOpen) return;
 
     if (task) {
-      setTitle(task.title || '');
-      setDescription(task.description || '');
-      setRole(task.role || defaultRole);
-      setEstimatedEffort(task.estimatedEffort !== undefined ? task.estimatedEffort : 2);
-      setActualEffort(task.actualEffort !== undefined ? task.actualEffort : 0);
-      setCompletionPercentage(
+      const initialStatus = task.status || 'To do';
+      const initialPct =
         task.completionPercentage !== undefined
           ? task.completionPercentage
           : task.status === 'Done'
           ? 100
-          : 0
-      );
+          : 0;
+      const initialEffort = task.actualEffort !== undefined ? task.actualEffort : 0;
+      const initialStartDate = task.startDate || '';
+      const initialEndDate = task.endDate || '';
+
+      setTitle(task.title || '');
+      setDescription(task.description || '');
+      setRole(task.role || defaultRole);
+      setEstimatedEffort(task.estimatedEffort !== undefined ? task.estimatedEffort : 2);
+      setActualEffort(initialEffort);
+      setCompletionPercentage(initialPct);
       // Auto-select assignee: use existing assignee, or fallback to member requesting task, or defaultAssignee
       const initialAssignee =
         task.assigneeAccount ||
@@ -456,8 +493,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         (defaultAssignee !== undefined ? defaultAssignee : '');
       setAssigneeAccount(initialAssignee);
       setMilestoneId(task.milestoneId || initialMilestoneId || '');
-      setStatus(task.status || 'To do');
+      setStatus(initialStatus);
       setPriority(task.priority || 'Medium');
+      setStartDate(initialStartDate);
+      setEndDate(initialEndDate);
       setNotes(task.notes || '');
     } else {
       setTitle('');
@@ -466,6 +505,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setEstimatedEffort(2);
       setActualEffort(0);
       setCompletionPercentage(0);
+      setStartDate('');
+      setEndDate('');
       setAssigneeAccount(
         defaultAssignee !== undefined
           ? defaultAssignee
@@ -487,6 +528,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   if (!isRendered) return null;
 
+  const todayStr = getTodayDateOnlyString(simulatedTime);
   const userRoleInTaskSpec = getUserRoleInSpec(currentUser, role);
   const isMember = currentUser?.role === 'Admin' ? false : userRoleInTaskSpec === 'Member';
 
@@ -536,6 +578,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         milestoneId,
         status: finalStatus,
         priority,
+        startDate: startDate.trim() || undefined,
+        endDate: endDate.trim() || undefined,
         notes,
         ...(isAdmin
           ? {
@@ -567,6 +611,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         completionPercentage: finalCompletionPercentage,
         weekNumber: defaultWeek || selectedWeek,
         year: selectedYear,
+        startDate: startDate.trim() || undefined,
+        endDate: endDate.trim() || undefined,
         notes,
         ...(isAdmin && (finalCompletionPercentage === 100 || finalStatus === 'Done')
           ? { lastSubmittedAt: new Date().toISOString() }
@@ -1025,6 +1071,37 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       ]}
                       className="w-full"
                       buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300/90"
+                    />
+                  </div>
+                </div>
+
+                {/* Start Date & End Date (Custom DatePicker matching Dropdown) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-300/80 text-xs">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1.5 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>Ngày bắt đầu (Start Date):</span>
+                    </label>
+                    <DatePicker
+                      value={startDate}
+                      onChange={handleStartDateChange}
+                      placeholder="Chọn ngày bắt đầu..."
+                      maxDate={endDate || undefined}
+                      icon={<Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-1.5 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>Hạn hoàn thành (End Date):</span>
+                    </label>
+                    <DatePicker
+                      value={endDate}
+                      onChange={handleEndDateChange}
+                      placeholder="Chọn hạn hoàn thành..."
+                      minDate={startDate || undefined}
+                      icon={<Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
                     />
                   </div>
                 </div>

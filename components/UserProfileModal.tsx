@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   X,
@@ -34,9 +34,20 @@ interface UserProfileModalProps {
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose }) => {
-  const { currentUser, users, tasks, roles, selectedWeek, selectedYear, weeklyAwards, weeklyArchives, updateUser, changePassword, logout } =
-    useApp();
-  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
+  const {
+    currentUser,
+    users,
+    tasks,
+    roles,
+    selectedWeek,
+    selectedYear,
+    weeklyAwards,
+    weeklyArchives,
+    updateUser,
+    changePassword,
+    logout,
+    confirmDialog,
+  } = useApp();
 
   const [activeTab, setActiveTab] = useState<'INFO' | 'PASSWORD'>('INFO');
 
@@ -59,6 +70,57 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Retrieve full user record from state/database
+  const userRecord =
+    users.find((u) => u.account.toLowerCase() === currentUser?.account?.toLowerCase()) || currentUser;
+
+  const checkDirtyAndConfirmClose = useCallback((): boolean => {
+    let isDirty = false;
+    if (activeTab === 'INFO' && isEditingInfo) {
+      isDirty =
+        editName.trim() !== (userRecord?.name || '') ||
+        editCccd.trim() !== (userRecord?.cccd || '') ||
+        editBankAccount.trim() !== (userRecord?.bankAccount || '') ||
+        editEmail.trim() !== (userRecord?.email || '') ||
+        editPhone.trim() !== (userRecord?.phone || '') ||
+        editTechnologies.trim() !== (userRecord?.technologies || '') ||
+        editBirthDate.trim() !== (userRecord?.birthDate ? String(userRecord.birthDate) : '');
+    } else if (activeTab === 'PASSWORD') {
+      isDirty = currentPassword.trim() !== '' || newPassword.trim() !== '' || confirmPassword.trim() !== '';
+    }
+
+    if (isDirty) {
+      confirmDialog({
+        title: 'Thông tin chưa được lưu',
+        message: 'Bạn đang nhập dở thông tin cá nhân / mật khẩu. Bạn có chắc chắn muốn hủy và đóng không?',
+        confirmText: 'Rời khỏi & Hủy',
+        cancelText: 'Tiếp tục chỉnh sửa',
+        type: 'warning',
+        onConfirm: () => forceClose(),
+      });
+      return false;
+    }
+    return true;
+  }, [
+    activeTab,
+    isEditingInfo,
+    editName,
+    editCccd,
+    editBankAccount,
+    editEmail,
+    editPhone,
+    editTechnologies,
+    editBirthDate,
+    userRecord,
+    currentPassword,
+    newPassword,
+    confirmPassword,
+    confirmDialog,
+  ]);
+
+  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
+    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
+
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,11 +132,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
-  if (!isRendered || !currentUser) return null;
-
-  // Retrieve full user record from state/database
-  const userRecord =
-    users.find((u) => u.account.toLowerCase() === currentUser.account.toLowerCase()) || currentUser;
+  if (!isRendered || !currentUser || !userRecord) return null;
 
   // Calculate user's current week stats
   const userCurrentTasks = tasks.filter(
@@ -699,8 +757,30 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                   <div className="flex justify-end items-center gap-2 pt-2 border-t border-slate-100">
                     <button
                       type="button"
-                      onClick={() => setIsEditingInfo(false)}
-                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition"
+                      onClick={() => {
+                        const isInfoDirty =
+                          editName.trim() !== (userRecord?.name || '') ||
+                          editCccd.trim() !== (userRecord?.cccd || '') ||
+                          editBankAccount.trim() !== (userRecord?.bankAccount || '') ||
+                          editEmail.trim() !== (userRecord?.email || '') ||
+                          editPhone.trim() !== (userRecord?.phone || '') ||
+                          editTechnologies.trim() !== (userRecord?.technologies || '') ||
+                          editBirthDate.trim() !== (userRecord?.birthDate ? String(userRecord.birthDate) : '');
+
+                        if (isInfoDirty) {
+                          confirmDialog({
+                            title: 'Hủy chỉnh sửa thông tin',
+                            message: 'Các thông tin bạn vừa nhập sẽ không được lưu. Bạn có chắc chắn muốn hủy không?',
+                            confirmText: 'Hủy thay đổi',
+                            cancelText: 'Tiếp tục sửa',
+                            type: 'warning',
+                            onConfirm: () => setIsEditingInfo(false),
+                          });
+                        } else {
+                          setIsEditingInfo(false);
+                        }
+                      }}
+                      className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition cursor-pointer"
                     >
                       Hủy
                     </button>

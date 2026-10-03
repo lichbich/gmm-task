@@ -258,6 +258,8 @@ export interface Task {
   isSubmittedLate?: boolean;
   weekNumber: number;
   year: number;
+  startDate?: string; // Ngày bắt đầu (YYYY-MM-DD)
+  endDate?: string; // Ngày hoàn thành (YYYY-MM-DD)
   notes?: string; // Ghi chú gửi Leader
   assignmentRequestedBy?: string; // Tài khoản member xin nhận task
   assignmentRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED'; // Trạng thái phê duyệt của Leader
@@ -308,6 +310,44 @@ export const getEffectiveTaskStatus = (t: Task): TaskStatus => {
   return 'To do';
 };
 
+/**
+ * Lấy chuỗi ngày YYYY-MM-DD cho input type="date"
+ */
+export const getTodayDateOnlyString = (baseTime?: string): string => {
+  const d = baseTime ? new Date(baseTime) : new Date();
+  if (isNaN(d.getTime())) {
+    const fallback = new Date();
+    return `${fallback.getFullYear()}-${String(fallback.getMonth() + 1).padStart(2, '0')}-${String(fallback.getDate()).padStart(2, '0')}`;
+  }
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+/**
+ * Format chuỗi ngày YYYY-MM-DD hoặc ISO sang DD/MM/YYYY
+ */
+export const formatDateOnlyDisplay = (dateStr?: string): string => {
+  if (!dateStr) return '';
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    const dt = new Date(dateStr);
+    if (!isNaN(dt.getTime())) {
+      const day = String(dt.getDate()).padStart(2, '0');
+      const month = String(dt.getMonth() + 1).padStart(2, '0');
+      const year = dt.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+};
+
 export type ResourceLevel =
   | 'Business Plan'
   | 'Level 1 - Business'
@@ -344,6 +384,26 @@ export interface TicketComment {
   attachments?: string[];
 }
 
+export interface TicketActivityLog {
+  id: string;
+  timestamp: string; // ISO date string
+  authorName: string;
+  authorAccount: string;
+  authorRole?: string;
+  actionType:
+    | 'CREATE'
+    | 'STATUS_CHANGE'
+    | 'ASSIGNEE_CHANGE'
+    | 'PRIORITY_CHANGE'
+    | 'DESC_UPDATE'
+    | 'RESOLVE'
+    | 'REOPEN'
+    | 'CLOSE'
+    | 'COMMENT_ADD'
+    | 'GENERAL_UPDATE';
+  summary: string;
+}
+
 export interface Ticket {
   id: string;
   code: string; // e.g. "REQ-001"
@@ -371,6 +431,7 @@ export interface Ticket {
   resolvedAt?: string;
   closedAt?: string;
   comments?: TicketComment[];
+  activityLogs?: TicketActivityLog[]; // Nhật ký lịch sử các lần cập nhật request
   createdAt: string;
   updatedAt?: string;
 }

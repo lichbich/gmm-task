@@ -19,6 +19,7 @@ export interface ModalProps {
   containerClassName?: string;
   zIndex?: string;
   closeOnBackdropClick?: boolean;
+  onRequestClose?: () => boolean | void;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -36,8 +37,13 @@ export const Modal: React.FC<ModalProps> = ({
   containerClassName = '',
   zIndex = 'z-50',
   closeOnBackdropClick = true,
+  onRequestClose,
 }) => {
-  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(isOpen, onClose);
+  const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(
+    isOpen,
+    onClose,
+    onRequestClose
+  );
 
   if (!isRendered) return null;
 

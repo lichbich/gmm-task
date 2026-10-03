@@ -623,4 +623,34 @@ html.dark .bg-slate-100 {
   will-change: filter, opacity, transform;
 }
 
+/* ==========================================================================
+   SMOOTH TOP-TO-BOTTOM FADE-IN REVEAL (FOR AI MESSAGES & TASK CARDS)
+   ========================================================================== */
+@keyframes fadeInDownSmooth {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+    filter: blur(4px);
+  }
+  50% {
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+}
+
+.animate-fade-in-down {
+  animation: fadeInDownSmooth 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform, filter;
+}
+
+.animate-task-card-reveal {
+  animation: fadeInDownSmooth 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  will-change: opacity, transform, filter;
+}
+
+
 

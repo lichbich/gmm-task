@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
-import { Task, TaskActivityLog, getUserRoleColorClass, getUserRoleInSpec } from '../types/task';
+import { Task, TaskActivityLog, getUserRoleColorClass, getUserRoleInSpec, formatDateOnlyDisplay } from '../types/task';
 import {
   X,
   MessageSquare,
@@ -975,6 +975,31 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Start Date & End Date Row if present */}
+            {(task.startDate || task.endDate) && (
+              <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+                <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                  <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-indigo-500" />
+                    Ngày bắt đầu:
+                  </span>
+                  <div className="font-mono font-bold text-xs text-indigo-700 dark:text-indigo-300">
+                    {formatDateOnlyDisplay(task.startDate) || 'Chưa cập nhật'}
+                  </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                  <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-emerald-500" />
+                    {task.status === 'Done' ? 'Ngày hoàn thành:' : 'Hạn hoàn thành (Deadline):'}
+                  </span>
+                  <div className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                    {formatDateOnlyDisplay(task.endDate) || (task.status === 'Done' ? 'Hoàn thành' : 'Chưa đặt')}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Completion Progress Bar */}
