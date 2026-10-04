@@ -2692,31 +2692,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     };
 
-    // Targeted notification: Send to Admin, Leader & Advisor of toRole (excluding ticket creator)
+    // Targeted notification: Send ONLY to Leader & Advisor of toRole (excluding ticket creator)
     const targetUsers = users.filter((u) => {
       if (u.disabled || u.status === 'disabled') return false;
       if (u.account.toLowerCase() === newTicket.fromAccount.toLowerCase()) return false;
-      if (u.role === 'Admin') return true;
-      const isLeaderOrAdvisor = u.role === 'Leader' || u.role === 'Advisor';
+
+      // If toRole is explicitly Admin or Back Office, notify Admin users
+      if (isMatchRole('Admin', newTicket.toRole) || isMatchRole('Back Office', newTicket.toRole)) {
+        if (u.role === 'Admin' || isUserAdminOrPM(u)) return true;
+      }
+
       const userSpecs = [
         ...(u.specializations || []),
         ...((u as any).specialization ? [(u as any).specialization] : []),
       ];
       const matchesSpec = userSpecs.some((s) => isMatchRole(s, newTicket.toRole));
-      return isLeaderOrAdvisor && matchesSpec;
+      if (!matchesSpec) return false;
+
+      // Determine user's role specifically within this target specialization
+      const userSpecRole = u.specializationRoles
+        ? (Object.entries(u.specializationRoles).find(([k]) => isMatchRole(k, newTicket.toRole))?.[1] || u.role)
+        : u.role;
+
+      const isLeaderOrAdvisor = userSpecRole === 'Leader' || userSpecRole === 'Advisor';
+      return isLeaderOrAdvisor;
     });
 
-    // Fallback: If no specific Leader/Advisor for that role was matched, notify all Leaders/Advisors
+    // Fallback: If no specific Leader/Advisor for that role was matched, notify active members matching toRole
     const finalTargets =
       targetUsers.length > 0
         ? targetUsers
-        : users.filter(
-            (u) =>
-              !u.disabled &&
-              u.status !== 'disabled' &&
-              u.account.toLowerCase() !== newTicket.fromAccount.toLowerCase() &&
-              (u.role === 'Leader' || u.role === 'Advisor' || u.role === 'Admin')
-          );
+        : users.filter((u) => {
+            if (u.disabled || u.status === 'disabled') return false;
+            if (u.account.toLowerCase() === newTicket.fromAccount.toLowerCase()) return false;
+            const userSpecs = [
+              ...(u.specializations || []),
+              ...((u as any).specialization ? [(u as any).specialization] : []),
+            ];
+            return userSpecs.some((s) => isMatchRole(s, newTicket.toRole));
+          });
 
     finalTargets.forEach((user) => {
       sendPushNotification({
