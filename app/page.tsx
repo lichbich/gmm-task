@@ -15,6 +15,7 @@ import { ResourceManagerView } from '../components/ResourceManagerView';
 import { TaskModal } from '../components/TaskModal';
 import { TaskDetailModal } from '../components/TaskDetailModal';
 import { LoginModal } from '../components/LoginModal';
+import { QuickResourceFloatingButton } from '../components/QuickResourceFloatingButton';
 import { Task } from '../types/task';
 
 function MainApp() {
@@ -243,6 +244,11 @@ function MainApp() {
               </div>
             )}
           </main>
+
+          {/* Quick Resource Floating Action Button */}
+          <QuickResourceFloatingButton
+            onNavigateToResourceManager={() => handleSetActiveMainSection('resources')}
+          />
 
           {/* Task Creation / Edit Modal */}
           <TaskModal

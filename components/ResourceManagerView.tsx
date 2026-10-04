@@ -24,8 +24,14 @@ import {
   BookOpen,
   SlidersHorizontal,
   RotateCcw,
+  Star,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+import {
+  getPinnedResourceIds,
+  togglePinResourceId,
+  QUICK_RESOURCE_UPDATE_EVENT,
+} from '../lib/quickResourceHelper';
 
 const FigmaIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
   <svg className={className} viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -126,6 +132,22 @@ export const ResourceManagerView: React.FC = () => {
   const [selectedToolFilter, setSelectedToolFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'GRID' | 'TABLE'>('TABLE');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
+  // Quick resource pinned state
+  const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+
+  React.useEffect(() => {
+    setPinnedIds(getPinnedResourceIds(currentUser?.account));
+    const handleUpdate = () => setPinnedIds(getPinnedResourceIds(currentUser?.account));
+    window.addEventListener(QUICK_RESOURCE_UPDATE_EVENT, handleUpdate);
+    return () => window.removeEventListener(QUICK_RESOURCE_UPDATE_EVENT, handleUpdate);
+  }, [currentUser?.account]);
+
+  const handleTogglePin = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    togglePinResourceId(currentUser?.account, id);
+    setPinnedIds(getPinnedResourceIds(currentUser?.account));
+  };
 
   const activeFilterCount =
     (selectedLevelFilter !== 'ALL' ? 1 : 0) + (selectedToolFilter !== 'ALL' ? 1 : 0);
@@ -510,7 +532,7 @@ export const ResourceManagerView: React.FC = () => {
                           className="bg-white border border-slate-200/90 rounded-2xl p-4 hover:border-indigo-300 hover:shadow-md transition-all space-y-3 flex flex-col justify-between group"
                         >
                           <div className="space-y-2">
-                            {/* Top row: Tool badge & Admin actions */}
+                            {/* Top row: Tool badge & Pin / Admin actions */}
                             <div className="flex items-center justify-between gap-2">
                               <span
                                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${toolStyle.badge}`}
@@ -519,24 +541,43 @@ export const ResourceManagerView: React.FC = () => {
                                 {r.tool || 'Tài liệu'}
                               </span>
 
-                              {canManage && (
-                                <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition">
-                                  <button
-                                    onClick={() => handleOpenEditModal(r)}
-                                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition"
-                                    title="Chỉnh sửa tài liệu"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDelete(r)}
-                                    className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
-                                    title="Xóa tài liệu"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              )}
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleTogglePin(r.id, e)}
+                                  className={`p-1.5 rounded-lg transition active:scale-90 cursor-pointer ${
+                                    pinnedIds.includes(r.id)
+                                      ? 'text-amber-500 bg-amber-50 hover:bg-amber-100 border border-amber-200'
+                                      : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50/50'
+                                  }`}
+                                  title={pinnedIds.includes(r.id) ? 'Bỏ ghim khỏi Quick Links' : 'Ghim vào Quick Links'}
+                                >
+                                  <Star
+                                    className={`w-3.5 h-3.5 ${
+                                      pinnedIds.includes(r.id) ? 'fill-amber-400 text-amber-500' : ''
+                                    }`}
+                                  />
+                                </button>
+
+                                {canManage && (
+                                  <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition">
+                                    <button
+                                      onClick={() => handleOpenEditModal(r)}
+                                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition"
+                                      title="Chỉnh sửa tài liệu"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDelete(r)}
+                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
+                                      title="Xóa tài liệu"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Resource Name */}
@@ -629,24 +670,39 @@ export const ResourceManagerView: React.FC = () => {
                         </span>
                       </div>
 
-                      {canManage && (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleOpenEditModal(r)}
-                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-white rounded-lg transition border border-slate-200/60"
-                            title="Sửa tài liệu"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(r)}
-                            className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-white rounded-lg transition border border-slate-200/60"
-                            title="Xóa tài liệu"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => handleTogglePin(r.id, e)}
+                          className={`p-1.5 rounded-lg transition active:scale-90 border ${
+                            pinnedIds.includes(r.id)
+                              ? 'text-amber-500 bg-amber-50 border-amber-200'
+                              : 'text-slate-400 hover:text-amber-500 hover:bg-white border-slate-200/60'
+                          }`}
+                          title={pinnedIds.includes(r.id) ? 'Bỏ ghim' : 'Ghim link'}
+                        >
+                          <Star className={`w-3.5 h-3.5 ${pinnedIds.includes(r.id) ? 'fill-amber-400' : ''}`} />
+                        </button>
+
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={() => handleOpenEditModal(r)}
+                              className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-white rounded-lg transition border border-slate-200/60"
+                              title="Sửa tài liệu"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(r)}
+                              className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-white rounded-lg transition border border-slate-200/60"
+                              title="Xóa tài liệu"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     <div>
@@ -709,11 +765,9 @@ export const ResourceManagerView: React.FC = () => {
                   <th className="py-3 px-3 text-center w-28 whitespace-nowrap">TOOL</th>
                   <th className="py-3 px-4 min-w-[180px]">LINK (BREAK DOWN) - ƯU TIÊN</th>
                   <th className="py-3 px-4 min-w-[180px]">LINK (ORIGIN) - ĐẶC BIỆT</th>
-                  {canManage && (
-                    <th className="py-3 px-4 text-center w-24 sticky right-0 bg-slate-100 border-l border-slate-200 z-10 shadow-sm text-slate-800 whitespace-nowrap">
-                      THAO TÁC
-                    </th>
-                  )}
+                  <th className="py-3 px-4 text-center w-24 sticky right-0 bg-slate-100 border-l border-slate-200 z-10 shadow-sm text-slate-800 whitespace-nowrap">
+                    THAO TÁC
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
@@ -779,26 +833,41 @@ export const ResourceManagerView: React.FC = () => {
                             <span className="text-slate-400 italic text-[11px]">Không có link</span>
                           )}
                         </td>
-                        {canManage && (
-                          <td className="py-3 px-4 text-center sticky right-0 bg-white group-hover:bg-slate-50 border-l border-slate-200 z-10 shadow-sm">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => handleOpenEditModal(r)}
-                                className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                                title="Sửa tài liệu"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(r)}
-                                className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                title="Xóa tài liệu"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        )}
+                        <td className="py-3 px-4 text-center sticky right-0 bg-white group-hover:bg-slate-50 border-l border-slate-200 z-10 shadow-sm">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => handleTogglePin(r.id, e)}
+                              className={`p-1.5 rounded-lg transition active:scale-90 ${
+                                pinnedIds.includes(r.id)
+                                  ? 'text-amber-500 bg-amber-50 hover:bg-amber-100'
+                                  : 'text-slate-400 hover:text-amber-500 hover:bg-slate-100'
+                              }`}
+                              title={pinnedIds.includes(r.id) ? 'Bỏ ghim khỏi Quick Links' : 'Ghim vào Quick Links'}
+                            >
+                              <Star className={`w-3.5 h-3.5 ${pinnedIds.includes(r.id) ? 'fill-amber-400' : ''}`} />
+                            </button>
+
+                            {canManage && (
+                              <>
+                                <button
+                                  onClick={() => handleOpenEditModal(r)}
+                                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                                  title="Sửa tài liệu"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(r)}
+                                  className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                  title="Xóa tài liệu"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })
