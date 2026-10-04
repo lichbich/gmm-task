@@ -12,6 +12,7 @@ import {
   getUserRoleColorClass,
   isUserPM,
   isUserAdminOrPM,
+  getTodayDateOnlyString,
 } from '../types/task';
 import { TaskModal } from './TaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
@@ -525,13 +526,44 @@ export const MilestonesView: React.FC = () => {
     return 2;
   };
 
+  // Deduplicate tasks by root task ID for Milestone & Ad-hoc views, picking the latest active version
+  const deduplicateTasksForMilestoneView = (taskList: Task[]): Task[] => {
+    const rootMap = new Map<string, Task>();
+
+    taskList.forEach((t) => {
+      const rootId = t.parentTaskId || t.id;
+      const existing = rootMap.get(rootId);
+
+      if (!existing) {
+        rootMap.set(rootId, t);
+      } else {
+        // Pick the version with higher weekNumber or newer updatedAt
+        const weekCurr = t.weekNumber || 0;
+        const weekExisting = existing.weekNumber || 0;
+        if (weekCurr > weekExisting) {
+          rootMap.set(rootId, t);
+        } else if (weekCurr === weekExisting) {
+          const timeCurr = t.updatedAt ? new Date(t.updatedAt).getTime() : 0;
+          const timeExisting = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+          if (timeCurr >= timeExisting) {
+            rootMap.set(rootId, t);
+          }
+        }
+      }
+    });
+
+    return Array.from(rootMap.values());
+  };
+
   // Filtered milestones and adhoc tasks
   const filteredMilestones = milestones
     .filter(isMilestoneRoleMatch)
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
-  const filteredAdhocTasks = tasks.filter(
-    (t) => (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) && isTaskRoleMatch(t.role) && isTaskAssigneeMatch(t)
+  const filteredAdhocTasks = deduplicateTasksForMilestoneView(
+    tasks.filter(
+      (t) => (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) && isTaskRoleMatch(t.role) && isTaskAssigneeMatch(t)
+    )
   );
 
   const canManageMilestone = (ms: Milestone): boolean => {
@@ -587,6 +619,14 @@ export const MilestonesView: React.FC = () => {
     setEditingMilestoneId(null);
   };
 
+  // Helper to check if a task is fully Done in Milestone/Adhoc (Must be >= 100% progress)
+  const isTaskDoneInMilestone = (t: Task): boolean => {
+    if (t.completionPercentage !== undefined) {
+      return t.completionPercentage >= 100;
+    }
+    return t.status === 'Done';
+  };
+
   // Toggle Done checkbox: Completed tasks automatically pushed to bottom
   const handleToggleTaskDone = (t: Task) => {
     if (!canToggleTaskCheck(t)) {
@@ -600,12 +640,49 @@ export const MilestonesView: React.FC = () => {
       });
       return;
     }
-    const isDone = t.status === 'Done';
-    const newStatus: TaskStatus = isDone ? 'To do' : 'Done';
-    const newComp = isDone ? 0 : 100;
-    updateTask(t.id, {
-      status: newStatus,
-      completionPercentage: newComp,
+    const isDone = isTaskDoneInMilestone(t);
+    const todayStr = getTodayDateOnlyString();
+    const rootId = t.parentTaskId || t.id;
+    const relatedTasks = tasks.filter((item) => item.id === t.id || item.id === rootId || item.parentTaskId === rootId);
+
+    if (isDone) {
+      relatedTasks.forEach((item) => {
+        updateTask(item.id, {
+          status: 'In Progress',
+          completionPercentage: 0,
+          endDate: undefined,
+          updatedAt: new Date().toISOString(),
+        });
+      });
+    } else {
+      relatedTasks.forEach((item) => {
+        updateTask(item.id, {
+          status: 'Done',
+          completionPercentage: 100,
+          endDate: item.endDate || todayStr,
+          updatedAt: new Date().toISOString(),
+        });
+      });
+    }
+  };
+
+  const handleDeleteTaskFromMilestone = (t: Task) => {
+    confirmDialog({
+      title: 'Xác nhận xóa đầu việc',
+      message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"? Thao tác này không thể hoàn tác.`,
+      confirmText: 'Xác nhận xóa',
+      type: 'danger',
+      onConfirm: () => {
+        const rootId = t.parentTaskId || t.id;
+        const familyIds = tasks
+          .filter((item) => item.id === t.id || item.id === rootId || item.parentTaskId === rootId)
+          .map((item) => item.id);
+        if (familyIds.length > 1) {
+          deleteTasks(familyIds);
+        } else {
+          deleteTask(t.id);
+        }
+      },
     });
   };
 
@@ -618,8 +695,8 @@ export const MilestonesView: React.FC = () => {
     const currentMsTasks = tasks
       .filter((t) => t.milestoneId === milestoneId && isTaskRoleMatch(t.role))
       .sort((a, b) => {
-        const aDone = a.status === 'Done';
-        const bDone = b.status === 'Done';
+        const aDone = isTaskDoneInMilestone(a);
+        const bDone = isTaskDoneInMilestone(b);
         if (aDone !== bDone) return aDone ? 1 : -1;
         return (a.orderInMilestone || 0) - (b.orderInMilestone || 0);
       });
@@ -812,11 +889,15 @@ export const MilestonesView: React.FC = () => {
                 <span className="text-[9px] px-1.5 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-semibold shrink-0">
                   {t.role}
                 </span>
-                {isDone && (
+                {isDone ? (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold shrink-0">
                     Đã xong
                   </span>
-                )}
+                ) : (t.completionPercentage !== undefined && t.completionPercentage > 0) ? (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold shrink-0">
+                    Tiến độ: {t.completionPercentage}%
+                  </span>
+                ) : null}
               </div>
 
               {t.description && (
@@ -920,12 +1001,16 @@ export const MilestonesView: React.FC = () => {
               className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border ${
                 isDone
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                  : t.status === 'In Progress'
+                  : (t.completionPercentage && t.completionPercentage > 0) || t.status === 'In Progress'
                   ? 'bg-blue-50 text-blue-700 border-blue-300'
                   : 'bg-slate-100 text-slate-500 border-slate-300'
               }`}
             >
-              {t.status}
+              {isDone
+                ? 'Done'
+                : (t.completionPercentage && t.completionPercentage > 0)
+                ? `In Progress (${t.completionPercentage}%)`
+                : (t.status === 'Done' ? 'In Progress' : t.status)}
             </span>
 
             <button
@@ -977,13 +1062,7 @@ export const MilestonesView: React.FC = () => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    confirmDialog({
-                      title: 'Xác nhận xóa đầu việc',
-                      message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"? Thao tác này không thể hoàn tác.`,
-                      confirmText: 'Xác nhận xóa',
-                      type: 'danger',
-                      onConfirm: () => deleteTask(t.id),
-                    });
+                    handleDeleteTaskFromMilestone(t);
                   }}
                   className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
                   title="Xóa task"
@@ -1076,12 +1155,16 @@ export const MilestonesView: React.FC = () => {
               className={`px-2 py-0.5 text-[10px] font-bold rounded-full border shrink-0 ${
                 isDone
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                  : t.status === 'In Progress'
+                  : (t.completionPercentage && t.completionPercentage > 0) || t.status === 'In Progress'
                   ? 'bg-blue-50 text-blue-700 border-blue-300'
                   : 'bg-slate-100 text-slate-500 border-slate-300'
               }`}
             >
-              {t.status}
+              {isDone
+                ? 'Done'
+                : (t.completionPercentage && t.completionPercentage > 0)
+                ? `${t.completionPercentage}%`
+                : (t.status === 'Done' ? 'In Progress' : t.status)}
             </span>
           </div>
 
@@ -1214,13 +1297,7 @@ export const MilestonesView: React.FC = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      confirmDialog({
-                        title: 'Xác nhận xóa đầu việc',
-                        message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"?`,
-                        confirmText: 'Xác nhận xóa',
-                        type: 'danger',
-                        onConfirm: () => deleteTask(t.id),
-                      });
+                      handleDeleteTaskFromMilestone(t);
                     }}
                     className="p-1.5 bg-slate-100 text-slate-400 hover:text-red-500 rounded-lg active:scale-95"
                     title="Xóa task"
@@ -1525,11 +1602,13 @@ export const MilestonesView: React.FC = () => {
             filteredMilestones.map((ms, index) => {
               const msOrderNumber = index + 1;
               const displayTitle = formatMilestoneTitle(ms.title, msOrderNumber);
-              const msTasksAll = tasks.filter(
-                (t) => t.milestoneId === ms.id && isTaskRoleMatch(t.role) && isTaskAssigneeMatch(t)
+              const msTasksAll = deduplicateTasksForMilestoneView(
+                tasks.filter(
+                  (t) => t.milestoneId === ms.id && isTaskRoleMatch(t.role) && isTaskAssigneeMatch(t)
+                )
               );
-              const activeMsTasks = sortActiveTasks(msTasksAll.filter((t) => t.status !== 'Done'));
-              const doneMsTasks = msTasksAll.filter((t) => t.status === 'Done');
+              const activeMsTasks = sortActiveTasks(msTasksAll.filter((t) => !isTaskDoneInMilestone(t)));
+              const doneMsTasks = msTasksAll.filter((t) => isTaskDoneInMilestone(t));
 
               const totalHours = msTasksAll.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0);
               const doneCount = doneMsTasks.length;
@@ -1855,8 +1934,8 @@ export const MilestonesView: React.FC = () => {
 
       {/* TAB 2: AD-HOC & UNASSIGNED MILESTONE TASKS VIEW */}
       {subTab === 'ADHOC' && (() => {
-        const adhocActiveTasks = sortActiveTasks(filteredAdhocTasks.filter((t) => t.status !== 'Done'));
-        const adhocDoneTasks = filteredAdhocTasks.filter((t) => t.status === 'Done');
+        const adhocActiveTasks = sortActiveTasks(filteredAdhocTasks.filter((t) => !isTaskDoneInMilestone(t)));
+        const adhocDoneTasks = filteredAdhocTasks.filter((t) => isTaskDoneInMilestone(t));
         const isAdhocDoneCollapsed = !expandedDoneSections.has('adhoc');
 
         return (

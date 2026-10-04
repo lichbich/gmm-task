@@ -198,6 +198,16 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (!t.assigneeAccount || t.assigneeAccount.trim() === '') return false;
       if ((t.completionPercentage !== undefined && t.completionPercentage >= 100) || (t.status === 'Done' && (t.completionPercentage === undefined || t.completionPercentage >= 100))) return false; // Unfinished tasks only
 
+      // Filter out tasks that have ALREADY been transferred to nextWeek
+      const rootId = t.parentTaskId || t.id;
+      const alreadyTransferred = tasks.some(
+        (nt) =>
+          nt.weekNumber === nextWeek &&
+          nt.year === selectedYear &&
+          (nt.parentTaskId === rootId || nt.id === rootId)
+      );
+      if (alreadyTransferred) return false;
+
       if (isUserAdminOrPM(currentUser)) {
         // sees all
       } else if (currentUser?.role === 'Member') {
@@ -212,7 +222,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
       return true;
     });
-  }, [tasks, selectedWeek, selectedYear, currentUser, roleFilter, users]);
+  }, [tasks, selectedWeek, selectedYear, nextWeek, currentUser, roleFilter, users]);
 
   // Group unfinished tasks by Member (Assignee) for crystal-clear clarity for Leaders & Admin
   const unfinishedTasksByMember = React.useMemo(() => {
@@ -337,34 +347,74 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     Math.round(nextWeekAssignedTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0) * 100) / 100;
 
   const handleTransferToNextWeek = (t: Task) => {
-    updateTask(t.id, {
+    // Check if continuation task already exists in nextWeek
+    const rootId = t.parentTaskId || t.id;
+    const existingInNextWeek = tasks.find(
+      (nt) =>
+        nt.weekNumber === nextWeek &&
+        nt.year === selectedYear &&
+        (nt.parentTaskId === rootId || nt.id === rootId)
+    );
+    if (existingInNextWeek) {
+      return; // Already transferred
+    }
+
+    // Create a continuation task for nextWeek while preserving original task in selectedWeek
+    const nextWeekTask: Task = {
+      ...t,
+      id: `tsk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      parentTaskId: rootId,
       weekNumber: nextWeek,
+      year: selectedYear,
       actualEffort: 0,
       status: (t.completionPercentage && t.completionPercentage > 0) ? 'In Progress' : 'To do',
       lastSubmittedAt: undefined,
       isSubmittedLate: undefined,
+      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    });
+      activityLogs: [
+        ...(t.activityLogs || []),
+        {
+          id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          timestamp: new Date().toISOString(),
+          authorName: currentUser?.name || 'Leader',
+          authorAccount: currentUser?.account || 'leader',
+          authorRole: currentUser?.role || 'Leader',
+          actionType: 'GENERAL_UPDATE',
+          summary: `Được tiếp nối từ Tuần ${selectedWeek} sang Tuần ${nextWeek} (Tiến độ: ${t.completionPercentage || 0}%)`,
+        },
+      ],
+    };
+
+    addTask(nextWeekTask);
   };
 
   const handleUndoTransfer = (t: Task) => {
-    updateTask(t.id, {
-      weekNumber: selectedWeek,
-      updatedAt: new Date().toISOString(),
-    });
+    if (t.parentTaskId) {
+      deleteTask(t.id);
+    } else {
+      updateTask(t.id, {
+        weekNumber: selectedWeek,
+        updatedAt: new Date().toISOString(),
+      });
+    }
   };
 
   const handleUndoNextWeekTask = (t: Task) => {
     confirmDialog({
       title: 'Hoàn tác chuyển task',
-      message: `Bạn có chắc muốn chuyển task "${t.title}" quay trở lại Tuần ${selectedWeek}?`,
+      message: `Bạn có chắc muốn hủy chuyển task "${t.title}" sang Tuần ${nextWeek}? Dữ liệu và báo cáo ở Tuần ${selectedWeek} vẫn được bảo toàn nguyên vẹn.`,
       type: 'warning',
-      confirmText: `Hoàn tác về Tuần ${selectedWeek}`,
+      confirmText: `Hủy kế hoạch Tuần ${nextWeek}`,
       onConfirm: () => {
-        updateTask(t.id, {
-          weekNumber: selectedWeek,
-          updatedAt: new Date().toISOString(),
-        });
+        if (t.parentTaskId) {
+          deleteTask(t.id);
+        } else {
+          updateTask(t.id, {
+            weekNumber: selectedWeek,
+            updatedAt: new Date().toISOString(),
+          });
+        }
       },
     });
   };

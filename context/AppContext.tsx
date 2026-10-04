@@ -2005,15 +2005,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateTaskNotes = (taskId: string, notes: string, options?: UpdateTaskNotesOptions) => {
-    updateTask(taskId, { notes });
-    markNoteAsRead(taskId, notes);
+    const task = tasks.find((t) => t.id === taskId);
+    const rootId = task?.parentTaskId || taskId;
+    const relatedTasks = tasks.filter((t) => t.id === taskId || t.id === rootId || t.parentTaskId === rootId);
+    relatedTasks.forEach((t) => {
+      updateTask(t.id, { notes }, { skipLog: t.id !== taskId });
+      markNoteAsRead(t.id, notes);
+    });
 
     // If this is a recall, edit, or explicit skip -> DO NOT dispatch any notifications!
     if (options?.skipNotification || options?.isRecall || options?.isEdit) {
       return;
     }
 
-    const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
 
     const currentAccount = (authSession?.account || '').trim().toLowerCase();
@@ -2470,13 +2474,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Unfinished tasks (completionPercentage < 100%) in selectedWeek are directly transferred to nextWeek
     // maintaining the exact same unique task ID (NO task cloning, NO duplicate task records).
     const newTasksList = tasks.map((t) => {
+      const isFinished = (t.completionPercentage !== undefined && t.completionPercentage >= 100) || (t.completionPercentage === undefined && t.status === 'Done');
       if (
         t.weekNumber === selectedWeek &&
         t.year === selectedYear &&
         ((t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
           (t.supporterAccounts && t.supporterAccounts.length > 0)) &&
-        (t.completionPercentage === undefined || t.completionPercentage < 100) &&
-        t.status !== 'Done'
+        !isFinished
       ) {
         return {
           ...t,
