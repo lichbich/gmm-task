@@ -47,11 +47,14 @@ const getRoleOrderRank = (roleCode?: string): number => {
   const normalized = roleCode.trim().toLowerCase();
   if (normalized === 'ba') return 1;
   if (normalized === 'designer' || normalized === 'design') return 2;
-  if (normalized === 'fe') return 3;
-  if (normalized === 'be') return 4;
-  if (normalized === 'devops') return 5;
-  if (normalized === 'ai') return 6;
-  if (normalized === 'po') return 7;
+  if (normalized === 'fe' || normalized === 'frontend') return 3;
+  if (normalized === 'be' || normalized === 'backend') return 4;
+  if (normalized === 'qa' || normalized === 'qc' || normalized === 'tester') return 5;
+  if (normalized === 'devops') return 6;
+  if (normalized === 'ai') return 7;
+  if (normalized === 'po') return 8;
+  if (normalized === 'sa') return 9;
+  if (normalized === 'pm') return 10;
   return 100;
 };
 
@@ -84,6 +87,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
+
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [expandedMembers, setExpandedMembers] = useState<Record<string, boolean>>({});
@@ -171,18 +175,17 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   const pendingRequests = React.useMemo(() => {
     return tasks.filter((t) => {
       if (t.assignmentRequestStatus !== 'PENDING') return false;
-      if (isUserAdminOrPM(currentUser)) return true;
-      if (currentUser?.role === 'Member') {
-        // Members see their own pending requests
-        return t.assignmentRequestedBy === currentUser.account;
+      if (isUserAdminOrPM(currentUser)) {
+        // sees all
+      } else if (currentUser?.role === 'Member') {
+        if (t.assignmentRequestedBy !== currentUser.account) return false;
+      } else if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
+        if (!isTaskInMyTeamScope(t)) return false;
       }
-      if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
-        // Leader / Advisor sees requests in their role / team only
-        return isTaskInMyTeamScope(t);
-      }
-      return true; // Admin/PM sees all
+      if (roleFilter !== 'ALL' && !isSpecializationMatchingRole(t.role, roleFilter)) return false;
+      return true;
     });
-  }, [tasks, currentUser, users]);
+  }, [tasks, currentUser, roleFilter, users]);
 
   // 1.5. Current Week Unfinished Tasks (Incomplete tasks belonging strictly to selectedWeek)
   const currentWeekUnfinishedTasks = React.useMemo(() => {
@@ -192,18 +195,21 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (!t.assigneeAccount || t.assigneeAccount.trim() === '') return false;
       if ((t.completionPercentage !== undefined && t.completionPercentage >= 100) || (t.status === 'Done' && (t.completionPercentage === undefined || t.completionPercentage >= 100))) return false; // Unfinished tasks only
 
-      if (isUserAdminOrPM(currentUser)) return true;
-      if (currentUser?.role === 'Member') {
+      if (isUserAdminOrPM(currentUser)) {
+        // sees all
+      } else if (currentUser?.role === 'Member') {
         const isPrimary = t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
         const isSupporter = t.supporterAccounts?.some((sp) => sp.toLowerCase() === currentUser.account.toLowerCase());
-        return Boolean(isPrimary || isSupporter);
+        if (!isPrimary && !isSupporter) return false;
+      } else if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
+        if (!isTaskInMyTeamScope(t)) return false;
       }
-      if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
-        return isTaskInMyTeamScope(t);
-      }
-      return true; // Admin/PM sees all
+
+      if (roleFilter !== 'ALL' && !isSpecializationMatchingRole(t.role, roleFilter)) return false;
+
+      return true;
     });
-  }, [tasks, selectedWeek, selectedYear, currentUser, users]);
+  }, [tasks, selectedWeek, selectedYear, currentUser, roleFilter, users]);
 
   // Group unfinished tasks by Member (Assignee) for crystal-clear clarity for Leaders & Admin
   const unfinishedTasksByMember = React.useMemo(() => {
@@ -320,14 +326,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
       if (roleFilter !== 'ALL' && !isSpecializationMatchingRole(t.role, roleFilter)) return false;
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        if (!t.title.toLowerCase().includes(q)) return false;
-      }
-
       return true;
     });
-  }, [tasks, currentUser, roleFilter, searchQuery]);
+  }, [tasks, currentUser, roleFilter]);
 
   const totalNextWeekEffort =
     Math.round(nextWeekAssignedTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0) * 100) / 100;
@@ -405,6 +406,14 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
     const groups = Array.from(map.values());
     groups.sort((a, b) => a.order - b.order);
+    groups.forEach((g) => {
+      g.tasks.sort((tA, tB) => {
+        const rankA = getRoleOrderRank(tA.role);
+        const rankB = getRoleOrderRank(tB.role);
+        if (rankA !== rankB) return rankA - rankB;
+        return (tA.orderInMilestone || 0) - (tB.orderInMilestone || 0);
+      });
+    });
     return groups;
   }, [unassignedMilestoneTasks, milestones]);
 
@@ -453,12 +462,31 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
             </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Action Buttons & Top Global Role Filter */}
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {/* Unified Role Filter Dropdown */}
+            {(isUserAdminOrPM(currentUser) || (currentUser?.specializations && currentUser.specializations.length > 1)) && (
+              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1 pl-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                <Filter className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <span className="text-xs text-slate-600 dark:text-slate-300 font-bold hidden sm:inline">Lọc Role:</span>
+                <Dropdown
+                  value={roleFilter}
+                  onChange={setRoleFilter}
+                  options={[
+                    { value: 'ALL', label: 'Tất cả Role' },
+                    ...(isUserAdminOrPM(currentUser)
+                      ? roles.map((r) => ({ value: r.code, label: `Role: ${r.code}` }))
+                      : (currentUser?.specializations || []).map((s) => ({ value: s, label: `Role: ${s}` }))),
+                  ]}
+                  buttonClassName="py-1.5 px-3 text-xs font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 rounded-lg shadow-2xs"
+                />
+              </div>
+            )}
+
             {isLeaderOrAdmin ? (
               <button
                 onClick={() => onOpenTaskModal(undefined, nextWeek)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95"
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Define & Phân Công Task Tuần {nextWeek}
@@ -466,7 +494,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
             ) : (
               <button
                 onClick={() => onOpenTaskModal(undefined, nextWeek, currentUser?.account)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95"
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Tự Tạo Task Cho Tôi (Tuần {nextWeek})
@@ -596,6 +624,11 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                   {unfinishedTasksByMember.length} thành viên
                 </span>
               )}
+              {roleFilter !== 'ALL' && (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
+                  Role: {roleFilter}
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Phân loại theo từng thành viên. Bấm nút chuyển để đưa các task chưa xong vào kế hoạch Tuần {nextWeek}.
@@ -618,8 +651,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
               <button
                 onClick={() => {
                   confirmDialog({
-                    title: `Đưa tất cả task làm dở vào kế hoạch Tuần ${nextWeek}`,
-                    message: `Bạn có chắc muốn đưa toàn bộ ${currentWeekUnfinishedTasks.length} task chưa hoàn thành từ Tuần ${selectedWeek} của ${unfinishedTasksByMember.length} thành viên vào kế hoạch Tuần ${nextWeek}? (Lịch sử làm việc Tuần ${selectedWeek} sẽ được bảo lưu nguyên vẹn).`,
+                    title: `Đưa tất cả task dở (${currentWeekUnfinishedTasks.length} task) vào kế hoạch Tuần ${nextWeek}`,
+                    message: `Bạn có chắc muốn đưa toàn bộ ${currentWeekUnfinishedTasks.length} task chưa hoàn thành từ Tuần ${selectedWeek}${roleFilter !== 'ALL' ? ` (thuộc Role ${roleFilter})` : ''} của ${unfinishedTasksByMember.length} thành viên vào kế hoạch Tuần ${nextWeek}?`,
                     type: 'info',
                     onConfirm: () => {
                       currentWeekUnfinishedTasks.forEach((t) => {
@@ -630,17 +663,34 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                 }}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
               >
-                <ArrowRight className="w-3.5 h-3.5" /> Chuyển tất cả sang Tuần {nextWeek}
+                <ArrowRight className="w-3.5 h-3.5" /> Chuyển tất cả ({currentWeekUnfinishedTasks.length}) sang Tuần {nextWeek}
               </button>
             </div>
           )}
         </div>
 
         {currentWeekUnfinishedTasks.length === 0 ? (
-          <div className="py-8 text-center bg-slate-50/60 dark:bg-slate-800/40 rounded-2xl text-xs text-slate-500 space-y-1.5 border border-dashed border-slate-200 dark:border-slate-700">
+          <div className="py-8 text-center bg-slate-50/60 dark:bg-slate-800/40 rounded-2xl text-xs text-slate-500 space-y-2 border border-dashed border-slate-200 dark:border-slate-700">
             <CheckCircle2 className="w-7 h-7 text-emerald-500 mx-auto" />
-            <p className="font-bold text-slate-700 dark:text-slate-200">Không có task làm dở nào ở Tuần {selectedWeek}!</p>
-            <p className="text-[11px] text-slate-400">Tất cả công việc đã được hoàn thành (Done) hoặc đã được đưa vào kế hoạch Tuần {nextWeek}.</p>
+            <p className="font-bold text-slate-700 dark:text-slate-200">
+              {roleFilter !== 'ALL'
+                ? `Không có task dở nào ở Tuần ${selectedWeek} thuộc Role "${roleFilter}"`
+                : `Không có task làm dở nào ở Tuần ${selectedWeek}!`}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              {roleFilter !== 'ALL'
+                ? 'Thử chọn Role khác từ bộ lọc bên trên.'
+                : `Tất cả công việc đã được hoàn thành (Done) hoặc đã được đưa vào kế hoạch Tuần ${nextWeek}.`}
+            </p>
+            {roleFilter !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setRoleFilter('ALL')}
+                className="px-3 py-1 bg-amber-50 text-amber-700 border border-amber-300 rounded-lg text-xs font-bold hover:bg-amber-100 transition cursor-pointer"
+              >
+                Xem tất cả Role
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -1338,8 +1388,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
             </div>
             <p className="text-xs text-slate-500 mt-1">
               {isLeaderOrAdmin
-                ? `Leader/Admin bấm "⚡ Phân Công Nhanh" để giao task từ từng Milestone cho thành viên thực hiện trong Tuần ${nextWeek}.`
-                : `Thành viên xem danh sách task theo từng Cột mốc và bấm "✋ Xin Nhận Task" để đăng ký việc cho Tuần ${nextWeek}.`}
+                ? `Lọc theo Role để phân công task từ từng Milestone cho thành viên thực hiện trong Tuần ${nextWeek}.`
+                : `Thành viên lọc theo Role chuyên môn và bấm "✋ Xin Nhận Task" để đăng ký việc cho Tuần ${nextWeek}.`}
             </p>
           </div>
 
@@ -1364,10 +1414,18 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         </div>
 
         {unassignedMilestoneTasks.length === 0 ? (
-          <div className="py-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs italic space-y-1.5">
+          <div className="py-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs italic space-y-2">
             <FolderOpen className="w-8 h-8 text-slate-300 mx-auto" />
-            <p className="font-semibold text-slate-600">Không có task Milestone chưa giao nào phù hợp với bộ lọc.</p>
-            <p className="text-[11px] text-slate-400">Tất cả các task thuộc Milestone đã được phân công hoặc chưa được tạo.</p>
+            <p className="font-semibold text-slate-600">
+              {roleFilter !== 'ALL'
+                ? `Không có task Milestone chưa giao nào thuộc Role "${roleFilter}".`
+                : 'Không có task Milestone chưa giao nào phù hợp với bộ lọc.'}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              {roleFilter !== 'ALL'
+                ? 'Thử chọn Role khác từ bộ lọc bên trên.'
+                : 'Tất cả các task thuộc Milestone đã được phân công hoặc chưa được tạo.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
