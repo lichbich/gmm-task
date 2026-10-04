@@ -338,10 +338,10 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 </div>
               </div>
 
-              {/* Supporters row if any */}
+              {/* Collab row if any */}
               {task.supporterAccounts && task.supporterAccounts.length > 0 && (
                 <div className="pt-2 border-t border-slate-200/80">
-                  <span className="text-slate-500 block text-[11px] mb-1">Người hỗ trợ (Supporters):</span>
+                  <span className="text-slate-500 block text-[11px] mb-1">Thành viên Collab (Hợp tác):</span>
                   <div className="flex flex-wrap gap-1.5">
                     {task.supporterAccounts.map((supAcc) => {
                       const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
@@ -359,7 +359,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                           />
                           <span>{supUser?.name || supAcc}</span>
                           <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-indigo-100 text-indigo-700">
-                            Supporter
+                            Collab
                           </span>
                         </span>
                       );

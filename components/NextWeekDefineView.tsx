@@ -7,6 +7,7 @@ import { TaskDetailModal } from './TaskDetailModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
 import { UserAvatar } from './common/UserAvatar';
+import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { getWeekDateRangeStr } from './WorkHistoryView';
 import {
   ClipboardList,
@@ -852,18 +853,27 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                               {/* Assignee & Action Section */}
                               <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
                                 {/* Full Assignee Info Row - NEVER clipped! */}
-                                <div className="flex items-center justify-between gap-2 text-xs">
+                                <div className="flex items-center justify-between gap-2 text-xs flex-wrap">
                                   <span className="text-slate-400 dark:text-slate-500 font-medium">Thành viên phụ trách:</span>
-                                  <div className="flex items-center gap-1.5">
-                                    <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                      {t.assigneeAccount ? t.assigneeAccount.slice(0, 2).toUpperCase() : '??'}
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                        {t.assigneeAccount ? t.assigneeAccount.slice(0, 2).toUpperCase() : '??'}
+                                      </div>
+                                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                                        {displayName}
+                                      </span>
+                                      <span className="font-mono text-indigo-600 dark:text-indigo-400 text-[11px]">
+                                        (@{t.assigneeAccount})
+                                      </span>
                                     </div>
-                                    <span className="font-bold text-slate-800 dark:text-slate-200">
-                                      {displayName}
-                                    </span>
-                                    <span className="font-mono text-indigo-600 dark:text-indigo-400 text-[11px]">
-                                      (@{t.assigneeAccount})
-                                    </span>
+                                    {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                                      <TaskSupportersBadge
+                                        supporterAccounts={t.supporterAccounts}
+                                        users={users}
+                                        size="xs"
+                                      />
+                                    )}
                                   </div>
                                 </div>
 
@@ -1124,13 +1134,24 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                     </td>
 
                                     <td className="py-3 px-3">
-                                      <div className="flex items-center gap-1.5 text-xs">
-                                        <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                          {t.assigneeAccount.slice(0, 2)}
+                                      <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1.5 text-xs">
+                                          <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                            {t.assigneeAccount.slice(0, 2)}
+                                          </div>
+                                          <span className={`font-semibold ${isMyTask ? 'text-indigo-700 font-bold' : 'text-slate-700'}`}>
+                                            {t.assigneeAccount} {isMyTask && '(Tôi)'}
+                                          </span>
                                         </div>
-                                        <span className={`font-semibold ${isMyTask ? 'text-indigo-700 font-bold' : 'text-slate-700'}`}>
-                                          {t.assigneeAccount} {isMyTask && '(Tôi)'}
-                                        </span>
+                                        {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                                          <div className="pt-0.5">
+                                            <TaskSupportersBadge
+                                              supporterAccounts={t.supporterAccounts}
+                                              users={users}
+                                              size="xs"
+                                            />
+                                          </div>
+                                        )}
                                       </div>
                                     </td>
 
@@ -1303,12 +1324,19 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                     )}
 
                                     <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 gap-2">
-                                      <div className="text-[11px] text-slate-500">
+                                      <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
                                         👤 <strong className={isMyTask ? 'text-indigo-600 font-bold' : 'text-slate-700'}>
                                           {t.assigneeAccount} {isMyTask && '(Tôi)'}
                                         </strong>
-                                        <span className="mx-1.5">•</span>
+                                        <span className="mx-1">•</span>
                                         Est: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong>
+                                        {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                                          <TaskSupportersBadge
+                                            supporterAccounts={t.supporterAccounts}
+                                            users={users}
+                                            size="xs"
+                                          />
+                                        )}
                                       </div>
 
                                       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>

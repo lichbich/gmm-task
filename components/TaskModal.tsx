@@ -1079,26 +1079,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   )}
                 </div>
 
-                {/* Supporter Accounts Section (Multi-select supporters with tag) */}
+                {/* Supporter/Collab Accounts Section (Multi-select collaborators with tag) */}
                 <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 rounded-2xl space-y-2.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                      <span>Người Hỗ Trợ Task (Supporter):</span>
+                      <span>Thành viên Collab (Hợp tác làm cùng):</span>
                     </label>
                     <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                      Hiển thị trên bảng công việc của cả người phụ trách và supporters
+                      Tính effort và hiển thị trên bảng của người Collab
                     </span>
                   </div>
 
-                  {/* Add Supporter Dropdown */}
+                  {/* Add Collab Dropdown */}
                   <Dropdown
                     value=""
                     onChange={(selectedAcc) => {
                       if (selectedAcc) handleToggleSupporter(selectedAcc);
                     }}
                     options={[
-                      { value: '', label: '+ Thêm người hỗ trợ (Chọn thành viên)...' },
+                      { value: '', label: '+ Thêm thành viên Collab (Chọn thành viên)...' },
                       ...eligibleSupporters
                         .filter((u) => !supporterAccounts.some((s) => s.toLowerCase() === u.account.toLowerCase()))
                         .map((u) => ({
@@ -1111,7 +1111,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     buttonClassName="py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-300/90 dark:border-slate-700"
                   />
 
-                  {/* Selected Supporters Tag Chips */}
+                  {/* Selected Collab Tag Chips */}
                   {supporterAccounts.length > 0 && (
                     <div className="flex flex-wrap gap-2 pt-1">
                       {supporterAccounts.map((supAcc) => {
@@ -1137,13 +1137,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               </span>
                             </div>
                             <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 ml-0.5">
-                              Supporter
+                              Collab
                             </span>
                             <button
                               type="button"
                               onClick={() => handleToggleSupporter(supAcc)}
                               className="ml-1 p-0.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                              title={`Bỏ hỗ trợ @${supAcc}`}
+                              title={`Bỏ Collab @${supAcc}`}
                             >
                               <X className="w-3 h-3" />
                             </button>

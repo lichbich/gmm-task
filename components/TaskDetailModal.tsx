@@ -947,16 +947,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Supporters Card (If supporters are assigned to this task) */}
+            {/* Collab Card (If collaborators are assigned to this task) */}
             {task.supporterAccounts && task.supporterAccounts.length > 0 && (
               <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Người hỗ trợ (Supporter):</span>
+                    <span>Thành viên Collab:</span>
                   </span>
                   <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
-                    {task.supporterAccounts.length} người hỗ trợ
+                    {task.supporterAccounts.length} thành viên
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -7,6 +7,7 @@ import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
+import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import {
   History,
   FolderArchive,
@@ -191,7 +192,11 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     
     // Also include tasks currently assigned to this week
     const currentWeekTasks = tasks.filter(
-      (t) => t.weekNumber === activeArchive.weekNumber && t.year === activeArchive.year && t.assigneeAccount && t.assigneeAccount.trim() !== ''
+      (t) =>
+        t.weekNumber === activeArchive.weekNumber &&
+        t.year === activeArchive.year &&
+        ((t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
+          (t.supporterAccounts && t.supporterAccounts.length > 0))
     );
 
     const map = new Map<string, Task>();
@@ -204,7 +209,10 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
 
     // EXCLUDE 0% & 0h unworked tasks from historical log display
     return Array.from(map.values()).filter(
-      (t) => t.assigneeAccount && t.assigneeAccount.trim() !== '' && !isTaskUnworked(t)
+      (t) =>
+        ((t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
+          (t.supporterAccounts && t.supporterAccounts.length > 0)) &&
+        !isTaskUnworked(t)
     );
   }, [activeArchive, tasks]);
 
@@ -216,8 +224,9 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
         const q = searchQuery.toLowerCase();
         const matchTitle = t.title.toLowerCase().includes(q);
         const matchAssignee = (t.assigneeAccount || '').toLowerCase().includes(q);
+        const matchSupporter = (t.supporterAccounts || []).some((sp) => sp.toLowerCase().includes(q));
         const matchRole = t.role.toLowerCase().includes(q);
-        if (!matchTitle && !matchAssignee && !matchRole) return false;
+        if (!matchTitle && !matchAssignee && !matchRole && !matchSupporter) return false;
       }
       return true;
     });
@@ -543,21 +552,32 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                 </td>
 
                                 <td className="py-3 px-3">
-                                  <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-                                    <UserAvatar
-                                      user={users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase())}
-                                      account={t.assigneeAccount}
-                                      size="xs"
-                                      shape="circle"
-                                    />
-                                    {(() => {
-                                      const assigneeUser = users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase());
-                                      return (
-                                        <span className={`truncate ${t.assigneeAccount ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}`}>
-                                          {t.assigneeAccount || 'Chưa phân công'}
-                                        </span>
-                                      );
-                                    })()}
+                                  <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
+                                      <UserAvatar
+                                        user={users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase())}
+                                        account={t.assigneeAccount}
+                                        size="xs"
+                                        shape="circle"
+                                      />
+                                      {(() => {
+                                        const assigneeUser = users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase());
+                                        return (
+                                          <span className={`truncate ${t.assigneeAccount ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}`}>
+                                            {t.assigneeAccount || 'Chưa phân công'}
+                                          </span>
+                                        );
+                                      })()}
+                                    </div>
+                                    {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                                      <div className="pt-0.5">
+                                        <TaskSupportersBadge
+                                          supporterAccounts={t.supporterAccounts}
+                                          users={users}
+                                          size="xs"
+                                        />
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
 
@@ -710,21 +730,30 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                               </h4>
 
                               <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-700/80">
-                                <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                                  <UserAvatar
-                                    user={users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase())}
-                                    account={t.assigneeAccount}
-                                    size="xs"
-                                    shape="circle"
-                                  />
-                                  {(() => {
-                                    const assigneeUser = users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase());
-                                    return (
-                                      <span className={t.assigneeAccount ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}>
-                                        {t.assigneeAccount || 'Chưa phân công'}
-                                      </span>
-                                    );
-                                  })()}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                                    <UserAvatar
+                                      user={users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase())}
+                                      account={t.assigneeAccount}
+                                      size="xs"
+                                      shape="circle"
+                                    />
+                                    {(() => {
+                                      const assigneeUser = users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase());
+                                      return (
+                                        <span className={t.assigneeAccount ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}>
+                                          {t.assigneeAccount || 'Chưa phân công'}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
+                                  {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                                    <TaskSupportersBadge
+                                      supporterAccounts={t.supporterAccounts}
+                                      users={users}
+                                      size="xs"
+                                    />
+                                  )}
                                 </div>
 
                                 <div className="flex items-center gap-2">

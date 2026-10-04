@@ -9,6 +9,7 @@ import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
+import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import {
   AlertTriangle,
   Award,
@@ -16,6 +17,7 @@ import {
   Edit2,
   MessageSquare,
   UserX,
+  Users,
   Clock,
   Flag,
   FolderOpen,
@@ -450,20 +452,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
             </div>
           </div>
 
-          {/* Supporter Chips on Kanban card if any */}
+          {/* Supporter Pill on Kanban card if any */}
           {t.supporterAccounts && t.supporterAccounts.length > 0 && (
-            <div className="flex flex-wrap gap-1 items-center">
-              {t.supporterAccounts.map((supAcc) => (
-                <span
-                  key={supAcc}
-                  className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800 text-[9px] font-semibold text-indigo-700 dark:text-indigo-300"
-                  title={`Người hỗ trợ: @${supAcc}`}
-                >
-                  <span className="text-[8px] font-bold text-indigo-500">SP:</span>
-                  <span>{supAcc}</span>
-                </span>
-              ))}
-            </div>
+            <TaskSupportersBadge
+              supporterAccounts={t.supporterAccounts}
+              users={users}
+              size="xs"
+            />
           )}
         </div>
 

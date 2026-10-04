@@ -35,6 +35,7 @@ import {
   Lock,
   MessageSquare,
   UserX,
+  Users,
   Flag,
   FolderOpen,
   Trash2,
@@ -51,6 +52,7 @@ import { NextWeekDefineView } from './NextWeekDefineView';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
 import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
+import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { AssignTaskToMemberModal } from './common/AssignTaskToMemberModal';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { useModalAnimation } from '../hooks/useModalAnimation';
@@ -249,11 +251,12 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       });
       if (hasSpecMatch) return true;
 
-      // 2. Check if user has any tasks assigned under this role
+      // 2. Check if user has any tasks assigned under this role (as assignee or supporter)
       const hasTaskInRole = tasks.some(
         (t) =>
           isSpecializationMatchingRole(t.role, roleCode) &&
-          t.assigneeAccount?.toLowerCase() === u.account.toLowerCase()
+          (t.assigneeAccount?.toLowerCase() === u.account.toLowerCase() ||
+            (t.supporterAccounts && t.supporterAccounts.some((s) => s.toLowerCase() === u.account.toLowerCase())))
       );
       if (hasTaskInRole) return true;
 
@@ -401,7 +404,23 @@ const getRoleOrderRank = (roleCode?: string): number => {
         }
 
         if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-        if (selectedRole !== 'ALL' && t.role !== selectedRole) return false;
+        if (selectedRole !== 'ALL') {
+          const isTaskRole = isSpecializationMatchingRole(t.role, selectedRole);
+          const isSupporterInRole = Boolean(
+            t.supporterAccounts &&
+              t.supporterAccounts.some((supAcc) => {
+                const supUser = users.find((u) => u.account.trim().toLowerCase() === supAcc.trim().toLowerCase());
+                const supRoles =
+                  supUser?.specializations && supUser.specializations.length > 0
+                    ? supUser.specializations
+                    : supUser?.role
+                    ? [supUser.role]
+                    : [];
+                return supRoles.some((r) => isSpecializationMatchingRole(r, selectedRole));
+              })
+          );
+          if (!isTaskRole && !isSupporterInRole) return false;
+        }
         if (selectedAccount !== 'ALL') {
           const accLower = selectedAccount.toLowerCase();
           const isAssignee = Boolean(t.assigneeAccount && t.assigneeAccount.toLowerCase() === accLower);
@@ -420,7 +439,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
         return true;
       })
       .sort(sortByPriority);
-  }, [tasks, selectedWeek, selectedYear, subTab, currentUser, searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus, milestones]);
+  }, [tasks, selectedWeek, selectedYear, subTab, currentUser, searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus, milestones, users]);
 
   const ROLE_ORDER: Specialization[] = useMemo(() => {
     const sortedRoles = [...roles].sort((a, b) => {
@@ -531,24 +550,63 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
     ROLE_ORDER.forEach((r) => roleMap.set(r, []));
 
-    filteredTasks.forEach((t) => {
-      let targetKey = t.role;
-      if (!roleMap.has(targetKey)) {
-        for (const k of roleMap.keys()) {
-          if (k.toLowerCase() === (t.role || '').toLowerCase()) {
-            targetKey = k;
-            break;
-          }
+    const findMatchingRoleKey = (roleCode: string): string => {
+      if (roleMap.has(roleCode)) return roleCode;
+      for (const k of roleMap.keys()) {
+        if (isSpecializationMatchingRole(k, roleCode)) {
+          return k;
         }
       }
+      return roleCode;
+    };
 
-      const list = roleMap.get(targetKey);
+    filteredTasks.forEach((t) => {
+      // 1. Add to primary task role group
+      const primaryKey = findMatchingRoleKey(t.role);
+      const list = roleMap.get(primaryKey);
       if (list) {
-        list.push(t);
+        if (!list.some((item) => item.id === t.id)) {
+          list.push(t);
+        }
       } else {
         const existing = roleMap.get(t.role) || [];
-        existing.push(t);
+        if (!existing.some((item) => item.id === t.id)) {
+          existing.push(t);
+        }
         roleMap.set(t.role, existing);
+      }
+
+      // 2. Also add to Collab members' role groups so Collab tasks appear under their team/account!
+      if (t.supporterAccounts && t.supporterAccounts.length > 0) {
+        t.supporterAccounts.forEach((supAcc) => {
+          const cleanSupAcc = supAcc.trim();
+          if (t.assigneeAccount && cleanSupAcc.toLowerCase() === t.assigneeAccount.trim().toLowerCase()) return;
+          const supUser = users.find((u) => u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
+          if (!supUser) return;
+
+          const supRoles =
+            supUser.specializations && supUser.specializations.length > 0
+              ? supUser.specializations
+              : supUser.role
+              ? [supUser.role]
+              : [t.role];
+
+          supRoles.forEach((sRole) => {
+            const sKey = findMatchingRoleKey(sRole);
+            const sList = roleMap.get(sKey);
+            if (sList) {
+              if (!sList.some((item) => item.id === t.id)) {
+                sList.push(t);
+              }
+            } else {
+              const existing = roleMap.get(sRole) || [];
+              if (!existing.some((item) => item.id === t.id)) {
+                existing.push(t);
+              }
+              roleMap.set(sRole, existing);
+            }
+          });
+        });
       }
     });
 
@@ -565,7 +623,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
     });
 
     return groups;
-  }, [filteredTasks, ROLE_ORDER]);
+  }, [filteredTasks, ROLE_ORDER, users]);
 
   const [activeRoleInView, setActiveRoleInView] = useState<string>('');
   const [showFloatingRoleBar, setShowFloatingRoleBar] = useState<boolean>(false);
@@ -704,7 +762,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
   };
 
   // Reusable task row renderer
-  const renderTaskRow = (t: Task, displayIdx: number) => {
+  const renderTaskRow = (t: Task, displayIdx: number, forAccount?: string) => {
     const todayStr = getTodayDateOnlyString(simulatedTime);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
     const nowTime = new Date(simulatedTime).getTime();
@@ -854,44 +912,55 @@ const getRoleOrderRank = (roleCode?: string): number => {
         {/* Account & Supporters */}
         <td className="py-3 px-3 font-medium">
           <div className="space-y-1">
-            {t.assigneeAccount ? (() => {
-              const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
-              const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.role) : 'Member';
+            {(() => {
+              const currentAcc = forAccount || t.assigneeAccount;
+              if (currentAcc) {
+                const userObj = users.find((u) => u.account.toLowerCase() === currentAcc.toLowerCase());
+                const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
+                return (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <UserAvatar
+                        user={userObj}
+                        account={currentAcc}
+                        size="xs"
+                        shape="circle"
+                      />
+                      <span className={getUserRoleColorClass(userRole)}>{currentAcc}</span>
+                    </div>
+
+                    {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                      <div className="pt-0.5">
+                        <TaskSupportersBadge
+                          supporterAccounts={t.supporterAccounts}
+                          users={users}
+                          primaryAssignee={t.assigneeAccount}
+                          currentViewingAccount={forAccount}
+                          size="sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
-                <div className="flex items-center gap-1.5">
-                  <UserAvatar
-                    user={assigneeUser}
-                    account={t.assigneeAccount}
-                    size="xs"
-                    shape="circle"
-                  />
-                  <span className={getUserRoleColorClass(assigneeRole)}>{t.assigneeAccount}</span>
+                <div className="space-y-1">
+                  <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
+                    <UserX className="w-3.5 h-3.5" /> Task trống
+                  </span>
+                  {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                    <div className="pt-0.5">
+                      <TaskSupportersBadge
+                        supporterAccounts={t.supporterAccounts}
+                        users={users}
+                        size="sm"
+                      />
+                    </div>
+                  )}
                 </div>
               );
-            })() : (
-              <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
-                <UserX className="w-3.5 h-3.5" /> Task trống
-              </span>
-            )}
-
-            {/* Supporter badges */}
-            {t.supporterAccounts && t.supporterAccounts.length > 0 && (
-              <div className="flex flex-wrap gap-1 items-center pt-0.5">
-                {t.supporterAccounts.map((supAcc) => {
-                  const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
-                  return (
-                    <span
-                      key={supAcc}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300"
-                      title={`Người hỗ trợ (Supporter): ${supUser?.name || supAcc}`}
-                    >
-                      <span className="text-[9px] font-bold text-indigo-500">SP:</span>
-                      <span>{supAcc}</span>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
+            })()}
           </div>
         </td>
 
@@ -1053,7 +1122,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
     );
   };
 
-  const renderMobileTaskCard = (t: Task, displayIdx: number) => {
+  const renderMobileTaskCard = (t: Task, displayIdx: number, forAccount?: string) => {
     const todayStr = getTodayDateOnlyString(simulatedTime);
     const isAssignedToMe = canReportTask(t);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
@@ -1156,42 +1225,41 @@ const getRoleOrderRank = (roleCode?: string): number => {
             {/* Assignee & Supporters */}
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
-                {t.assigneeAccount ? (() => {
-                  const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
-                  const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.role) : 'Member';
+                {(() => {
+                  const currentAcc = forAccount || t.assigneeAccount;
+                  if (currentAcc) {
+                    const userObj = users.find((u) => u.account.toLowerCase() === currentAcc.toLowerCase());
+                    const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
+                    return (
+                      <>
+                        <UserAvatar
+                          user={userObj}
+                          account={currentAcc}
+                          size="xs"
+                          shape="circle"
+                        />
+                        <span className={`text-xs ${getUserRoleColorClass(userRole)}`}>
+                          {currentAcc}
+                        </span>
+                      </>
+                    );
+                  }
                   return (
-                    <>
-                      <UserAvatar
-                        user={assigneeUser}
-                        account={t.assigneeAccount}
-                        size="xs"
-                        shape="circle"
-                      />
-                      <span className={`text-xs ${getUserRoleColorClass(assigneeRole)}`}>
-                        {t.assigneeAccount}
-                      </span>
-                    </>
+                    <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
+                      <UserX className="w-3 h-3" /> Chưa giao
+                    </span>
                   );
-                })() : (
-                  <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
-                    <UserX className="w-3 h-3" /> Chưa giao
-                  </span>
-                )}
+                })()}
               </div>
 
               {t.supporterAccounts && t.supporterAccounts.length > 0 && (
-                <div className="flex flex-wrap gap-1 items-center">
-                  {t.supporterAccounts.map((supAcc) => (
-                    <span
-                      key={supAcc}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800 text-[9.5px] font-semibold text-indigo-700 dark:text-indigo-300"
-                      title={`Người hỗ trợ: @${supAcc}`}
-                    >
-                      <span className="text-[8.5px] font-bold text-indigo-500">SP:</span>
-                      <span>{supAcc}</span>
-                    </span>
-                  ))}
-                </div>
+                <TaskSupportersBadge
+                  supporterAccounts={t.supporterAccounts}
+                  users={users}
+                  primaryAssignee={t.assigneeAccount}
+                  currentViewingAccount={forAccount}
+                  size="xs"
+                />
               )}
             </div>
 
@@ -1707,16 +1775,84 @@ const getRoleOrderRank = (roleCode?: string): number => {
                         {(() => {
                           const tasksByAccountMap = new Map<string, Task[]>();
                           group.tasks.forEach((t) => {
-                            const acc = (t.assigneeAccount || '').trim();
-                            if (!acc || acc.toLowerCase() === 'unassigned') return;
-                            const list = tasksByAccountMap.get(acc) || [];
-                            list.push(t);
-                            tasksByAccountMap.set(acc, list);
+                            const primaryAcc = (t.assigneeAccount || '').trim();
+
+                            // 1. Primary assignee
+                            if (primaryAcc && primaryAcc.toLowerCase() !== 'unassigned') {
+                              const primaryUser = users.find((u) => u.account.trim().toLowerCase() === primaryAcc.toLowerCase());
+                              const primaryRoles =
+                                primaryUser?.specializations && primaryUser.specializations.length > 0
+                                  ? primaryUser.specializations
+                                  : [t.role];
+                              const isPrimaryInThisRole =
+                                primaryRoles.some((r) => isSpecializationMatchingRole(r, group.role)) ||
+                                isSpecializationMatchingRole(t.role, group.role);
+
+                              if (isPrimaryInThisRole) {
+                                const list = tasksByAccountMap.get(primaryAcc) || [];
+                                if (!list.some((item) => item.id === t.id)) {
+                                  list.push(t);
+                                  tasksByAccountMap.set(primaryAcc, list);
+                                }
+                              }
+                            }
+
+                            // 2. Collab members who belong to this role
+                            if (t.supporterAccounts && t.supporterAccounts.length > 0) {
+                              t.supporterAccounts.forEach((supAcc) => {
+                                const cleanSupAcc = supAcc.trim();
+                                if (primaryAcc && cleanSupAcc.toLowerCase() === primaryAcc.toLowerCase()) return;
+                                const supUser = users.find((u) => u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
+                                const supRoles =
+                                  supUser?.specializations && supUser.specializations.length > 0
+                                    ? supUser.specializations
+                                    : supUser?.role
+                                    ? [supUser.role]
+                                    : [t.role];
+
+                                const isMemberInThisRole = supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
+                                if (
+                                  isMemberInThisRole ||
+                                  (!supUser?.specializations?.length && isSpecializationMatchingRole(t.role, group.role))
+                                ) {
+                                  const targetAcc = supUser?.account || cleanSupAcc;
+                                  const list = tasksByAccountMap.get(targetAcc) || [];
+                                  if (!list.some((item) => item.id === t.id)) {
+                                    list.push(t);
+                                    tasksByAccountMap.set(targetAcc, list);
+                                  }
+                                }
+                              });
+                            }
+
+                            // 3. Fallback: If task has no primary assignee and no supporters matched this group, but t.role matches group.role
+                            if (!primaryAcc || primaryAcc.toLowerCase() === 'unassigned') {
+                              const hasAnyMatchedSupporter =
+                                t.supporterAccounts &&
+                                t.supporterAccounts.some((supAcc) => {
+                                  const supUser = users.find((u) => u.account.trim().toLowerCase() === supAcc.trim().toLowerCase());
+                                  const supRoles =
+                                    supUser?.specializations && supUser.specializations.length > 0
+                                      ? supUser.specializations
+                                      : [t.role];
+                                  return supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
+                                });
+                              if (!hasAnyMatchedSupporter && isSpecializationMatchingRole(t.role, group.role)) {
+                                const unassignedKey = '';
+                                const list = tasksByAccountMap.get(unassignedKey) || [];
+                                if (!list.some((item) => item.id === t.id)) {
+                                  list.push(t);
+                                  tasksByAccountMap.set(unassignedKey, list);
+                                }
+                              }
+                            }
                           });
 
                           const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
-                            const userA = users.find((u) => u.account.toLowerCase() === accA.toLowerCase());
-                            const userB = users.find((u) => u.account.toLowerCase() === accB.toLowerCase());
+                            if (!accA) return 1;
+                            if (!accB) return -1;
+                            const userA = users.find((u) => u.account.trim().toLowerCase() === accA.toLowerCase());
+                            const userB = users.find((u) => u.account.trim().toLowerCase() === accB.toLowerCase());
 
                             const rankA = getUserLevelRank(userA?.role);
                             const rankB = getUserLevelRank(userB?.role);
@@ -1729,7 +1865,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                           });
 
                           return accountGroups.map(([acc, accTasks], accIdx) => (
-                            <React.Fragment key={`acc-group-${group.role}-${acc}`}>
+                            <React.Fragment key={`acc-group-${group.role}-${acc || 'unassigned'}`}>
                               {accIdx > 0 && (
                                 <tr className="h-4 bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-100/80 dark:border-slate-800 select-none">
                                   <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
@@ -1738,7 +1874,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                               {[...accTasks].sort(sortByPriority).map((t) => {
                                 const taskIdx = tasks.findIndex((item) => item.id === t.id);
                                 const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                                return renderTaskRow(t, displayIdx);
+                                return renderTaskRow(t, displayIdx, acc || undefined);
                               })}
                             </React.Fragment>
                           ));
@@ -1751,7 +1887,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                     {filteredTasks.map((t, idx) => {
                       const taskIdx = tasks.findIndex((item) => item.id === t.id);
                       const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
-                      return renderTaskRow(t, displayIdx);
+                      return renderTaskRow(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined);
                     })}
                   </tbody>
                 )}
@@ -1798,15 +1934,84 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
                 const tasksByAccountMap = new Map<string, Task[]>();
                 group.tasks.forEach((t) => {
-                  const acc = (t.assigneeAccount || '').trim();
-                  if (!acc || acc.toLowerCase() === 'unassigned') return;
-                  const list = tasksByAccountMap.get(acc) || [];
-                  list.push(t);
-                  tasksByAccountMap.set(acc, list);
+                  const primaryAcc = (t.assigneeAccount || '').trim();
+
+                  // 1. Primary assignee
+                  if (primaryAcc && primaryAcc.toLowerCase() !== 'unassigned') {
+                    const primaryUser = users.find((u) => u.account.trim().toLowerCase() === primaryAcc.toLowerCase());
+                    const primaryRoles =
+                      primaryUser?.specializations && primaryUser.specializations.length > 0
+                        ? primaryUser.specializations
+                        : [t.role];
+                    const isPrimaryInThisRole =
+                      primaryRoles.some((r) => isSpecializationMatchingRole(r, group.role)) ||
+                      isSpecializationMatchingRole(t.role, group.role);
+
+                    if (isPrimaryInThisRole) {
+                      const list = tasksByAccountMap.get(primaryAcc) || [];
+                      if (!list.some((item) => item.id === t.id)) {
+                        list.push(t);
+                        tasksByAccountMap.set(primaryAcc, list);
+                      }
+                    }
+                  }
+
+                  // 2. Collab members who belong to this role
+                  if (t.supporterAccounts && t.supporterAccounts.length > 0) {
+                    t.supporterAccounts.forEach((supAcc) => {
+                      const cleanSupAcc = supAcc.trim();
+                      if (primaryAcc && cleanSupAcc.toLowerCase() === primaryAcc.toLowerCase()) return;
+                      const supUser = users.find((u) => u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
+                      const supRoles =
+                        supUser?.specializations && supUser.specializations.length > 0
+                          ? supUser.specializations
+                          : supUser?.role
+                          ? [supUser.role]
+                          : [t.role];
+
+                      const isMemberInThisRole = supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
+                      if (
+                        isMemberInThisRole ||
+                        (!supUser?.specializations?.length && isSpecializationMatchingRole(t.role, group.role))
+                      ) {
+                        const targetAcc = supUser?.account || cleanSupAcc;
+                        const list = tasksByAccountMap.get(targetAcc) || [];
+                        if (!list.some((item) => item.id === t.id)) {
+                          list.push(t);
+                          tasksByAccountMap.set(targetAcc, list);
+                        }
+                      }
+                    });
+                  }
+
+                  // 3. Fallback: If task has no primary assignee and no supporters matched this group, but t.role matches group.role
+                  if (!primaryAcc || primaryAcc.toLowerCase() === 'unassigned') {
+                    const hasAnyMatchedSupporter =
+                      t.supporterAccounts &&
+                      t.supporterAccounts.some((supAcc) => {
+                        const supUser = users.find((u) => u.account.trim().toLowerCase() === supAcc.trim().toLowerCase());
+                        const supRoles =
+                          supUser?.specializations && supUser.specializations.length > 0
+                            ? supUser.specializations
+                            : [t.role];
+                        return supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
+                      });
+                    if (!hasAnyMatchedSupporter && isSpecializationMatchingRole(t.role, group.role)) {
+                      const unassignedKey = '';
+                      const list = tasksByAccountMap.get(unassignedKey) || [];
+                      if (!list.some((item) => item.id === t.id)) {
+                        list.push(t);
+                        tasksByAccountMap.set(unassignedKey, list);
+                      }
+                    }
+                  }
                 });
+
                 const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
-                  const userA = users.find((u) => u.account.toLowerCase() === accA.toLowerCase());
-                  const userB = users.find((u) => u.account.toLowerCase() === accB.toLowerCase());
+                  if (!accA) return 1;
+                  if (!accB) return -1;
+                  const userA = users.find((u) => u.account.trim().toLowerCase() === accA.toLowerCase());
+                  const userB = users.find((u) => u.account.trim().toLowerCase() === accB.toLowerCase());
 
                   const rankA = getUserLevelRank(userA?.role);
                   const rankB = getUserLevelRank(userB?.role);
@@ -1869,11 +2074,18 @@ const getRoleOrderRank = (roleCode?: string): number => {
                     {/* Account Subgroups / Task Cards */}
                     <div className="space-y-2.5">
                       {accountGroups.map(([acc, accTasks]) => (
-                        <div key={`mobile-acc-${group.role}-${acc}`} className="space-y-2">
+                        <div key={`mobile-acc-${group.role}-${acc || 'unassigned'}`} className="space-y-2">
                           {accountGroups.length > 1 && (
                             <div className="flex items-center gap-2 pt-1">
                               {(() => {
-                                const accUser = users.find((u) => u.account.toLowerCase() === acc.toLowerCase());
+                                if (!acc) {
+                                  return (
+                                    <span className="text-[11px] font-bold bg-amber-50 dark:bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300">
+                                      👤 Chưa giao ({accTasks.length})
+                                    </span>
+                                  );
+                                }
+                                const accUser = users.find((u) => u.account.trim().toLowerCase() === acc.toLowerCase());
                                 const accRole = accUser ? getUserRoleInSpec(accUser, group.role) : 'Member';
                                 return (
                                   <span className={`text-[11px] font-bold bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 ${getUserRoleColorClass(accRole)}`}>
@@ -1887,7 +2099,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                           {[...accTasks].sort(sortByPriority).map((t) => {
                             const taskIdx = tasks.findIndex((item) => item.id === t.id);
                             const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                            return renderMobileTaskCard(t, displayIdx);
+                            return renderMobileTaskCard(t, displayIdx, acc || undefined);
                           })}
                         </div>
                       ))}
@@ -1899,7 +2111,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
               filteredTasks.map((t, idx) => {
                 const taskIdx = tasks.findIndex((item) => item.id === t.id);
                 const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
-                return renderMobileTaskCard(t, displayIdx);
+                return renderMobileTaskCard(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined);
               })
             )}
 

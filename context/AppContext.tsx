@@ -2423,9 +2423,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const nextWeek = selectedWeek + 1;
-    // Only assigned tasks are part of active weekly schedules & history
+    // Only assigned tasks are part of active weekly schedules & history (tasks with primary assignee or supporters)
     const currentWeekAssignedTasks = tasks.filter(
-      (t) => t.weekNumber === selectedWeek && t.year === selectedYear && t.assigneeAccount && t.assigneeAccount.trim() !== ''
+      (t) =>
+        t.weekNumber === selectedWeek &&
+        t.year === selectedYear &&
+        ((t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
+          (t.supporterAccounts && t.supporterAccounts.length > 0))
     );
 
     // Separate tasks into worked (has progress/effort or Done) vs unworked (0% progress & 0h effort)
@@ -2469,8 +2473,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (
         t.weekNumber === selectedWeek &&
         t.year === selectedYear &&
-        t.assigneeAccount &&
-        t.assigneeAccount.trim() !== '' &&
+        ((t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
+          (t.supporterAccounts && t.supporterAccounts.length > 0)) &&
         (t.completionPercentage === undefined || t.completionPercentage < 100) &&
         t.status !== 'Done'
       ) {
@@ -2535,37 +2539,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     currentWeekTasks.forEach((task) => {
-      if (!task.assigneeAccount) return;
-      const entry = userEffortMap.get(task.assigneeAccount) || {
-        totalEffort: 0,
-        count: 0,
-        total: 0,
-        isLate: false,
-        hasUnsubmitted: false,
-      };
-      entry.total += 1;
-      const effectiveEffort = (task.completionPercentage === 0) ? 0 : (task.actualEffort || 0);
-      entry.totalEffort += effectiveEffort;
+      // Gather all distinct participants (assignee and supporters)
+      const participantAccounts = new Set<string>();
+      if (task.assigneeAccount && task.assigneeAccount.trim() !== '') {
+        participantAccounts.add(task.assigneeAccount.trim().toLowerCase());
+      }
+      if (task.supporterAccounts && Array.isArray(task.supporterAccounts)) {
+        task.supporterAccounts.forEach((sup) => {
+          if (sup && sup.trim()) {
+            participantAccounts.add(sup.trim().toLowerCase());
+          }
+        });
+      }
 
+      if (participantAccounts.size === 0) return;
+
+      const effectiveEffort = (task.completionPercentage === 0) ? 0 : (task.actualEffort || 0);
       const isTaskDone = task.status === 'Done' || task.completionPercentage === 100;
       const isTaskReported =
         isTaskDone ||
         (!!task.lastSubmittedAt &&
           new Date(task.lastSubmittedAt).getTime() >= sundayNoon.getTime());
 
-      if (isTaskReported) {
-        entry.count += 1;
-        entry.lastSubmittedAt = task.lastSubmittedAt;
-        if (task.isSubmittedLate && !isTaskDone) {
-          entry.isLate = true;
+      // Credit the full task effort and status to every participant
+      activeUsers.forEach((u) => {
+        if (!participantAccounts.has(u.account.toLowerCase())) return;
+
+        const entry = userEffortMap.get(u.account) || {
+          totalEffort: 0,
+          count: 0,
+          total: 0,
+          isLate: false,
+          hasUnsubmitted: false,
+        };
+
+        entry.total += 1;
+        entry.totalEffort = Math.round((entry.totalEffort + effectiveEffort) * 100) / 100;
+
+        if (isTaskReported) {
+          entry.count += 1;
+          if (task.lastSubmittedAt) {
+            entry.lastSubmittedAt = task.lastSubmittedAt;
+          }
+          if (task.isSubmittedLate && !isTaskDone) {
+            entry.isLate = true;
+          }
+        } else {
+          entry.hasUnsubmitted = true;
+          if (isPastDeadline) {
+            entry.isLate = true;
+          }
         }
-      } else {
-        entry.hasUnsubmitted = true;
-        if (isPastDeadline) {
-          entry.isLate = true;
-        }
-      }
-      userEffortMap.set(task.assigneeAccount, entry);
+        userEffortMap.set(u.account, entry);
+      });
     });
 
     let maxEffort = 0;
