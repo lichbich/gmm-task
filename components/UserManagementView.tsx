@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   UserRole,
@@ -329,7 +329,14 @@ export const UserManagementView: React.FC = () => {
   };
 
   // SELECTED USER FOR DETAIL MODAL
-  const [selectedUserForDetail, setSelectedUserForDetail] = useState<User | null>(null);
+  const [selectedUserIdForDetail, setSelectedUserIdForDetail] = useState<string | null>(null);
+  const selectedUserForDetail = useMemo(
+    () => (selectedUserIdForDetail ? users.find((u) => u.id === selectedUserIdForDetail) || null : null),
+    [users, selectedUserIdForDetail]
+  );
+  const setSelectedUserForDetail = useCallback((u: User | null) => {
+    setSelectedUserIdForDetail(u ? u.id : null);
+  }, []);
 
   // TEMPORARY CREDENTIAL MODAL (SINGLE USER)
   const [tempCredModal, setTempCredModal] = useState<{

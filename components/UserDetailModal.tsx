@@ -43,6 +43,19 @@ interface UserDetailModalProps {
   onClose: () => void;
 }
 
+interface SavedSnapshot {
+  role: UserRole;
+  specs: Specialization[];
+  specRoles: Record<Specialization, UserRole>;
+  name: string;
+  phone: string;
+  email: string;
+  cccd: string;
+  birthDate: string;
+  bankAccount: string;
+  technologies: string;
+}
+
 export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, onClose }) => {
   const {
     currentUser,
@@ -57,6 +70,8 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     confirmDialog,
   } = useApp();
 
+  const liveUser = (user ? users.find((u) => u.id === user.id) : null) || user;
+
   // Form Fields (Admin updates role, specializations, and personal info)
   const [userRole, setUserRole] = useState<UserRole>('Member');
   const [selectedSpecs, setSelectedSpecs] = useState<Specialization[]>(['BA']);
@@ -70,23 +85,47 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const [userBankAccount, setUserBankAccount] = useState('');
   const [userTechnologies, setUserTechnologies] = useState('');
 
+  const lastSavedSnapshotRef = useRef<SavedSnapshot | null>(null);
+
   const checkDirtyAndConfirmClose = useCallback((): boolean => {
-    if (!user) return true;
+    if (!liveUser) return true;
+    const snapshot = lastSavedSnapshotRef.current || {
+      role: liveUser.role || 'Member',
+      specs: liveUser.specializations && liveUser.specializations.length > 0 ? liveUser.specializations : ['BA'],
+      specRoles: liveUser.specializationRoles || {},
+      name: liveUser.name || '',
+      phone: liveUser.phone || '',
+      email: liveUser.email || '',
+      cccd: liveUser.cccd || '',
+      birthDate: liveUser.birthDate ? String(liveUser.birthDate) : '',
+      bankAccount: liveUser.bankAccount || '',
+      technologies: liveUser.technologies || '',
+    };
+
     let isDirty = false;
     if (isEditingProfile) {
       isDirty =
-        userName.trim() !== (user.name || '') ||
-        userPhone.trim() !== (user.phone || '') ||
-        userEmail.trim() !== (user.email || '') ||
-        userCccd.trim() !== (user.cccd || '') ||
-        userBirthDate.trim() !== (user.birthDate ? String(user.birthDate) : '') ||
-        userBankAccount.trim() !== (user.bankAccount || '') ||
-        userTechnologies.trim() !== (user.technologies || '');
+        userName.trim() !== snapshot.name ||
+        userPhone.trim() !== snapshot.phone ||
+        userEmail.trim() !== snapshot.email ||
+        userCccd.trim() !== snapshot.cccd ||
+        userBirthDate.trim() !== snapshot.birthDate ||
+        userBankAccount.trim() !== snapshot.bankAccount ||
+        userTechnologies.trim() !== snapshot.technologies;
     }
 
-    const origRole = user.role || 'Member';
-    const origSpecs = user.specializations && user.specializations.length > 0 ? user.specializations : ['BA'];
-    if (userRole !== origRole || JSON.stringify(selectedSpecs) !== JSON.stringify(origSpecs)) {
+    const currentSpecsSorted = [...selectedSpecs].sort().join(',');
+    const snapshotSpecsSorted = [...snapshot.specs].sort().join(',');
+
+    let specRolesChanged = false;
+    for (const spec of selectedSpecs) {
+      if ((specRoles[spec] || 'Member') !== (snapshot.specRoles[spec] || 'Member')) {
+        specRolesChanged = true;
+        break;
+      }
+    }
+
+    if (userRole !== snapshot.role || currentSpecsSorted !== snapshotSpecsSorted || specRolesChanged) {
       isDirty = true;
     }
 
@@ -103,7 +142,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     }
     return true;
   }, [
-    user,
+    liveUser,
     isEditingProfile,
     userName,
     userPhone,
@@ -114,6 +153,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     userTechnologies,
     userRole,
     selectedSpecs,
+    specRoles,
     confirmDialog,
   ]);
 
@@ -148,14 +188,14 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
 
   // Sync state when user prop changes or modal opens
   useEffect(() => {
-    if (!isOpen || !user) return;
-    const initialRole = user.role || 'Member';
+    if (!isOpen || !liveUser) return;
+    const initialRole = liveUser.role || 'Member';
     setUserRole(initialRole);
-    const initialSpecs = user.specializations && user.specializations.length > 0 ? user.specializations : ['BA'];
+    const initialSpecs = liveUser.specializations && liveUser.specializations.length > 0 ? liveUser.specializations : ['BA'];
     setSelectedSpecs(initialSpecs);
 
-    const initialSpecRoles: Record<Specialization, UserRole> = user.specializationRoles
-      ? { ...user.specializationRoles }
+    const initialSpecRoles: Record<Specialization, UserRole> = liveUser.specializationRoles
+      ? { ...liveUser.specializationRoles }
       : {};
     initialSpecs.forEach((s) => {
       if (!initialSpecRoles[s]) {
@@ -164,26 +204,47 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     });
     setSpecRoles(initialSpecRoles);
 
-    setUserName(user.name || '');
-    setUserPhone(user.phone || '');
-    setUserEmail(user.email || '');
-    setUserCccd(user.cccd || '');
-    setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
-    setUserBankAccount(user.bankAccount || '');
-    setUserTechnologies(user.technologies || '');
+    const initialName = liveUser.name || '';
+    const initialPhone = liveUser.phone || '';
+    const initialEmail = liveUser.email || '';
+    const initialCccd = liveUser.cccd || '';
+    const initialBirthDate = liveUser.birthDate ? String(liveUser.birthDate) : '';
+    const initialBankAccount = liveUser.bankAccount || '';
+    const initialTechnologies = liveUser.technologies || '';
+
+    setUserName(initialName);
+    setUserPhone(initialPhone);
+    setUserEmail(initialEmail);
+    setUserCccd(initialCccd);
+    setUserBirthDate(initialBirthDate);
+    setUserBankAccount(initialBankAccount);
+    setUserTechnologies(initialTechnologies);
     setIsEditingProfile(false);
     setErrorMsg('');
     setSuccessMsg('');
-  }, [isOpen, user?.id]);
 
-  if (!isRendered || !user) return null;
+    lastSavedSnapshotRef.current = {
+      role: initialRole,
+      specs: [...initialSpecs],
+      specRoles: { ...initialSpecRoles },
+      name: initialName,
+      phone: initialPhone,
+      email: initialEmail,
+      cccd: initialCccd,
+      birthDate: initialBirthDate,
+      bankAccount: initialBankAccount,
+      technologies: initialTechnologies,
+    };
+  }, [isOpen, liveUser?.id]);
+
+  if (!isRendered || !liveUser) return null;
 
   const isAdmin = currentUser?.role === 'Admin';
 
   // Calculate task & effort stats for this user in current week
   const userCurrentTasks = tasks.filter(
     (t) =>
-      t.assigneeAccount?.toLowerCase() === user.account.toLowerCase() &&
+      t.assigneeAccount?.toLowerCase() === liveUser.account.toLowerCase() &&
       t.weekNumber === selectedWeek &&
       t.year === selectedYear
   );
@@ -193,7 +254,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const currentWeekEffort =
     Math.round(userCurrentTasks.reduce((acc, t) => acc + (t.actualEffort || 0), 0) * 100) / 100;
   const totalEffortCumulative =
-    Math.round(((user.totalEffort || 0) + currentWeekEffort) * 100) / 100;
+    Math.round(((liveUser.totalEffort || 0) + currentWeekEffort) * 100) / 100;
 
   const handleUserRoleChange = (newRole: UserRole) => {
     setUserRole(newRole);
@@ -244,18 +305,18 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const handleResetPassword = () => {
     confirmDialog({
       title: 'Xác nhận đặt lại mật khẩu',
-      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Hệ thống sẽ ngay lập tức đăng xuất tài khoản này khỏi tất cả các thiết bị đã đăng nhập và tạo mật khẩu tạm thời mới để bạn gửi cho nhân viên.`,
+      message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${liveUser.name} (${liveUser.account})? Hệ thống sẽ ngay lập tức đăng xuất tài khoản này khỏi tất cả các thiết bị đã đăng nhập và tạo mật khẩu tạm thời mới để bạn gửi cho nhân viên.`,
       confirmText: 'Đặt lại & Đăng xuất thiết bị',
       type: 'warning',
       onConfirm: async () => {
-        const res = await resetUserPassword(user.id);
+        const res = await resetUserPassword(liveUser.id);
         if (res.success && res.tempPassword) {
           setTempCredModal({
-            name: user.name,
-            account: user.account,
+            name: liveUser.name,
+            account: liveUser.account,
             tempPassword: res.tempPassword,
           });
-          setSuccessMsg(`Đã thu hồi phiên đăng nhập & tạo mật khẩu tạm thời mới cho ${user.account}!`);
+          setSuccessMsg(`Đã thu hồi phiên đăng nhập & tạo mật khẩu tạm thời mới cho ${liveUser.account}!`);
         } else {
           setErrorMsg(res.error || 'Có lỗi xảy ra khi đặt lại mật khẩu.');
         }
@@ -266,11 +327,11 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const handleDeleteUser = () => {
     confirmDialog({
       title: 'Xác nhận vô hiệu hóa tài khoản',
-      message: `Bạn có chắc chắn muốn vô hiệu hóa tài khoản ${user.name} (${user.account})? Tài khoản sẽ bị ẩn khỏi giao diện nhưng dữ liệu vẫn được bảo lưu an toàn trong Database. Tất cả task của người này sẽ chuyển thành Task Trống.`,
+      message: `Bạn có chắc chắn muốn vô hiệu hóa tài khoản ${liveUser.name} (${liveUser.account})? Tài khoản sẽ bị ẩn khỏi giao diện nhưng dữ liệu vẫn được bảo lưu an toàn trong Database. Tất cả task của người này sẽ chuyển thành Task Trống.`,
       confirmText: 'Xác nhận vô hiệu hóa',
       type: 'danger',
       onConfirm: () => {
-        deleteUser(user.id);
+        deleteUser(liveUser.id);
         handleClose();
       },
     });
@@ -284,7 +345,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     }
 
     // Validate Role Level Quota per specialization when changing role or specs
-    const quotaCheck = validateRoleQuota(userRole, selectedSpecs, users, user.id, specRoles);
+    const quotaCheck = validateRoleQuota(userRole, selectedSpecs, users, liveUser.id, specRoles);
     if (!quotaCheck.valid && quotaCheck.error) {
       setErrorMsg(quotaCheck.error);
       return;
@@ -297,7 +358,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     setIsSaving(true);
 
     setTimeout(() => {
-      updateUser(user.id, {
+      updateUser(liveUser.id, {
         name: userName.trim(),
         role: effectiveRole,
         specializations: selectedSpecs,
@@ -309,6 +370,19 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
         bankAccount: userBankAccount.trim(),
         technologies: userTechnologies.trim(),
       });
+
+      lastSavedSnapshotRef.current = {
+        role: effectiveRole,
+        specs: [...selectedSpecs],
+        specRoles: { ...specRoles },
+        name: userName.trim(),
+        phone: userPhone.trim(),
+        email: userEmail.trim(),
+        cccd: userCccd.trim(),
+        birthDate: userBirthDate.trim(),
+        bankAccount: userBankAccount.trim(),
+        technologies: userTechnologies.trim(),
+      };
 
       setIsSaving(false);
       setIsSaved(true);
@@ -385,19 +459,19 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-slate-800 rounded-2xl p-4 shadow-md gap-4">
             <div className="flex items-center gap-3.5">
               <UserAvatar
-                user={user}
+                user={liveUser}
                 size="xl"
                 showStatus
-                isOnline={Boolean(user.password && user.password.trim() !== '' && user.firstLoginCompleted === true)}
+                isOnline={Boolean(liveUser.password && liveUser.password.trim() !== '' && liveUser.firstLoginCompleted === true)}
               />
 
               <div className="space-y-1">
                 <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
-                  {userName || user.name}
+                  {userName || liveUser.name}
                 </h3>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-mono text-indigo-200 bg-white/10 px-2 py-0.5 rounded-md border border-white/15 font-bold">
-                    @{user.account}
+                    @{liveUser.account}
                   </span>
                   <span
                     className={`inline-flex items-center gap-1 text-[11px] font-extrabold px-2 py-0.5 rounded-md border ${roleTheme.badge}`}
@@ -454,7 +528,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
           </div>
 
           {/* Temporary Password Notice Banner for Admin */}
-          {user.firstLoginCompleted === false && user.tempPassword && (
+          {liveUser.firstLoginCompleted === false && liveUser.tempPassword && (
             <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-2xs">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
@@ -467,14 +541,14 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                   <div className="text-amber-700 text-[11px] mt-0.5 flex items-center gap-1.5 flex-wrap">
                     <span>Mật khẩu tạm thời đang cấp:</span>
                     <span className="font-mono font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-300">
-                      {user.tempPassword}
+                      {liveUser.tempPassword}
                     </span>
                   </div>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => handleCopyAllInfo(user.account, userName || user.name, user.tempPassword!)}
+                onClick={() => handleCopyAllInfo(liveUser.account, userName || liveUser.name, liveUser.tempPassword!)}
                 className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 transition active:scale-95 shrink-0 shadow-xs"
               >
                 {copiedField === 'all' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -577,7 +651,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                     Staff Code (Username):
                   </label>
                   <div className="py-2 px-3 bg-white border border-slate-200 rounded-xl text-xs font-mono font-bold text-indigo-700 shadow-2xs">
-                    @{user.account}
+                    @{liveUser.account}
                   </div>
                 </div>
 
@@ -748,23 +822,25 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                       <button
                         type="button"
                         onClick={() => {
+                          const snapshot = lastSavedSnapshotRef.current;
+                          const baseUser = snapshot || liveUser;
                           const isProfileDirty =
-                            userName.trim() !== (user.name || '') ||
-                            userPhone.trim() !== (user.phone || '') ||
-                            userEmail.trim() !== (user.email || '') ||
-                            userCccd.trim() !== (user.cccd || '') ||
-                            userBirthDate.trim() !== (user.birthDate ? String(user.birthDate) : '') ||
-                            userBankAccount.trim() !== (user.bankAccount || '') ||
-                            userTechnologies.trim() !== (user.technologies || '');
+                            userName.trim() !== (baseUser.name || '') ||
+                            userPhone.trim() !== (baseUser.phone || '') ||
+                            userEmail.trim() !== (baseUser.email || '') ||
+                            userCccd.trim() !== (baseUser.cccd || '') ||
+                            userBirthDate.trim() !== (baseUser.birthDate ? String(baseUser.birthDate) : '') ||
+                            userBankAccount.trim() !== (baseUser.bankAccount || '') ||
+                            userTechnologies.trim() !== (baseUser.technologies || '');
 
                           const resetFields = () => {
-                            setUserName(user.name || '');
-                            setUserPhone(user.phone || '');
-                            setUserEmail(user.email || '');
-                            setUserCccd(user.cccd || '');
-                            setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
-                            setUserBankAccount(user.bankAccount || '');
-                            setUserTechnologies(user.technologies || '');
+                            setUserName(baseUser.name || '');
+                            setUserPhone(baseUser.phone || '');
+                            setUserEmail(baseUser.email || '');
+                            setUserCccd(baseUser.cccd || '');
+                            setUserBirthDate(baseUser.birthDate ? String(baseUser.birthDate) : '');
+                            setUserBankAccount(baseUser.bankAccount || '');
+                            setUserTechnologies(baseUser.technologies || '');
                             setIsEditingProfile(false);
                             setErrorMsg('');
                           };
@@ -797,29 +873,29 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Họ & Tên</span>
-                    <span className="font-bold text-slate-800 text-xs">{userName || user.name || '—'}</span>
+                    <span className="font-bold text-slate-800 text-xs">{userName || liveUser.name || '—'}</span>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
                       <Phone className="w-3 h-3 text-slate-400" /> Số Điện Thoại
                     </span>
-                    <span className="font-mono font-bold text-slate-800">{userPhone || user.phone || '—'}</span>
+                    <span className="font-mono font-bold text-slate-800">{userPhone || liveUser.phone || '—'}</span>
                   </div>
 
                   <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
                       <Mail className="w-3 h-3 text-slate-400" /> Gmail / Email
                     </span>
-                    <span className="font-semibold text-slate-800 truncate block">{userEmail || user.email || '—'}</span>
+                    <span className="font-semibold text-slate-800 truncate block">{userEmail || liveUser.email || '—'}</span>
                   </div>
 
-                  {(isAdmin || currentUser?.account?.toLowerCase() === user.account.toLowerCase()) && (
+                  {(isAdmin || currentUser?.account?.toLowerCase() === liveUser.account.toLowerCase()) && (
                     <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
                       <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
                         <FileText className="w-3 h-3 text-slate-400" /> Số Căn Cước (CCCD)
                       </span>
-                      <span className="font-mono font-bold text-slate-800">{userCccd || user.cccd || '—'}</span>
+                      <span className="font-mono font-bold text-slate-800">{userCccd || liveUser.cccd || '—'}</span>
                     </div>
                   )}
 
@@ -827,16 +903,16 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
                       <Calendar className="w-3 h-3 text-slate-400" /> Năm Sinh
                     </span>
-                    <span className="font-mono font-bold text-slate-800">{userBirthDate || user.birthDate || '—'}</span>
+                    <span className="font-mono font-bold text-slate-800">{userBirthDate || liveUser.birthDate || '—'}</span>
                   </div>
 
-                  {(isAdmin || currentUser?.account?.toLowerCase() === user.account.toLowerCase()) && (
+                  {(isAdmin || currentUser?.account?.toLowerCase() === liveUser.account.toLowerCase()) && (
                     <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
                       <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
                         <CreditCard className="w-3 h-3 text-slate-400" /> Tài Khoản Ngân Hàng (Tk Bank)
                       </span>
                       <span className="font-mono font-bold text-slate-800 text-[11px] block">
-                        {userBankAccount || user.bankAccount || '—'}
+                        {userBankAccount || liveUser.bankAccount || '—'}
                       </span>
                     </div>
                   )}
@@ -846,7 +922,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                       <Cpu className="w-3 h-3 text-indigo-500" /> Kỹ Năng / Công Nghệ (Technology)
                     </span>
                     <span className="font-semibold text-indigo-700 text-xs block">
-                      {userTechnologies || user.technologies || '—'}
+                      {userTechnologies || liveUser.technologies || '—'}
                     </span>
                   </div>
                 </div>
@@ -877,7 +953,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                             if (parsed.technologies) setUserTechnologies(parsed.technologies);
                             if (parsed.specializations.length > 0) setSelectedSpecs(parsed.specializations);
                             if (parsed.role) setUserRole(parsed.role);
-                            setSuccessMsg(`Đã trích xuất thông tin từ Sheet cho ${parsed.name || user.name}!`);
+                            setSuccessMsg(`Đã trích xuất thông tin từ Sheet cho ${parsed.name || liveUser.name}!`);
                             setTimeout(() => setSuccessMsg(''), 3000);
                           } else {
                             setErrorMsg('Không thể nhận diện định dạng dòng từ Sheet.');
@@ -904,7 +980,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                               if (parsed.technologies) setUserTechnologies(parsed.technologies);
                               if (parsed.specializations.length > 0) setSelectedSpecs(parsed.specializations);
                               if (parsed.role) setUserRole(parsed.role);
-                              setSuccessMsg(`Đã trích xuất thông tin từ Sheet cho ${parsed.name || user.name}!`);
+                              setSuccessMsg(`Đã trích xuất thông tin từ Sheet cho ${parsed.name || liveUser.name}!`);
                               setTimeout(() => setSuccessMsg(''), 3000);
                             }
                           }
