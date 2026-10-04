@@ -184,10 +184,11 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     });
   }, [tasks, currentUser, users]);
 
-  // 1.5. Current Week / Previous Week Unfinished Tasks (Incomplete tasks that can be rolled over to next week)
+  // 1.5. Current Week Unfinished Tasks (Incomplete tasks belonging strictly to selectedWeek)
   const currentWeekUnfinishedTasks = React.useMemo(() => {
     return tasks.filter((t) => {
-      if (t.weekNumber > selectedWeek || t.year !== selectedYear) return false;
+      // ONLY query tasks of current selectedWeek (Tuần 95)
+      if (t.weekNumber !== selectedWeek || t.year !== selectedYear) return false;
       if (!t.assigneeAccount || t.assigneeAccount.trim() === '') return false;
       if ((t.completionPercentage !== undefined && t.completionPercentage >= 100) || (t.status === 'Done' && (t.completionPercentage === undefined || t.completionPercentage >= 100))) return false; // Unfinished tasks only
 
@@ -213,29 +214,15 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         account: string;
         tasks: Task[];
         totalHours: number;
-        unaddedTasks: Task[];
-        addedTasks: Task[];
       }
     >();
 
     currentWeekUnfinishedTasks.forEach((t) => {
       const account = t.assigneeAccount || 'UNKNOWN';
-      const isAlreadyAdded = tasks.some(
-        (nt) =>
-          nt.weekNumber === nextWeek &&
-          nt.year === selectedYear &&
-          (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
-      );
-
       const existing = map.get(account);
       if (existing) {
         existing.tasks.push(t);
         existing.totalHours += t.estimatedEffort || 0;
-        if (!isAlreadyAdded) {
-          existing.unaddedTasks.push(t);
-        } else {
-          existing.addedTasks.push(t);
-        }
       } else {
         const u = users.find((user) => user.account.toLowerCase() === account.toLowerCase());
         map.set(account, {
@@ -243,8 +230,6 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
           account,
           tasks: [t],
           totalHours: t.estimatedEffort || 0,
-          unaddedTasks: isAlreadyAdded ? [] : [t],
-          addedTasks: isAlreadyAdded ? [t] : [],
         });
       }
     });
@@ -255,7 +240,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (b.account.toLowerCase() === currentUser?.account.toLowerCase()) return 1;
       return a.account.localeCompare(b.account);
     });
-  }, [currentWeekUnfinishedTasks, tasks, nextWeek, selectedYear, users, currentUser]);
+  }, [currentWeekUnfinishedTasks, users, currentUser]);
 
   // 2. Next Week Planned Tasks (Already assigned for next week)
   const nextWeekAssignedTasks = React.useMemo(() => {
@@ -348,58 +333,21 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     Math.round(nextWeekAssignedTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0) * 100) / 100;
 
   const handleTransferToNextWeek = (t: Task) => {
-    const isUnworked = isTaskUnworked(t);
-
-    const existingNextWeek = tasks.find(
-      (nt) =>
-        nt.id !== t.id &&
-        nt.weekNumber === nextWeek &&
-        nt.year === selectedYear &&
-        (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
-    );
-
-    if (isUnworked) {
-      if (existingNextWeek) {
-        // Next week already has a task for this, delete the 0%/0h ghost task from current week
-        deleteTask(t.id);
-      } else {
-        // Directly move the 0%/0h task to nextWeek (clears it from current week)
-        updateTask(t.id, { weekNumber: nextWeek });
-      }
-    } else {
-      if (existingNextWeek) return;
-      // Continuation task for partially worked task
-      const continuationTask: Task = {
-        ...t,
-        id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-        weekNumber: nextWeek,
-        parentTaskId: t.id,
-        status: 'In Progress',
-        actualEffort: 0,
-        completionPercentage: t.completionPercentage,
-        lastSubmittedAt: undefined,
-        isSubmittedLate: undefined,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      addTask(continuationTask);
-    }
+    updateTask(t.id, {
+      weekNumber: nextWeek,
+      actualEffort: 0,
+      status: (t.completionPercentage && t.completionPercentage > 0) ? 'In Progress' : 'To do',
+      lastSubmittedAt: undefined,
+      isSubmittedLate: undefined,
+      updatedAt: new Date().toISOString(),
+    });
   };
 
   const handleUndoTransfer = (t: Task) => {
-    const existingNextWeek = tasks.find(
-      (nt) =>
-        nt.id !== t.id &&
-        nt.weekNumber === nextWeek &&
-        nt.year === selectedYear &&
-        (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
-    );
-
-    if (existingNextWeek) {
-      deleteTask(existingNextWeek.id);
-    } else if (t.weekNumber === nextWeek) {
-      updateTask(t.id, { weekNumber: selectedWeek });
-    }
+    updateTask(t.id, {
+      weekNumber: selectedWeek,
+      updatedAt: new Date().toISOString(),
+    });
   };
 
   const handleUndoNextWeekTask = (t: Task) => {
@@ -409,11 +357,10 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       type: 'warning',
       confirmText: `Hoàn tác về Tuần ${selectedWeek}`,
       onConfirm: () => {
-        if (t.parentTaskId) {
-          deleteTask(t.id);
-        } else {
-          updateTask(t.id, { weekNumber: selectedWeek });
-        }
+        updateTask(t.id, {
+          weekNumber: selectedWeek,
+          updatedAt: new Date().toISOString(),
+        });
       },
     });
   };
@@ -700,7 +647,6 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
             {unfinishedTasksByMember.map((group) => {
               const isMe = currentUser && group.account.toLowerCase() === currentUser.account.toLowerCase();
               const displayName = group.user?.name || group.account;
-              const hasUnadded = group.unaddedTasks.length > 0;
               const isExpanded = !!expandedMembers[group.account];
 
               return (
@@ -769,74 +715,19 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                         </span>
                       </div>
 
-                      {/* Member Quick Transfer All & Undo Buttons */}
+                      {/* Member Quick Transfer All Button */}
                       <div className="shrink-0 pt-1 sm:pt-0" onClick={(e) => e.stopPropagation()}>
-                        {hasUnadded ? (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                group.unaddedTasks.forEach((t) => handleTransferToNextWeek(t));
-                              }}
-                              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95 cursor-pointer"
-                              title={`Chuyển toàn bộ ${group.unaddedTasks.length} task dở của ${displayName} sang Tuần ${nextWeek}`}
-                            >
-                              <ArrowRight className="w-3.5 h-3.5" />
-                              <span>Chuyển tất cả ({group.unaddedTasks.length}) sang Tuần {nextWeek}</span>
-                            </button>
-
-                            {group.addedTasks.length > 0 && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  confirmDialog({
-                                    title: `Hoàn tác chuyển task của ${displayName}`,
-                                    message: `Bạn có chắc muốn hoàn tác ${group.addedTasks.length} task đã chuyển sang Tuần ${nextWeek} quay trở lại Tuần ${selectedWeek}?`,
-                                    type: 'warning',
-                                    confirmText: 'Hoàn tác về tuần cũ',
-                                    onConfirm: () => {
-                                      group.addedTasks.forEach((t) => handleUndoTransfer(t));
-                                    },
-                                  });
-                                }}
-                                className="flex items-center gap-1 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-2xs"
-                                title={`Hoàn tác ${group.addedTasks.length} task đã chuyển về lại Tuần ${selectedWeek}`}
-                              >
-                                <Undo2 className="w-3.5 h-3.5" />
-                                <span>Hoàn tác ({group.addedTasks.length})</span>
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="inline-flex items-center justify-center gap-1 px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold rounded-xl">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                              <span>Đã chuyển hết sang Tuần {nextWeek}</span>
-                            </span>
-
-                            {group.addedTasks.length > 0 && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  confirmDialog({
-                                    title: `Hoàn tác chuyển task của ${displayName}`,
-                                    message: `Bạn có chắc muốn hoàn tác toàn bộ ${group.addedTasks.length} task đã chuyển sang Tuần ${nextWeek} quay trở lại Tuần ${selectedWeek}?`,
-                                    type: 'warning',
-                                    confirmText: 'Hoàn tác tất cả về tuần cũ',
-                                    onConfirm: () => {
-                                      group.addedTasks.forEach((t) => handleUndoTransfer(t));
-                                    },
-                                  });
-                                }}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-2xs"
-                                title={`Hoàn tác tất cả ${group.addedTasks.length} task của ${displayName} về lại Tuần ${selectedWeek}`}
-                              >
-                                <Undo2 className="w-3.5 h-3.5" />
-                                <span>Hoàn tác tất cả ({group.addedTasks.length})</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            group.tasks.forEach((t) => handleTransferToNextWeek(t));
+                          }}
+                          className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95 cursor-pointer"
+                          title={`Chuyển toàn bộ ${group.tasks.length} task dở của ${displayName} sang Tuần ${nextWeek}`}
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" />
+                          <span>Chuyển tất cả ({group.tasks.length}) sang Tuần {nextWeek}</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -847,12 +738,6 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                       <div className="pt-3.5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {group.tasks.map((t) => {
                           const milestone = milestones.find((m) => m.id === t.milestoneId);
-                          const isAlreadyAdded = tasks.some(
-                            (nt) =>
-                              nt.weekNumber === nextWeek &&
-                              nt.year === selectedYear &&
-                              (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
-                          );
 
                           return (
                             <div
@@ -932,36 +817,15 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                   </div>
                                 </div>
 
-                                {/* Action Button: Dedicated prominence with Back / Undo */}
-                                {isAlreadyAdded ? (
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex-1 py-2 px-3 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-1.5 shadow-2xs">
-                                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                                      <span className="truncate">Đã vào Tuần {nextWeek}</span>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleUndoTransfer(t);
-                                      }}
-                                      className="py-2 px-3 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-800 hover:text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
-                                      title={`Hoàn tác / Back task "${t.title}" về lại Tuần ${selectedWeek}`}
-                                    >
-                                      <Undo2 className="w-3.5 h-3.5" />
-                                      <span>Back lại</span>
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => handleTransferToNextWeek(t)}
-                                    className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl transition active:scale-98 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
-                                    title={`Đưa task này vào kế hoạch Tuần ${nextWeek}`}
-                                  >
-                                    <ArrowRight className="w-4 h-4" />
-                                    <span>Chuyển sang kế hoạch Tuần {nextWeek}</span>
-                                  </button>
-                                )}
+                                {/* Action Button: Dedicated prominence */}
+                                <button
+                                  onClick={() => handleTransferToNextWeek(t)}
+                                  className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl transition active:scale-98 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
+                                  title={`Đưa task này vào kế hoạch Tuần ${nextWeek}`}
+                                >
+                                  <ArrowRight className="w-4 h-4" />
+                                  <span>Chuyển sang kế hoạch Tuần {nextWeek}</span>
+                                </button>
                               </div>
                             </div>
                           );

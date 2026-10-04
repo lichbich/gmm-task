@@ -2463,61 +2463,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncArchivesToFirebase(updatedArchives);
 
     // Update tasks array:
-    // 1. Move unworked tasks (0% progress) directly to nextWeek (clears them from currentWeek)
-    const newTasksList = tasks
-      .map((t) => {
-        if (t.weekNumber === selectedWeek && t.year === selectedYear && t.assigneeAccount && isTaskUnworked(t)) {
-          const alreadyHasNextWeekTask = tasks.some(
-            (nt) =>
-              nt.id !== t.id &&
-              nt.weekNumber === nextWeek &&
-              nt.year === selectedYear &&
-              (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
-          );
-          if (alreadyHasNextWeekTask) {
-            return null; // Remove duplicate unworked task from current week
-          }
-          return {
-            ...t,
-            weekNumber: nextWeek,
-            actualEffort: 0,
-            status: 'To do' as TaskStatus,
-            lastSubmittedAt: undefined,
-            isSubmittedLate: undefined,
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return t;
-      })
-      .filter(Boolean) as Task[];
-
-    // 2. For partially worked unfinished tasks (0% < completionPercentage < 100%), create continuation tasks for nextWeek while keeping original record in current week
-    const partiallyWorkedUnfinished = currentWeekAssignedTasks.filter(
-      (t) => (t.completionPercentage || 0) > 0 && (t.completionPercentage || 0) < 100
-    );
-
-    partiallyWorkedUnfinished.forEach((t) => {
-      const alreadyHasNextWeekTask = newTasksList.some(
-        (nt) =>
-          nt.weekNumber === nextWeek &&
-          nt.year === selectedYear &&
-          (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
-      );
-      if (!alreadyHasNextWeekTask) {
-        newTasksList.push({
+    // Unfinished tasks (completionPercentage < 100%) in selectedWeek are directly transferred to nextWeek
+    // maintaining the exact same unique task ID (NO task cloning, NO duplicate task records).
+    const newTasksList = tasks.map((t) => {
+      if (
+        t.weekNumber === selectedWeek &&
+        t.year === selectedYear &&
+        t.assigneeAccount &&
+        t.assigneeAccount.trim() !== '' &&
+        (t.completionPercentage === undefined || t.completionPercentage < 100) &&
+        t.status !== 'Done'
+      ) {
+        return {
           ...t,
-          id: `tsk-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
           weekNumber: nextWeek,
-          parentTaskId: t.id,
-          status: 'In Progress',
           actualEffort: 0,
-          completionPercentage: t.completionPercentage,
+          status: (t.completionPercentage && t.completionPercentage > 0) ? ('In Progress' as TaskStatus) : ('To do' as TaskStatus),
           lastSubmittedAt: undefined,
           isSubmittedLate: undefined,
-          createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        };
       }
+      return t;
     });
 
     setTasks(newTasksList);
