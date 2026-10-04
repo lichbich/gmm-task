@@ -30,9 +30,82 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // History Stack for Undo / Redo
+  interface TitleHistory {
+    value: string;
+    selection: { start: number; end: number };
+  }
+
+  const historyRef = useRef<TitleHistory[]>([
+    { value, selection: { start: value.length, end: value.length } },
+  ]);
+  const historyIndexRef = useRef<number>(0);
+  const isUndoingRedoingRef = useRef<boolean>(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const pushTitleSnapshot = (
+    newVal: string,
+    selection?: { start: number; end: number }
+  ) => {
+    if (isUndoingRedoingRef.current) return;
+    const current = historyRef.current[historyIndexRef.current];
+    if (current && current.value === newVal) return;
+
+    const nextHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+    nextHistory.push({
+      value: newVal,
+      selection: selection || { start: newVal.length, end: newVal.length },
+    });
+    if (nextHistory.length > 50) nextHistory.shift();
+    historyRef.current = nextHistory;
+    historyIndexRef.current = nextHistory.length - 1;
+  };
+
+  const handleUndo = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (historyIndexRef.current <= 0) return;
+    isUndoingRedoingRef.current = true;
+    historyIndexRef.current -= 1;
+    const target = historyRef.current[historyIndexRef.current];
+    onChange(target.value);
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(target.selection.start, target.selection.end);
+      }
+      isUndoingRedoingRef.current = false;
+    }, 0);
+  };
+
+  const handleRedo = () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    isUndoingRedoingRef.current = true;
+    historyIndexRef.current += 1;
+    const target = historyRef.current[historyIndexRef.current];
+    onChange(target.value);
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(target.selection.start, target.selection.end);
+      }
+      isUndoingRedoingRef.current = false;
+    }, 0);
+  };
+
   const handleBoldToggle = () => {
     const input = inputRef.current;
     if (!input || disabled) return;
+
+    const currStart = input.selectionStart ?? 0;
+    const currEnd = input.selectionEnd ?? 0;
+    pushTitleSnapshot(value, { start: currStart, end: currEnd });
 
     const { newValue, newSelection } = applyInlineFormatting(
       input,
@@ -41,6 +114,7 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
       'nội dung quan trọng'
     );
     onChange(newValue);
+    pushTitleSnapshot(newValue, newSelection);
 
     setTimeout(() => {
       input.focus();
@@ -49,10 +123,26 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Ctrl + B or Cmd + B
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-      e.preventDefault();
-      handleBoldToggle();
+    if (e.ctrlKey || e.metaKey) {
+      const key = e.key.toLowerCase();
+      // Undo: Ctrl + Z
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+      // Redo: Ctrl + Y or Ctrl + Shift + Z
+      if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+      // Bold: Ctrl + B or Cmd + B
+      if (key === 'b') {
+        e.preventDefault();
+        handleBoldToggle();
+        return;
+      }
     }
   };
 
@@ -70,7 +160,16 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
           ref={inputRef}
           type="text"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            const newVal = e.target.value;
+            const start = e.target.selectionStart ?? 0;
+            const end = e.target.selectionEnd ?? 0;
+            onChange(newVal);
+            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = setTimeout(() => {
+              pushTitleSnapshot(newVal, { start, end });
+            }, 300);
+          }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           required={required}

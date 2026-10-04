@@ -19,6 +19,8 @@ import {
   Loader2,
   FileCode,
   Eye,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import { DecryptedImage } from './DecryptedImage';
 import {
@@ -162,13 +164,129 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
   const focusedBlockIndexRef = useRef<number>(0);
   const textareaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
 
+  // Undo / Redo History Management
+  interface HistorySnapshot {
+    markdown: string;
+    blockIndex?: number;
+    selection?: { start: number; end: number };
+  }
+
+  const historyRef = useRef<HistorySnapshot[]>([{ markdown: value, blockIndex: 0 }]);
+  const historyIndexRef = useRef<number>(0);
+  const [canUndo, setCanUndo] = useState<boolean>(false);
+  const [canRedo, setCanRedo] = useState<boolean>(false);
+  const isUndoingRedoingRef = useRef<boolean>(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const pushSnapshot = useCallback(
+    (
+      newMarkdown: string,
+      blockIndex?: number,
+      selection?: { start: number; end: number }
+    ) => {
+      if (isUndoingRedoingRef.current) return;
+      const currentSnapshot = historyRef.current[historyIndexRef.current];
+      if (currentSnapshot && currentSnapshot.markdown === newMarkdown) {
+        return;
+      }
+
+      // Discard future redo history
+      const nextHistory = historyRef.current.slice(0, historyIndexRef.current + 1);
+      nextHistory.push({
+        markdown: newMarkdown,
+        blockIndex: blockIndex ?? focusedBlockIndexRef.current,
+        selection,
+      });
+
+      // Keep max 60 history steps
+      if (nextHistory.length > 60) {
+        nextHistory.shift();
+      }
+
+      historyRef.current = nextHistory;
+      historyIndexRef.current = nextHistory.length - 1;
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(false);
+    },
+    []
+  );
+
+  const handleUndo = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    if (historyIndexRef.current <= 0) return;
+
+    isUndoingRedoingRef.current = true;
+    historyIndexRef.current -= 1;
+    const target = historyRef.current[historyIndexRef.current];
+
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+
+    const newBlocks = parseMarkdownToBlocks(target.markdown);
+    setBlocks(newBlocks);
+    lastSerializedRef.current = target.markdown;
+    onChange(target.markdown);
+
+    setTimeout(() => {
+      const blockIdx = target.blockIndex ?? 0;
+      const textarea = textareaRefs.current[blockIdx] || textareaRefs.current[0];
+      if (textarea) {
+        textarea.focus();
+        if (target.selection) {
+          textarea.setSelectionRange(target.selection.start, target.selection.end);
+        }
+      }
+      isUndoingRedoingRef.current = false;
+    }, 0);
+  }, [onChange]);
+
+  const handleRedo = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+
+    isUndoingRedoingRef.current = true;
+    historyIndexRef.current += 1;
+    const target = historyRef.current[historyIndexRef.current];
+
+    setCanUndo(historyIndexRef.current > 0);
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+
+    const newBlocks = parseMarkdownToBlocks(target.markdown);
+    setBlocks(newBlocks);
+    lastSerializedRef.current = target.markdown;
+    onChange(target.markdown);
+
+    setTimeout(() => {
+      const blockIdx = target.blockIndex ?? 0;
+      const textarea = textareaRefs.current[blockIdx] || textareaRefs.current[0];
+      if (textarea) {
+        textarea.focus();
+        if (target.selection) {
+          textarea.setSelectionRange(target.selection.start, target.selection.end);
+        }
+      }
+      isUndoingRedoingRef.current = false;
+    }, 0);
+  }, [onChange]);
+
   // Sync external value changes into blocks
   useEffect(() => {
     if (value !== lastSerializedRef.current) {
       lastSerializedRef.current = value;
       setBlocks(parseMarkdownToBlocks(value));
+      if (!isUndoingRedoingRef.current) {
+        pushSnapshot(value);
+      }
     }
-  }, [value]);
+  }, [value, pushSnapshot]);
 
   const updateBlocksAndNotify = useCallback(
     (newBlocks: EditorBlock[]) => {
@@ -187,7 +305,21 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
         ...(newBlocks[index] as TextBlock),
         content: newContent,
       };
-      updateBlocksAndNotify(newBlocks);
+      setBlocks(newBlocks);
+      const serialized = serializeBlocksToMarkdown(newBlocks);
+      lastSerializedRef.current = serialized;
+      onChange(serialized);
+
+      const textarea = textareaRefs.current[index];
+      const start = textarea?.selectionStart ?? 0;
+      const end = textarea?.selectionEnd ?? 0;
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        pushSnapshot(serialized, index, { start, end });
+      }, 350);
     }
   };
 
@@ -202,9 +334,26 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
     if (!textarea || disabled) return;
 
     const idx = focusedBlockIndexRef.current;
+    const currStart = textarea.selectionStart ?? 0;
+    const currEnd = textarea.selectionEnd ?? 0;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    pushSnapshot(lastSerializedRef.current, idx, { start: currStart, end: currEnd });
+
     const { newValue, newSelection } = applyInlineFormatting(textarea, prefix, suffix, placeholderText);
 
-    handleTextChange(idx, newValue);
+    const newBlocks = [...blocks];
+    if (newBlocks[idx] && newBlocks[idx].type === 'text') {
+      newBlocks[idx] = {
+        ...(newBlocks[idx] as TextBlock),
+        content: newValue,
+      };
+      updateBlocksAndNotify(newBlocks);
+      pushSnapshot(serializeBlocksToMarkdown(newBlocks), idx, newSelection);
+    }
 
     setTimeout(() => {
       textarea.focus();
@@ -218,9 +367,26 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
     if (!textarea || disabled) return;
 
     const idx = focusedBlockIndexRef.current;
+    const currStart = textarea.selectionStart ?? 0;
+    const currEnd = textarea.selectionEnd ?? 0;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    pushSnapshot(lastSerializedRef.current, idx, { start: currStart, end: currEnd });
+
     const { newValue, newSelection } = applyLinePrefix(textarea, linePrefix, isNumbered);
 
-    handleTextChange(idx, newValue);
+    const newBlocks = [...blocks];
+    if (newBlocks[idx] && newBlocks[idx].type === 'text') {
+      newBlocks[idx] = {
+        ...(newBlocks[idx] as TextBlock),
+        content: newValue,
+      };
+      updateBlocksAndNotify(newBlocks);
+      pushSnapshot(serializeBlocksToMarkdown(newBlocks), idx, newSelection);
+    }
 
     setTimeout(() => {
       textarea.focus();
@@ -236,6 +402,20 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
     // Ctrl / Cmd shortcuts
     if (e.ctrlKey || e.metaKey) {
       const key = e.key.toLowerCase();
+
+      // Undo: Ctrl + Z (without Shift)
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      // Redo: Ctrl + Y or Ctrl + Shift + Z
+      if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
 
       // Bold: Ctrl + B
       if (key === 'b') {
@@ -282,7 +462,21 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
 
     // Smart Enter list continuation
     if (e.key === 'Enter') {
-      const handled = handleSmartEnter(textarea, e, (newVal) => handleTextChange(idx, newVal));
+      const currStart = textarea.selectionStart ?? 0;
+      const currEnd = textarea.selectionEnd ?? 0;
+
+      const handled = handleSmartEnter(textarea, e, (newVal) => {
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = null;
+        }
+        pushSnapshot(lastSerializedRef.current, idx, { start: currStart, end: currEnd });
+        handleTextChange(idx, newVal);
+        setTimeout(() => {
+          const pos = textarea.selectionStart ?? 0;
+          pushSnapshot(lastSerializedRef.current, idx, { start: pos, end: pos });
+        }, 0);
+      });
       if (handled) return;
     }
   };
@@ -408,6 +602,30 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
       <div className="bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-xl p-1 px-1.5 flex items-center justify-between gap-1 flex-wrap shadow-2xs">
         {/* Left Toolbar Actions */}
         <div className="flex items-center gap-0.5 flex-wrap">
+          {/* Undo */}
+          <button
+            type="button"
+            disabled={disabled || !canUndo || editorMode === 'preview'}
+            onClick={handleUndo}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Hoàn tác (Ctrl + Z)"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Redo */}
+          <button
+            type="button"
+            disabled={disabled || !canRedo || editorMode === 'preview'}
+            onClick={handleRedo}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Làm lại (Ctrl + Y / Ctrl + Shift + Z)"
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-0.5" />
+
           {/* Bold */}
           <button
             type="button"
@@ -612,7 +830,30 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
           <textarea
             rows={minRows}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => {
+              const newVal = e.target.value;
+              lastSerializedRef.current = newVal;
+              onChange(newVal);
+              if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+              debounceTimerRef.current = setTimeout(() => {
+                pushSnapshot(newVal);
+              }, 350);
+            }}
+            onKeyDown={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                const key = e.key.toLowerCase();
+                if (key === 'z' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleUndo();
+                  return;
+                }
+                if (key === 'y' || (key === 'z' && e.shiftKey)) {
+                  e.preventDefault();
+                  handleRedo();
+                  return;
+                }
+              }
+            }}
             disabled={disabled}
             placeholder={placeholder}
             className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 font-mono resize-none leading-relaxed"
@@ -716,7 +957,7 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
       {/* Helper Shortcut Legend */}
       <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 px-1 pt-0.5">
         <span>
-          Phím tắt: <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+B</code> (Đậm), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+I</code> (Nghiêng), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+U</code> (Gạch chân), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Enter</code> (Nối list)
+          Phím tắt: <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+Z</code> (Hoàn tác), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+Y</code> (Làm lại), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+B</code> (Đậm), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+I</code> (Nghiêng), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+U</code> (Gạch chân)
         </span>
       </div>
     </div>
