@@ -228,24 +228,24 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
 
   // Toggle Pin
   const handleTogglePin = (resourceId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     togglePinResourceId(userAccount, resourceId);
     setPinnedIds(getPinnedResourceIds(userAccount));
   };
 
   // Copy Link to clipboard with feedback
   const handleCopyLink = (url: string, id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!url) return;
     navigator.clipboard.writeText(url);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  // Open link helper
-  const handleOpenUrl = (url?: string) => {
-    if (!url) return;
-    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   // Save new custom quick link
@@ -270,7 +270,10 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
   };
 
   const handleDeleteCustomLink = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     removeCustomQuickLink(userAccount, id);
     setCustomLinks(getCustomQuickLinks(userAccount));
   };
@@ -382,7 +385,7 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
         />
       )}
 
-      {/* 3. QUICK RESOURCE FLYOUT CARD - Clean, High-Contrast & Sleek Layout */}
+      {/* 3. QUICK RESOURCE FLYOUT CARD - Clean, High-Contrast & Native Links */}
       {isOpen && (
         <div className="fixed bottom-24 right-3 left-3 sm:left-auto sm:right-6 sm:bottom-20 z-50 sm:w-[460px] max-h-[82vh] sm:max-h-[640px] flex flex-col bg-slate-50/98 dark:bg-slate-900/98 backdrop-blur-2xl border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] overflow-hidden animate-in zoom-in-95 fade-in duration-200">
           {/* Header */}
@@ -667,12 +670,20 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
 
                     {filteredCustomLinks.map((link) => {
                       const visual = getToolVisual(link.tool);
+                      const targetUrl = normalizeUrl(link.url);
                       const isCopied = copiedId === link.id;
 
                       return (
-                        <div
+                        <a
                           key={link.id}
-                          onClick={() => handleOpenUrl(link.url)}
+                          href={targetUrl || '#'}
+                          target={targetUrl ? '_blank' : undefined}
+                          rel={targetUrl ? 'noopener noreferrer' : undefined}
+                          onClick={(e) => {
+                            if (!targetUrl) {
+                              e.preventDefault();
+                            }
+                          }}
                           className={`group relative flex items-center justify-between gap-2.5 p-2.5 sm:p-3 bg-white dark:bg-slate-800/95 border border-slate-200/90 dark:border-slate-700/80 rounded-2xl hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer border-l-4 ${visual.borderLeft}`}
                         >
                           {/* Tool Icon container */}
@@ -701,24 +712,37 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                           {/* Right action icons */}
                           <div
                             className="flex items-center gap-1 shrink-0"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
                           >
-                            <button
-                              type="button"
-                              onClick={(e) => handleCopyLink(link.url, link.id, e)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
-                              title="Copy link"
-                            >
-                              {isCopied ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
+                            {targetUrl && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleCopyLink(targetUrl, link.id, e);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+                                title="Copy link"
+                              >
+                                {isCopied ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
 
                             <button
                               type="button"
-                              onClick={(e) => handleDeleteCustomLink(link.id, e)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteCustomLink(link.id, e);
+                              }}
                               className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition"
                               title="Xóa link cá nhân"
                             >
@@ -729,7 +753,7 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                               <ExternalLink className="w-4 h-4" />
                             </div>
                           </div>
-                        </div>
+                        </a>
                       );
                     })}
                   </div>
@@ -748,12 +772,21 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                         label: res.level,
                         badge: 'bg-slate-100 text-slate-700',
                       };
+                      const targetUrl = normalizeUrl(res.primaryLink || res.originLink || '');
+                      const originUrl = normalizeUrl(res.originLink || '');
                       const isCopied = copiedId === res.id;
 
                       return (
-                        <div
+                        <a
                           key={res.id}
-                          onClick={() => handleOpenUrl(res.primaryLink)}
+                          href={targetUrl || '#'}
+                          target={targetUrl ? '_blank' : undefined}
+                          rel={targetUrl ? 'noopener noreferrer' : undefined}
+                          onClick={(e) => {
+                            if (!targetUrl) {
+                              e.preventDefault();
+                            }
+                          }}
                           className={`group relative flex items-center justify-between gap-2.5 p-2.5 sm:p-3 bg-white dark:bg-slate-800/95 border border-slate-200/90 dark:border-slate-700/80 rounded-2xl hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer border-l-4 ${visual.borderLeft}`}
                         >
                           {/* Tool Icon container */}
@@ -781,12 +814,13 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                                 {res.content || res.primaryLinkLabel || 'Mở tài liệu'}
                               </p>
 
-                              {res.originLink && (
+                              {originUrl && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
+                                    e.preventDefault();
                                     e.stopPropagation();
-                                    handleOpenUrl(res.originLink);
+                                    window.open(originUrl, '_blank', 'noopener,noreferrer');
                                   }}
                                   className="inline-flex items-center gap-0.5 text-[9px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-600 shrink-0 transition"
                                   title="Mở bản tổng hợp (Origin)"
@@ -800,14 +834,21 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                           {/* Actions */}
                           <div
                             className="flex items-center gap-1 shrink-0"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
                           >
-                            {res.primaryLink && (
+                            {targetUrl && (
                               <button
                                 type="button"
-                                onClick={(e) => handleCopyLink(res.primaryLink, res.id, e)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleCopyLink(targetUrl, res.id, e);
+                                }}
                                 className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
-                                title="Copy primary link"
+                                title="Copy link"
                               >
                                 {isCopied ? (
                                   <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -819,7 +860,11 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
 
                             <button
                               type="button"
-                              onClick={(e) => handleTogglePin(res.id, e)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleTogglePin(res.id, e);
+                              }}
                               className="p-1.5 text-amber-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition cursor-pointer active:scale-90"
                               title="Bỏ ghim"
                             >
@@ -830,7 +875,7 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                               <ExternalLink className="w-4 h-4" />
                             </div>
                           </div>
-                        </div>
+                        </a>
                       );
                     })}
                   </div>
@@ -853,12 +898,21 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                       label: res.level,
                       badge: 'bg-slate-100 text-slate-700',
                     };
+                    const targetUrl = normalizeUrl(res.primaryLink || res.originLink || '');
+                    const originUrl = normalizeUrl(res.originLink || '');
                     const isCopied = copiedId === res.id;
 
                     return (
-                      <div
+                      <a
                         key={res.id}
-                        onClick={() => handleOpenUrl(res.primaryLink)}
+                        href={targetUrl || '#'}
+                        target={targetUrl ? '_blank' : undefined}
+                        rel={targetUrl ? 'noopener noreferrer' : undefined}
+                        onClick={(e) => {
+                          if (!targetUrl) {
+                            e.preventDefault();
+                          }
+                        }}
                         className={`group relative flex items-center justify-between gap-2.5 p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer border-l-4 ${
                           visual.borderLeft
                         } ${
@@ -892,12 +946,13 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                               {res.content || res.primaryLinkLabel || 'Mở tài liệu'}
                             </p>
 
-                            {res.originLink && (
+                            {originUrl && (
                               <button
                                 type="button"
                                 onClick={(e) => {
+                                  e.preventDefault();
                                   e.stopPropagation();
-                                  handleOpenUrl(res.originLink);
+                                  window.open(originUrl, '_blank', 'noopener,noreferrer');
                                 }}
                                 className="inline-flex items-center gap-0.5 text-[9px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-300 px-1.5 py-0.2 rounded border border-slate-200 dark:border-slate-600 shrink-0 transition"
                                 title="Mở bản tổng hợp (Origin)"
@@ -911,14 +966,21 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                         {/* Actions */}
                         <div
                           className="flex items-center gap-1 shrink-0"
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
                         >
-                          {res.primaryLink && (
+                          {targetUrl && (
                             <button
                               type="button"
-                              onClick={(e) => handleCopyLink(res.primaryLink, res.id, e)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleCopyLink(targetUrl, res.id, e);
+                              }}
                               className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
-                              title="Copy primary link"
+                              title="Copy link"
                             >
                               {isCopied ? (
                                 <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -930,7 +992,11 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
 
                           <button
                             type="button"
-                            onClick={(e) => handleTogglePin(res.id, e)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleTogglePin(res.id, e);
+                            }}
                             className={`p-1.5 rounded-lg transition cursor-pointer active:scale-90 ${
                               isPinned
                                 ? 'text-amber-500 bg-amber-100 dark:bg-amber-900/60'
@@ -949,7 +1015,7 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                             <ExternalLink className="w-4 h-4" />
                           </div>
                         </div>
-                      </div>
+                      </a>
                     );
                   })
                 )}

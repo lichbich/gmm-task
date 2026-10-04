@@ -98,7 +98,8 @@ export function updateCustomQuickLink(
   saveCustomQuickLinks(account, next);
 }
 
-export function normalizeUrl(url: string): string {
+export function normalizeUrl(url?: string): string {
+  if (!url) return '';
   const trimmed = url.trim();
   if (!trimmed) return '';
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
