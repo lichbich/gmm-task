@@ -17,7 +17,6 @@ import {
   Trash2,
   Maximize2,
   Loader2,
-  FileCode,
   Eye,
   Undo2,
   Redo2,
@@ -158,7 +157,7 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
 }) => {
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => parseMarkdownToBlocks(value));
   const [isUploading, setIsUploading] = useState(false);
-  const [editorMode, setEditorMode] = useState<'visual' | 'preview' | 'raw'>('visual');
+  const [editorMode, setEditorMode] = useState<'visual' | 'preview'>('visual');
   const lastSerializedRef = useRef<string>(value);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const focusedBlockIndexRef = useRef<number>(0);
@@ -599,9 +598,9 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
       />
 
       {/* RICH TEXT FORMATTING TOOLBAR */}
-      <div className="bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-xl p-1 px-1.5 flex items-center justify-between gap-1 flex-wrap shadow-2xs">
+      <div className="bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-xl p-1 px-1.5 flex items-center justify-between gap-1.5 shadow-2xs overflow-x-auto no-scrollbar">
         {/* Left Toolbar Actions */}
-        <div className="flex items-center gap-0.5 flex-wrap">
+        <div className="flex items-center gap-0.5 shrink-0">
           {/* Undo */}
           <button
             type="button"
@@ -768,8 +767,8 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
           </button>
         </div>
 
-        {/* Right View Modes Toggle */}
-        <div className="flex items-center gap-1">
+        {/* Right View Modes Toggle (Soạn thảo | Xem trước) */}
+        <div className="flex items-center gap-1 shrink-0">
           <div className="bg-slate-200/80 dark:bg-slate-700/80 p-0.5 rounded-lg flex items-center text-[10px] font-medium">
             <button
               type="button"
@@ -786,26 +785,15 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
             <button
               type="button"
               onClick={() => setEditorMode('preview')}
-              className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+              className={`px-2 py-0.5 rounded-md transition cursor-pointer flex items-center gap-1 ${
                 editorMode === 'preview'
                   ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
               }`}
               title="Xem trước kết quả hiển thị"
             >
-              Xem trước
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditorMode('raw')}
-              className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
-                editorMode === 'raw'
-                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-              title="Chế độ mã nguồn Markdown"
-            >
-              Mã nguồn
+              <Eye className="w-3 h-3" />
+              <span>Xem trước</span>
             </button>
           </div>
         </div>
@@ -825,39 +813,6 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
               onPreviewImage={onPreviewImage}
             />
           </div>
-        ) : editorMode === 'raw' ? (
-          // Raw Markdown Textarea
-          <textarea
-            rows={minRows}
-            value={value}
-            onChange={(e) => {
-              const newVal = e.target.value;
-              lastSerializedRef.current = newVal;
-              onChange(newVal);
-              if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-              debounceTimerRef.current = setTimeout(() => {
-                pushSnapshot(newVal);
-              }, 350);
-            }}
-            onKeyDown={(e) => {
-              if (e.ctrlKey || e.metaKey) {
-                const key = e.key.toLowerCase();
-                if (key === 'z' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleUndo();
-                  return;
-                }
-                if (key === 'y' || (key === 'z' && e.shiftKey)) {
-                  e.preventDefault();
-                  handleRedo();
-                  return;
-                }
-              }
-            }}
-            disabled={disabled}
-            placeholder={placeholder}
-            className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 font-mono resize-none leading-relaxed"
-          />
         ) : (
           // Visual Flow Mode
           <div className="space-y-2">
