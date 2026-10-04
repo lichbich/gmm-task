@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Milestone, User as UserType, isTaskUnworked, Ticket, getUserLevelRank, getUserRoleInSpec } from '../types/task';
+import { Task, Milestone, User as UserType, isTaskUnworked, Ticket, getUserLevelRank, getUserRoleInSpec, isUserPM, isUserAdminOrPM, isSpecializationMatchingRole } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
@@ -33,6 +33,10 @@ import {
   X,
   MessageSquare,
   ChevronDown,
+  ChevronUp,
+  Undo2,
+  RotateCcw,
+  Layers,
   Ticket as TicketIcon,
 } from 'lucide-react';
 
@@ -83,6 +87,26 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [expandedMembers, setExpandedMembers] = useState<Record<string, boolean>>({});
+  const [collapsedMsGroups, setCollapsedMsGroups] = useState<Record<string, boolean>>({});
+
+  const toggleCollapseMsGroup = (msId: string) => {
+    setCollapsedMsGroups((prev) => ({
+      ...prev,
+      [msId]: !prev[msId],
+    }));
+  };
+
+  const handleCollapseAllMsGroups = () => {
+    const nextState: Record<string, boolean> = {};
+    unassignedTasksGroupedByMilestone.forEach((g) => {
+      nextState[g.milestoneId] = true;
+    });
+    setCollapsedMsGroups(nextState);
+  };
+
+  const handleExpandAllMsGroups = () => {
+    setCollapsedMsGroups({});
+  };
 
   const getLinkedTicket = (t: Task): Ticket | undefined => {
     if (t.ticketId) {
@@ -124,27 +148,30 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   };
 
   // Role filtering permissions
-  const isLeaderOrAdmin = currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin';
-  const myRole = currentUser?.role === 'Admin' ? 'ALL' : currentUser?.specializations?.[0] || 'ALL';
+  const isLeaderOrAdmin = currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser);
+  const myRole = isUserAdminOrPM(currentUser) ? 'ALL' : currentUser?.specializations?.[0] || 'ALL';
 
   // Helper to check if a task strictly belongs to current user's team / scope
   const isTaskInMyTeamScope = (t: Task): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'Admin') return true;
+    if (isUserAdminOrPM(currentUser)) return true;
 
     const myRoleInTask = getUserRoleInSpec(currentUser, t.role);
     if (myRoleInTask === 'Leader' || myRoleInTask === 'Advisor') {
       return true;
     }
 
-    // Member: only own tasks
-    return Boolean(t.assigneeAccount && t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase());
+    // Member: only own tasks (as assignee or supporter)
+    const isPrimary = Boolean(t.assigneeAccount && t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase());
+    const isSupporter = Boolean(t.supporterAccounts && t.supporterAccounts.some((acc) => acc.toLowerCase() === currentUser.account.toLowerCase()));
+    return isPrimary || isSupporter;
   };
 
   // 1. Pending Assignment Requests
   const pendingRequests = React.useMemo(() => {
     return tasks.filter((t) => {
       if (t.assignmentRequestStatus !== 'PENDING') return false;
+      if (isUserAdminOrPM(currentUser)) return true;
       if (currentUser?.role === 'Member') {
         // Members see their own pending requests
         return t.assignmentRequestedBy === currentUser.account;
@@ -153,7 +180,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         // Leader / Advisor sees requests in their role / team only
         return isTaskInMyTeamScope(t);
       }
-      return true; // Admin sees all
+      return true; // Admin/PM sees all
     });
   }, [tasks, currentUser, users]);
 
@@ -164,13 +191,16 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (!t.assigneeAccount || t.assigneeAccount.trim() === '') return false;
       if ((t.completionPercentage !== undefined && t.completionPercentage >= 100) || (t.status === 'Done' && (t.completionPercentage === undefined || t.completionPercentage >= 100))) return false; // Unfinished tasks only
 
+      if (isUserAdminOrPM(currentUser)) return true;
       if (currentUser?.role === 'Member') {
-        return t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
+        const isPrimary = t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
+        const isSupporter = t.supporterAccounts?.some((sp) => sp.toLowerCase() === currentUser.account.toLowerCase());
+        return Boolean(isPrimary || isSupporter);
       }
       if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
         return isTaskInMyTeamScope(t);
       }
-      return true; // Admin sees all
+      return true; // Admin/PM sees all
     });
   }, [tasks, selectedWeek, selectedYear, currentUser, users]);
 
@@ -184,6 +214,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         tasks: Task[];
         totalHours: number;
         unaddedTasks: Task[];
+        addedTasks: Task[];
       }
     >();
 
@@ -202,6 +233,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         existing.totalHours += t.estimatedEffort || 0;
         if (!isAlreadyAdded) {
           existing.unaddedTasks.push(t);
+        } else {
+          existing.addedTasks.push(t);
         }
       } else {
         const u = users.find((user) => user.account.toLowerCase() === account.toLowerCase());
@@ -211,6 +244,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
           tasks: [t],
           totalHours: t.estimatedEffort || 0,
           unaddedTasks: isAlreadyAdded ? [] : [t],
+          addedTasks: isAlreadyAdded ? [t] : [],
         });
       }
     });
@@ -229,20 +263,25 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (t.weekNumber !== nextWeek || t.year !== selectedYear) return false;
       if (!t.assigneeAccount || t.assigneeAccount.trim() === '') return false;
 
-      // Role check for Leader/Advisor/Member if not admin
-      if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
+      // Role check for Leader/Advisor/Member if not admin or PM
+      if (isUserAdminOrPM(currentUser)) {
+        // sees all
+      } else if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
         if (!isTaskInMyTeamScope(t)) return false;
       } else if (currentUser?.role === 'Member') {
-        if (t.assigneeAccount?.toLowerCase() !== currentUser.account.toLowerCase()) return false;
+        const isPrimary = t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
+        const isSupporter = t.supporterAccounts?.some((sp) => sp.toLowerCase() === currentUser.account.toLowerCase());
+        if (!isPrimary && !isSupporter) return false;
       }
 
-      if (roleFilter !== 'ALL' && t.role !== roleFilter) return false;
+      if (roleFilter !== 'ALL' && !isSpecializationMatchingRole(t.role, roleFilter)) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchTitle = t.title.toLowerCase().includes(q);
         const matchAssignee = (t.assigneeAccount || '').toLowerCase().includes(q);
-        if (!matchTitle && !matchAssignee) return false;
+        const matchSupporter = (t.supporterAccounts || []).some((sp) => sp.toLowerCase().includes(q));
+        if (!matchTitle && !matchAssignee && !matchSupporter) return false;
       }
 
       return true;
@@ -283,16 +322,18 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       if (t.assigneeAccount && t.assigneeAccount.trim() !== '') return false;
       if (t.assignmentRequestStatus === 'PENDING') return false;
 
-      // Filter by role for members/leaders/advisors
-      if (currentUser?.role === 'Member') {
+      // Filter by role for members/leaders/advisors if not admin/pm
+      if (isUserAdminOrPM(currentUser)) {
+        // sees all
+      } else if (currentUser?.role === 'Member') {
         const mySpecs = currentUser.specializations || [];
-        if (!mySpecs.includes(t.role)) return false;
+        if (!mySpecs.some((s) => isSpecializationMatchingRole(s, t.role))) return false;
       } else if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor') {
         const leaderRoles = currentUser.specializations || [];
-        if (!leaderRoles.includes(t.role)) return false;
+        if (!leaderRoles.some((s) => isSpecializationMatchingRole(s, t.role))) return false;
       }
 
-      if (roleFilter !== 'ALL' && t.role !== roleFilter) return false;
+      if (roleFilter !== 'ALL' && !isSpecializationMatchingRole(t.role, roleFilter)) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -345,6 +386,81 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     }
   };
 
+  const handleUndoTransfer = (t: Task) => {
+    const existingNextWeek = tasks.find(
+      (nt) =>
+        nt.id !== t.id &&
+        nt.weekNumber === nextWeek &&
+        nt.year === selectedYear &&
+        (nt.parentTaskId === t.id || (nt.title === t.title && nt.assigneeAccount === t.assigneeAccount))
+    );
+
+    if (existingNextWeek) {
+      deleteTask(existingNextWeek.id);
+    } else if (t.weekNumber === nextWeek) {
+      updateTask(t.id, { weekNumber: selectedWeek });
+    }
+  };
+
+  const handleUndoNextWeekTask = (t: Task) => {
+    confirmDialog({
+      title: 'Hoàn tác chuyển task',
+      message: `Bạn có chắc muốn chuyển task "${t.title}" quay trở lại Tuần ${selectedWeek}?`,
+      type: 'warning',
+      confirmText: `Hoàn tác về Tuần ${selectedWeek}`,
+      onConfirm: () => {
+        if (t.parentTaskId) {
+          deleteTask(t.id);
+        } else {
+          updateTask(t.id, { weekNumber: selectedWeek });
+        }
+      },
+    });
+  };
+
+  // Group unassigned milestone tasks by milestone for a clean & intuitive UI
+  const unassignedTasksGroupedByMilestone = React.useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        milestone?: Milestone;
+        milestoneId: string;
+        title: string;
+        order: number;
+        moduleCode?: string;
+        deadline?: string;
+        tasks: Task[];
+        totalEffort: number;
+      }
+    >();
+
+    unassignedMilestoneTasks.forEach((t) => {
+      const msId = t.milestoneId || '__ADHOC__';
+      const ms = milestones.find((m) => m.id === msId);
+      const existing = map.get(msId);
+
+      if (existing) {
+        existing.tasks.push(t);
+        existing.totalEffort += t.estimatedEffort || 0;
+      } else {
+        map.set(msId, {
+          milestone: ms,
+          milestoneId: msId,
+          title: ms ? ms.title : 'Task Tự Do & Phát Sinh (Ngoài Milestone)',
+          order: ms ? (ms.order || 0) : 9999,
+          moduleCode: ms?.moduleCode,
+          deadline: ms?.deadline || ms?.targetDate,
+          tasks: [t],
+          totalEffort: t.estimatedEffort || 0,
+        });
+      }
+    });
+
+    const groups = Array.from(map.values());
+    groups.sort((a, b) => a.order - b.order);
+    return groups;
+  }, [unassignedMilestoneTasks, milestones]);
+
   const isSunday = new Date(simulatedTime || Date.now()).getDay() === 0;
 
   if (!isSunday) {
@@ -382,8 +498,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              {currentUser?.role === 'Admin'
-                ? 'Admin: Define công việc tuần tới cho tất cả các team và phân công task.'
+              {isUserAdminOrPM(currentUser)
+                ? `${currentUser?.role === 'Admin' ? 'Admin' : 'PM'}: Define công việc tuần tới cho tất cả các team và phân công task.`
                 : currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
                 ? `${currentUser.role} (${currentUser.specializations?.join(', ') || 'Team'}): Quản lý & lên kế hoạch tuần tới cho các thành viên trong team của bạn.`
                 : `Member (${currentUser?.name}): Tự tạo task mới cho bản thân tuần tới hoặc xin nhận task từ Milestone để Leader/Advisor duyệt.`}
@@ -653,25 +769,73 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                         </span>
                       </div>
 
-                      {/* Member Quick Transfer All Button */}
+                      {/* Member Quick Transfer All & Undo Buttons */}
                       <div className="shrink-0 pt-1 sm:pt-0" onClick={(e) => e.stopPropagation()}>
                         {hasUnadded ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              group.unaddedTasks.forEach((t) => handleTransferToNextWeek(t));
-                            }}
-                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95 cursor-pointer"
-                            title={`Chuyển toàn bộ ${group.unaddedTasks.length} task dở của ${displayName} sang Tuần ${nextWeek}`}
-                          >
-                            <ArrowRight className="w-3.5 h-3.5" />
-                            <span>Chuyển tất cả ({group.unaddedTasks.length}) sang Tuần {nextWeek}</span>
-                          </button>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                group.unaddedTasks.forEach((t) => handleTransferToNextWeek(t));
+                              }}
+                              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95 cursor-pointer"
+                              title={`Chuyển toàn bộ ${group.unaddedTasks.length} task dở của ${displayName} sang Tuần ${nextWeek}`}
+                            >
+                              <ArrowRight className="w-3.5 h-3.5" />
+                              <span>Chuyển tất cả ({group.unaddedTasks.length}) sang Tuần {nextWeek}</span>
+                            </button>
+
+                            {group.addedTasks.length > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  confirmDialog({
+                                    title: `Hoàn tác chuyển task của ${displayName}`,
+                                    message: `Bạn có chắc muốn hoàn tác ${group.addedTasks.length} task đã chuyển sang Tuần ${nextWeek} quay trở lại Tuần ${selectedWeek}?`,
+                                    type: 'warning',
+                                    confirmText: 'Hoàn tác về tuần cũ',
+                                    onConfirm: () => {
+                                      group.addedTasks.forEach((t) => handleUndoTransfer(t));
+                                    },
+                                  });
+                                }}
+                                className="flex items-center gap-1 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-2xs"
+                                title={`Hoàn tác ${group.addedTasks.length} task đã chuyển về lại Tuần ${selectedWeek}`}
+                              >
+                                <Undo2 className="w-3.5 h-3.5" />
+                                <span>Hoàn tác ({group.addedTasks.length})</span>
+                              </button>
+                            )}
+                          </div>
                         ) : (
-                          <span className="w-full sm:w-auto inline-flex items-center justify-center gap-1 px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold rounded-xl">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                            <span>Đã chuyển hết sang Tuần {nextWeek}</span>
-                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center justify-center gap-1 px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold rounded-xl">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>Đã chuyển hết sang Tuần {nextWeek}</span>
+                            </span>
+
+                            {group.addedTasks.length > 0 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  confirmDialog({
+                                    title: `Hoàn tác chuyển task của ${displayName}`,
+                                    message: `Bạn có chắc muốn hoàn tác toàn bộ ${group.addedTasks.length} task đã chuyển sang Tuần ${nextWeek} quay trở lại Tuần ${selectedWeek}?`,
+                                    type: 'warning',
+                                    confirmText: 'Hoàn tác tất cả về tuần cũ',
+                                    onConfirm: () => {
+                                      group.addedTasks.forEach((t) => handleUndoTransfer(t));
+                                    },
+                                  });
+                                }}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition active:scale-95 cursor-pointer shadow-2xs"
+                                title={`Hoàn tác tất cả ${group.addedTasks.length} task của ${displayName} về lại Tuần ${selectedWeek}`}
+                              >
+                                <Undo2 className="w-3.5 h-3.5" />
+                                <span>Hoàn tác tất cả ({group.addedTasks.length})</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -768,11 +932,25 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                   </div>
                                 </div>
 
-                                {/* Action Button: Dedicated prominence */}
+                                {/* Action Button: Dedicated prominence with Back / Undo */}
                                 {isAlreadyAdded ? (
-                                  <div className="w-full py-2 px-3 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-1.5 shadow-2xs">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                                    <span>Đã đưa vào kế hoạch Tuần {nextWeek}</span>
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 py-2 px-3 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-xs font-bold rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center justify-center gap-1.5 shadow-2xs">
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <span className="truncate">Đã vào Tuần {nextWeek}</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUndoTransfer(t);
+                                      }}
+                                      className="py-2 px-3 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-800 hover:text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer shadow-2xs"
+                                      title={`Hoàn tác / Back task "${t.title}" về lại Tuần ${selectedWeek}`}
+                                    >
+                                      <Undo2 className="w-3.5 h-3.5" />
+                                      <span>Back lại</span>
+                                    </button>
                                   </div>
                                 ) : (
                                   <button
@@ -822,7 +1000,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
               />
             </div>
 
-            {currentUser?.role === 'Admin' ? (
+            {isUserAdminOrPM(currentUser) ? (
               <Dropdown
                 value={roleFilter}
                 onChange={setRoleFilter}
@@ -1057,6 +1235,15 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                         >
                                           <Edit2 className="w-3.5 h-3.5" />
                                         </button>
+                                        {(isLeaderOrAdmin || t.assigneeAccount === currentUser?.account) && (
+                                          <button
+                                            onClick={() => handleUndoNextWeekTask(t)}
+                                            className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition"
+                                            title={`Hoàn tác / Trả lại về Tuần ${selectedWeek}`}
+                                          >
+                                            <RotateCcw className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
                                         {isLeaderOrAdmin && (
                                           <button
                                             onClick={() => {
@@ -1211,6 +1398,18 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                       </div>
 
                                       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                        {(isLeaderOrAdmin || t.assigneeAccount === currentUser?.account) && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleUndoNextWeekTask(t);
+                                            }}
+                                            className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 active:scale-95"
+                                            title={`Hoàn tác / Trả lại về Tuần ${selectedWeek}`}
+                                          >
+                                            <RotateCcw className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -1256,73 +1455,199 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         )}
       </div>
 
-      {/* SECTION 3: UNASSIGNED MILESTONE TASKS POOL */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+      {/* SECTION 3: UNASSIGNED MILESTONE TASKS POOL (Grouped by Milestone) */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div>
-            <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <FolderOpen className="w-4 h-4 text-amber-500" />
-              Kho Task Milestone Chưa Phân Công ({unassignedMilestoneTasks.length} task)
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                <Layers className="w-3.5 h-3.5" />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                Kho Task Milestone Chưa Phân Công ({unassignedMilestoneTasks.length} task)
+              </h3>
+              {unassignedTasksGroupedByMilestone.length > 0 && (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-2xs">
+                  {unassignedTasksGroupedByMilestone.length} Cột mốc Milestone
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
               {isLeaderOrAdmin
-                ? 'Leader/Admin bấm Phân công nhanh để giao task từ Milestone cho thành viên làm tuần tới.'
-                : 'Member bấm Xin Nhận Task để đăng ký công việc tuần tới cho bản thân và gửi Leader duyệt.'}
+                ? `Leader/Admin bấm "⚡ Phân Công Nhanh" để giao task từ từng Milestone cho thành viên thực hiện trong Tuần ${nextWeek}.`
+                : `Thành viên xem danh sách task theo từng Cột mốc và bấm "✋ Xin Nhận Task" để đăng ký việc cho Tuần ${nextWeek}.`}
             </p>
           </div>
+
+          {unassignedTasksGroupedByMilestone.length > 0 && (
+            <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={handleExpandAllMsGroups}
+                className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition active:scale-95 cursor-pointer shadow-2xs"
+              >
+                Mở rộng tất cả
+              </button>
+              <button
+                type="button"
+                onClick={handleCollapseAllMsGroups}
+                className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition active:scale-95 cursor-pointer shadow-2xs"
+              >
+                Thu gọn tất cả
+              </button>
+            </div>
+          )}
         </div>
 
         {unassignedMilestoneTasks.length === 0 ? (
-          <div className="py-8 text-center text-slate-400 text-xs italic">
-            Không có task Milestone chưa giao nào phù hợp với bộ lọc.
+          <div className="py-10 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs italic space-y-1.5">
+            <FolderOpen className="w-8 h-8 text-slate-300 mx-auto" />
+            <p className="font-semibold text-slate-600">Không có task Milestone chưa giao nào phù hợp với bộ lọc.</p>
+            <p className="text-[11px] text-slate-400">Tất cả các task thuộc Milestone đã được phân công hoặc chưa được tạo.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {unassignedMilestoneTasks.map((t) => {
-              const milestone = milestones.find((m) => m.id === t.milestoneId);
+          <div className="space-y-4">
+            {unassignedTasksGroupedByMilestone.map((group) => {
+              const isCollapsed = Boolean(collapsedMsGroups[group.milestoneId]);
+              const isAdhoc = group.milestoneId === '__ADHOC__';
 
               return (
-                <div key={t.id} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-col justify-between space-y-3 hover:border-indigo-300 transition">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">
-                        {t.role}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400">Est: {t.estimatedEffort}h</span>
+                <div
+                  key={group.milestoneId}
+                  className={`border rounded-2xl overflow-hidden transition-all duration-200 ${
+                    isCollapsed
+                      ? 'bg-white border-slate-200/90 shadow-2xs'
+                      : isAdhoc
+                      ? 'bg-amber-50/20 border-amber-200/80 shadow-2xs'
+                      : 'bg-indigo-50/20 border-indigo-200/80 shadow-2xs'
+                  }`}
+                >
+                  {/* Milestone Group Header (Clickable) */}
+                  <div
+                    onClick={() => toggleCollapseMsGroup(group.milestoneId)}
+                    className={`p-3.5 sm:p-4 flex items-center justify-between cursor-pointer select-none transition-colors ${
+                      isAdhoc
+                        ? 'bg-amber-50/70 hover:bg-amber-100/70 border-b border-amber-200/70'
+                        : 'bg-indigo-50/60 hover:bg-indigo-100/60 border-b border-indigo-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-wrap flex-1">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 shadow-2xs ${
+                          isAdhoc
+                            ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                            : 'bg-indigo-600 text-white'
+                        }`}
+                      >
+                        {isAdhoc ? <FolderOpen className="w-4 h-4" /> : <Flag className="w-4 h-4" />}
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        {group.moduleCode && (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-white text-indigo-700 border border-indigo-200 shadow-2xs">
+                            {group.moduleCode}
+                          </span>
+                        )}
+                        <h4 className="font-bold text-xs sm:text-sm text-slate-800">
+                          {group.title}
+                        </h4>
+                      </div>
+
+                      {group.deadline && (
+                        <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1 bg-white/90 px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">
+                          <Clock className="w-3 h-3 text-slate-400" /> Hạn chót: {group.deadline}
+                        </span>
+                      )}
                     </div>
 
-                    <h4 className="text-xs font-bold text-slate-800 leading-snug line-clamp-2">{t.title}</h4>
+                    {/* Stats & Chevron */}
+                    <div className="flex items-center gap-3 shrink-0 ml-2">
+                      <div className="text-right hidden sm:flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-white text-indigo-700 border border-indigo-200 shadow-2xs">
+                          {group.tasks.length} task
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">
+                          {group.totalEffort}h
+                        </span>
+                      </div>
 
-                    {milestone && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-100">
-                        <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" /> {milestone.title}
-                      </span>
-                    )}
+                      <div className="w-7 h-7 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-800 shadow-2xs">
+                        {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                    <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                      Chưa ai nhận
-                    </span>
+                  {/* Tasks inside this Milestone Group */}
+                  {!isCollapsed && (
+                    <div className="p-3.5 sm:p-4 bg-white/60">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {group.tasks.map((t) => {
+                          return (
+                            <div
+                              key={t.id}
+                              className="bg-white p-4 rounded-xl border border-slate-200/90 hover:border-indigo-300 hover:shadow-sm transition flex flex-col justify-between space-y-3.5"
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                    {t.role}
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {t.priority === 'High' && (
+                                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 text-[10px] font-bold">
+                                        <Flame className="w-3 h-3 text-red-500 fill-red-500" /> Cao
+                                      </span>
+                                    )}
+                                    <span className="text-[11px] font-mono font-bold text-indigo-600 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100">
+                                      {t.estimatedEffort || 0}h
+                                    </span>
+                                  </div>
+                                </div>
 
-                    {isLeaderOrAdmin ? (
-                      <button
-                        onClick={() => onOpenTaskModal(t, nextWeek)}
-                        className="flex items-center gap-1 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition active:scale-95"
-                      >
-                        ⚡ Phân Công Nhanh
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          requestTaskAssignment(t.id, currentUser?.account || '', nextWeek);
-                        }}
-                        className="flex items-center gap-1 px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg transition active:scale-95"
-                      >
-                        <Handshake className="w-3.5 h-3.5" /> ✋ Xin Nhận Task
-                      </button>
-                    )}
-                  </div>
+                                <h5
+                                  onClick={() => handleTaskClick(t)}
+                                  className="text-xs font-bold text-slate-800 leading-snug line-clamp-2 hover:text-indigo-600 transition cursor-pointer"
+                                  title="Bấm để xem chi tiết task"
+                                >
+                                  {t.title}
+                                </h5>
+
+                                {t.description && (
+                                  <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                                    {t.description}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                                <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                                  Chưa phân công
+                                </span>
+
+                                {isLeaderOrAdmin ? (
+                                  <button
+                                    onClick={() => onOpenTaskModal(t, nextWeek)}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+                                  >
+                                    ⚡ Phân Công Nhanh
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      requestTaskAssignment(t.id, currentUser?.account || '', nextWeek);
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
+                                  >
+                                    <Handshake className="w-3.5 h-3.5" /> ✋ Xin Nhận Task
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

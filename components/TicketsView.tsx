@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Ticket, TicketStatus, TicketPriority, getUserRoleColorClass, getUserRoleInSpec } from '../types/task';
+import { Ticket, TicketStatus, TicketPriority, getUserRoleColorClass, getUserRoleInSpec, isUserAdminOrPM } from '../types/task';
 import { TicketCreateModal } from './TicketCreateModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown, DropdownOption } from './common/Dropdown';
@@ -32,9 +32,13 @@ import {
 
 interface TicketsViewProps {
   initialSelectedTicketId?: string | null;
+  onClearInitialTicketId?: () => void;
 }
 
-export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketId }) => {
+export const TicketsView: React.FC<TicketsViewProps> = ({
+  initialSelectedTicketId,
+  onClearInitialTicketId,
+}) => {
   const { currentUser, tickets, users, roles } = useApp();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -60,18 +64,19 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
   const userSpecializations = useMemo(() => {
     return currentUser?.specializations && currentUser.specializations.length > 0
       ? currentUser.specializations
-      : [currentUser?.role === 'Admin' ? 'PO' : 'BA'];
+      : [isUserAdminOrPM(currentUser) ? 'PO' : 'BA'];
   }, [currentUser]);
 
-  // Handle auto-opening ticket from prop
+  // Handle auto-opening ticket from prop (one-shot consumption)
   useEffect(() => {
     if (initialSelectedTicketId && tickets.length > 0) {
       const found = tickets.find((t) => t.id === initialSelectedTicketId || t.code === initialSelectedTicketId);
       if (found) {
         setSelectedTicket(found);
+        onClearInitialTicketId?.();
       }
     }
-  }, [initialSelectedTicketId, tickets]);
+  }, [initialSelectedTicketId, tickets, onClearInitialTicketId]);
 
   // Keep selectedTicket synchronized with latest ticket data from context
   useEffect(() => {
@@ -690,7 +695,10 @@ export const TicketsView: React.FC<TicketsViewProps> = ({ initialSelectedTicketI
       <TicketDetailModal
         ticket={selectedTicket}
         isOpen={!!selectedTicket}
-        onClose={() => setSelectedTicket(null)}
+        onClose={() => {
+          setSelectedTicket(null);
+          onClearInitialTicketId?.();
+        }}
       />
     </div>
   );

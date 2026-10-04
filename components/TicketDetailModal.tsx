@@ -3,7 +3,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { useModalAnimation } from '../hooks/useModalAnimation';
-import { Ticket, TicketStatus, TicketPriority, TicketActivityLog, getUserRoleColorClass, getUserRoleInSpec } from '../types/task';
+import { Ticket, TicketStatus, TicketPriority, TicketActivityLog, getUserRoleColorClass, getUserRoleInSpec, isUserPM, isUserAdminOrPM } from '../types/task';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import {
   X,
@@ -350,20 +350,20 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
     ticket.assignedTo && ticket.assignedTo.toLowerCase() === currentUser.account.toLowerCase()
   );
 
-  // Can edit content (Title, Description, Priority, Attachments): Creator or Admin
-  const canEdit = isCreator || currentUser.role === 'Admin';
+  // Can edit content (Title, Description, Priority, Attachments): Creator, Admin, or PM
+  const canEdit = isCreator || isUserAdminOrPM(currentUser);
 
   const userRoleInTarget = getUserRoleInSpec(currentUser, ticket.toRole);
   const isLeaderOrAdvisorInTarget = userRoleInTarget === 'Leader' || userRoleInTarget === 'Advisor';
 
-  // Can assign: Destination team leaders/advisors, assignee, or uninvolved Admin
-  const canAssign = isLeaderOrAdvisorInTarget || isAssignee || (currentUser.role === 'Admin' && !isCreator && !isSendingTeam);
+  // Can assign: Destination team leaders/advisors, assignee, or uninvolved Admin/PM
+  const canAssign = isLeaderOrAdvisorInTarget || isAssignee || (isUserAdminOrPM(currentUser) && !isCreator && !isSendingTeam);
 
   // Can manage processing status (In Progress, Resolved, Rejected):
-  // Destination team, assignee, or uninvolved Admin. Requester/Sending Team CANNOT update destination team's status!
-  const canManageStatus = isTargetTeam || isAssignee || (currentUser.role === 'Admin' && !isCreator && !isSendingTeam);
+  // Destination team, assignee, or uninvolved Admin/PM. Requester/Sending Team CANNOT update destination team's status!
+  const canManageStatus = isTargetTeam || isAssignee || (isUserAdminOrPM(currentUser) && !isCreator && !isSendingTeam);
 
-  const canDelete = isCreator || currentUser.role === 'Admin';
+  const canDelete = isCreator || isUserAdminOrPM(currentUser);
 
   // Candidate users for assignment in toRole
   const candidateAssignees = users.filter((u) => {

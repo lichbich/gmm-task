@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ProjectResource, ResourceLevel } from '../types/task';
+import { ProjectResource, ResourceLevel, isUserAdminOrPM } from '../types/task';
 import {
   FolderGit2,
   Plus,
@@ -147,7 +147,7 @@ export const ResourceManagerView: React.FC = () => {
   const [resOriginLink, setResOriginLink] = useState('');
   const [resOriginLinkLabel, setResOriginLinkLabel] = useState('');
 
-  const canManage = currentUser?.role === 'Admin' || currentUser?.role === 'Leader' || currentUser?.role === 'Advisor';
+  const canManage = isUserAdminOrPM(currentUser) || currentUser?.role === 'Leader' || currentUser?.role === 'Advisor';
 
   const handleOpenAddModal = () => {
     setEditingResId(null);

@@ -173,6 +173,20 @@ function MainApp() {
     }
   }, [tasks, weeklyArchives, handleSelectTaskFromNotification]);
 
+  const handleSetActiveTaskTab = (tab: string) => {
+    if (tab !== 'tickets') {
+      setSelectedTicketIdForView(null);
+    }
+    setActiveTaskTab(tab);
+  };
+
+  const handleSetActiveMainSection = (section: MainSectionType) => {
+    if (section !== 'tasks') {
+      setSelectedTicketIdForView(null);
+    }
+    setActiveMainSection(section);
+  };
+
   return (
     <div suppressHydrationWarning className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col antialiased selection:bg-indigo-200 selection:text-indigo-900 relative">
       {/* Login Modal Overlay if not logged in */}
@@ -182,9 +196,9 @@ function MainApp() {
         <>
           <Header
             activeMainSection={activeMainSection}
-            setActiveMainSection={setActiveMainSection}
+            setActiveMainSection={handleSetActiveMainSection}
             activeTaskTab={activeTaskTab}
-            setActiveTaskTab={setActiveTaskTab}
+            setActiveTaskTab={handleSetActiveTaskTab}
             onSelectTask={handleSelectTaskFromNotification}
           />
 
@@ -197,7 +211,10 @@ function MainApp() {
                 )}
                 {activeTaskTab === 'milestones' && <MilestonesView />}
                 {activeTaskTab === 'tickets' && (
-                  <TicketsView initialSelectedTicketId={selectedTicketIdForView} />
+                  <TicketsView
+                    initialSelectedTicketId={selectedTicketIdForView}
+                    onClearInitialTicketId={() => setSelectedTicketIdForView(null)}
+                  />
                 )}
                 {activeTaskTab === 'nextweek' && (
                   <NextWeekDefineView onOpenTaskModal={handleOpenTaskModal} />

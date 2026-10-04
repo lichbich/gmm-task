@@ -10,6 +10,8 @@ import {
   isSpecializationMatchingRole,
   normalizeRoleToken,
   getUserRoleColorClass,
+  isUserPM,
+  isUserAdminOrPM,
 } from '../types/task';
 import { TaskModal } from './TaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
@@ -241,7 +243,7 @@ export const MilestonesView: React.FC = () => {
 
   const canManageRoleGroup = (roleCode: string): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'Admin') return true;
+    if (isUserAdminOrPM(currentUser)) return true;
     if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
       if (!currentUser.specializations || currentUser.specializations.length === 0) return true;
       return currentUser.specializations.some((spec) => {
@@ -261,11 +263,13 @@ export const MilestonesView: React.FC = () => {
         (t.weekNumber || selectedWeek) === selectedWeek && (t.year || selectedYear) === selectedYear
     );
 
-    // Filter members who currently have 0 tasks assigned in this week
+    // Filter members who currently have 0 tasks assigned in this week (as primary or supporter)
     const unassignedMembers = roleMembers.filter((u) => {
       const uAcc = u.account.trim().toLowerCase();
       const hasAnyTask = weekTasks.some(
-        (t) => t.assigneeAccount && t.assigneeAccount.trim().toLowerCase() === uAcc
+        (t) =>
+          (t.assigneeAccount && t.assigneeAccount.trim().toLowerCase() === uAcc) ||
+          (t.supporterAccounts && t.supporterAccounts.some((sp) => sp.trim().toLowerCase() === uAcc))
       );
       return !hasAnyTask;
     });
@@ -441,18 +445,20 @@ export const MilestonesView: React.FC = () => {
   const isTaskAssigneeMatch = (t: Task): boolean => {
     if (assigneeFilter === 'ALL') return true;
     if (assigneeFilter === 'UNASSIGNED') return !t.assigneeAccount;
-    return t.assigneeAccount?.toLowerCase() === assigneeFilter.toLowerCase();
+    const isPrimary = t.assigneeAccount?.toLowerCase() === assigneeFilter.toLowerCase();
+    const isSupporter = t.supporterAccounts?.some((sp) => sp.toLowerCase() === assigneeFilter.toLowerCase());
+    return Boolean(isPrimary || isSupporter);
   };
 
-  // PO & Admin check: ONLY PO or Admin can create/edit/delete Milestones!
-  const isPOOrAdmin = (u?: any): boolean => {
+  // PO & Admin & PM check: PO, Admin, PM can create/edit/delete Milestones!
+  const isPOOrAdminOrPM = (u?: any): boolean => {
     if (!u) return false;
-    if (u.role === 'Admin') return true;
+    if (isUserAdminOrPM(u)) return true;
     const specs = u.specializations || [];
     return specs.some((s: string) => s.toUpperCase() === 'PO');
   };
 
-  const canCreateMilestone = isPOOrAdmin(currentUser);
+  const canCreateMilestone = isPOOrAdminOrPM(currentUser);
 
   // Check if a milestone matches current view filter (Milestones are common across all roles!)
   const isMilestoneRoleMatch = (ms: Milestone): boolean => {
@@ -471,7 +477,10 @@ export const MilestonesView: React.FC = () => {
 
     // 2. Check if user has any tasks assigned under this role
     const hasTaskInRole = tasks.some(
-      (t) => isSpecializationMatchingRole(t.role, roleCode) && t.assigneeAccount?.toLowerCase() === u.account.toLowerCase()
+      (t) =>
+        isSpecializationMatchingRole(t.role, roleCode) &&
+        (t.assigneeAccount?.toLowerCase() === u.account.toLowerCase() ||
+          t.supporterAccounts?.some((sp) => sp.toLowerCase() === u.account.toLowerCase()))
     );
     if (hasTaskInRole) return true;
 
@@ -498,13 +507,14 @@ export const MilestonesView: React.FC = () => {
   };
 
   // Checkbox toggle permission:
-  // Admin, Leader & Advisor can check any task
-  // Member can ONLY check tasks assigned to themselves
+  // Admin, PM, Leader & Advisor can check any task
+  // Member can ONLY check tasks assigned to themselves (as assignee or supporter)
   const canToggleTaskCheck = (t: Task): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'Admin' || currentUser.role === 'Leader' || currentUser.role === 'Advisor') return true;
-    if (!t.assigneeAccount) return false;
-    return t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase();
+    if (isUserAdminOrPM(currentUser) || currentUser.role === 'Leader' || currentUser.role === 'Advisor') return true;
+    const isPrimary = t.assigneeAccount && t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase();
+    const isSupporter = t.supporterAccounts && t.supporterAccounts.some((acc) => acc.toLowerCase() === currentUser.account.toLowerCase());
+    return Boolean(isPrimary || isSupporter);
   };
 
   const getPriorityRank = (priority?: string): number => {
@@ -523,7 +533,7 @@ export const MilestonesView: React.FC = () => {
   );
 
   const canManageMilestone = (ms: Milestone): boolean => {
-    return isPOOrAdmin(currentUser);
+    return isPOOrAdminOrPM(currentUser);
   };
 
   const handleCreateMilestone = (e: React.FormEvent) => {
@@ -665,7 +675,7 @@ export const MilestonesView: React.FC = () => {
       <React.Fragment key={t.id}>
         {/* DESKTOP ROW VIEW */}
         <div
-          draggable={!isDone && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin')}
+          draggable={!isDone && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser))}
           onDragStart={(e) => {
             if (isDone) return;
             e.dataTransfer.setData('text/plain', t.id);
@@ -710,7 +720,7 @@ export const MilestonesView: React.FC = () => {
         >
           {/* Left: Drag Handle, Checkbox, Index & Info */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            {!isDone && milestoneId && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
+            {!isDone && milestoneId && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
               <div
                 className="text-slate-300 hover:text-slate-600 cursor-grab active:cursor-grabbing p-1 -ml-1 transition"
                 title="Kéo thả để sắp xếp thứ tự ưu tiên"
@@ -752,7 +762,7 @@ export const MilestonesView: React.FC = () => {
                     ? 'Bỏ chọn task này'
                     : 'Chọn task để thực hiện xóa nhanh'
                   : !canToggle
-                  ? 'Chỉ người được giao việc hoặc Leader/Admin mới có quyền đánh dấu hoàn thành'
+                  ? 'Chỉ người được giao việc, hỗ trợ hoặc Leader/Admin/PM mới có quyền đánh dấu hoàn thành'
                   : isDone
                   ? 'Đánh dấu chưa hoàn thành'
                   : 'Đánh dấu đã hoàn thành'
@@ -881,7 +891,7 @@ export const MilestonesView: React.FC = () => {
               )
             )}
 
-            {!milestoneId && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
+            {!milestoneId && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
               <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200" onClick={(e) => e.stopPropagation()}>
                 <span className="text-[10px] text-slate-500 font-medium pl-1 hidden lg:inline">
                   Gán vào:
@@ -937,7 +947,7 @@ export const MilestonesView: React.FC = () => {
               )}
             </button>
 
-            {(canEditTask(t) || currentUser?.role === 'Admin') && (
+            {(canEditTask(t) || isUserAdminOrPM(currentUser)) && (
               <div className="flex items-center gap-1">
                 <button
                   onClick={(e) => {
@@ -1024,7 +1034,7 @@ export const MilestonesView: React.FC = () => {
                       ? 'Bỏ chọn task này'
                       : 'Chọn task để thực hiện xóa nhanh'
                     : !canToggle
-                    ? 'Chỉ người được giao việc hoặc Leader/Admin mới có quyền đánh dấu hoàn thành'
+                    ? 'Chỉ người được giao việc, hỗ trợ hoặc Leader/Admin/PM mới có quyền đánh dấu hoàn thành'
                     : isDone
                     ? 'Đánh dấu chưa hoàn thành'
                     : 'Đánh dấu đã hoàn thành'
@@ -1083,7 +1093,7 @@ export const MilestonesView: React.FC = () => {
             </p>
           )}
 
-          {!milestoneId && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
+          {!milestoneId && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
             <div className="bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
               <span className="text-[10px] text-slate-500 font-bold">Gán vào:</span>
               <Dropdown
@@ -1174,7 +1184,7 @@ export const MilestonesView: React.FC = () => {
                 <MessageSquare className="w-3.5 h-3.5" />
               </button>
 
-              {(canEditTask(t) || currentUser?.role === 'Admin') && (
+              {(canEditTask(t) || isUserAdminOrPM(currentUser)) && (
                 <>
                   <button
                     onClick={(e) => {
@@ -1236,7 +1246,7 @@ export const MilestonesView: React.FC = () => {
                 <span className="hidden sm:inline">Quản Lý Milestones & Break Tasks</span>
               </h2>
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                {canCreateMilestone ? 'PO & Admin (Tạo Milestone)' : 'Leader & Thành viên (Break Task)'}
+                {canCreateMilestone ? 'PO, Admin & PM (Tạo Milestone)' : 'Leader & Thành viên (Break Task)'}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
@@ -1504,7 +1514,7 @@ export const MilestonesView: React.FC = () => {
                 Chưa có cột mốc Milestone nào thuộc chuyên môn / bộ lọc này.
               </span>
               <span className="text-slate-400">
-                {currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin'
+                {currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)
                   ? 'Hãy bấm "Tạo Milestone Mới" để thiết lập cột mốc và break task.'
                   : 'Cột mốc và đầu việc của chuyên môn này sẽ xuất hiện khi Leader phân bổ.'}
               </span>

@@ -302,39 +302,71 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
             ) : null}
 
             {/* Task Info Summary */}
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200 text-xs">
-              <div>
-                <span className="text-slate-500 block text-[11px]">Role phụ trách:</span>
-                <span className="font-semibold text-slate-800">{task.role}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[11px]">Ước tính (Est):</span>
-                <span className="font-semibold text-slate-800">{task.estimatedEffort} giờ</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[11px] mb-1">Người thực hiện:</span>
-                <div className="flex items-center gap-2">
-                  <UserAvatar
-                    user={assigneeUser}
-                    account={task.assigneeAccount}
-                    name={assigneeUser?.name}
-                    size="xs"
-                    shape="circle"
-                  />
-                  <div className={`font-semibold break-words text-xs ${getUserRoleColorClass(assigneeUser?.role)}`}>
-                    {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
-                    {task.assigneeAccount && (
-                      <span className={`text-[10px] font-mono block ${getUserRoleColorClass(assigneeUser?.role)}`}>
-                        @{task.assigneeAccount}
-                      </span>
-                    )}
+            <div className="space-y-2 bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200 text-xs">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Role phụ trách:</span>
+                  <span className="font-semibold text-slate-800">{task.role}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px]">Ước tính (Est):</span>
+                  <span className="font-semibold text-slate-800">{task.estimatedEffort} giờ</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px] mb-1">Người thực hiện:</span>
+                  <div className="flex items-center gap-2">
+                    <UserAvatar
+                      user={assigneeUser}
+                      account={task.assigneeAccount}
+                      name={assigneeUser?.name}
+                      size="xs"
+                      shape="circle"
+                    />
+                    <div className={`font-semibold break-words text-xs ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                      {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
+                      {task.assigneeAccount && (
+                        <span className={`text-[10px] font-mono block ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                          @{task.assigneeAccount}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
+                <div>
+                  <span className="text-slate-500 block text-[11px] mb-0.5">Mốc tuần (Week):</span>
+                  <span className="font-semibold text-slate-800">Tuần {task.weekNumber <= 53 ? task.weekNumber + 55 : task.weekNumber} / {task.year}</span>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-500 block text-[11px] mb-0.5">Mốc tuần (Week):</span>
-                <span className="font-semibold text-slate-800">Tuần {task.weekNumber <= 53 ? task.weekNumber + 55 : task.weekNumber} / {task.year}</span>
-              </div>
+
+              {/* Supporters row if any */}
+              {task.supporterAccounts && task.supporterAccounts.length > 0 && (
+                <div className="pt-2 border-t border-slate-200/80">
+                  <span className="text-slate-500 block text-[11px] mb-1">Người hỗ trợ (Supporters):</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {task.supporterAccounts.map((supAcc) => {
+                      const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
+                      return (
+                        <span
+                          key={supAcc}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-xs font-medium text-slate-800"
+                        >
+                          <UserAvatar
+                            user={supUser}
+                            account={supAcc}
+                            name={supUser?.name}
+                            size="xs"
+                            shape="circle"
+                          />
+                          <span>{supUser?.name || supAcc}</span>
+                          <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-indigo-100 text-indigo-700">
+                            Supporter
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Actual Effort (Hours Worked) */}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket, getUserRoleColorClass } from '../types/task';
+import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket, getUserRoleColorClass, isUserAdminOrPM } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
@@ -162,10 +162,10 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     uniqueArchives.find((a) => a.id === selectedArchiveId) ||
     (uniqueArchives.length > 0 ? uniqueArchives[uniqueArchives.length - 1] : null);
 
-  // PO & Admin check: ONLY PO or Admin can finalize week & create archives
+  // PO & Admin & PM check: PO, Admin, PM can finalize week & create archives
   const isPOOrAdmin = (u?: any): boolean => {
     if (!u) return false;
-    if (u.role === 'Admin' || u.role === 'PO') return true;
+    if (isUserAdminOrPM(u) || u.role === 'PO') return true;
     const specs = u.specializations || [];
     return specs.some((s: string) => s.toUpperCase() === 'PO');
   };

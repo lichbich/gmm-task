@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useModalAnimation } from '../hooks/useModalAnimation';
-import { Ticket, TicketPriority, Specialization } from '../types/task';
+import { Ticket, TicketPriority, Specialization, isUserAdminOrPM } from '../types/task';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import {
   X,
@@ -55,7 +55,7 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
 
   const userSpecializations = currentUser?.specializations && currentUser.specializations.length > 0
     ? currentUser.specializations
-    : [currentUser?.role === 'Admin' ? 'PO' : 'BA'];
+    : [isUserAdminOrPM(currentUser) ? 'PO' : 'BA'];
 
   const [fromRole, setFromRole] = useState<string>(userSpecializations[0] || 'Design');
   const [toRole, setToRole] = useState<string>(defaultToRole || 'BA');
@@ -149,7 +149,7 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
     : ['BA', 'Design', 'FE', 'BE', 'QA', 'SA', 'DevOps', 'Mobile', 'AI'];
 
   const fromRoleOptions: DropdownOption[] = (
-    currentUser?.role === 'Admin' ? availableToRoles : userSpecializations
+    isUserAdminOrPM(currentUser) ? availableToRoles : userSpecializations
   ).map((r) => ({
     value: r,
     label: `Team ${r} ${userSpecializations.includes(r) ? '(Bạn)' : ''}`,

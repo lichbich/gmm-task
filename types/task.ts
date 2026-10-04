@@ -35,15 +35,44 @@ export interface User {
 }
 
 /**
+ * Standardize role name or specialization string to a canonical token (prevent substring false positives like "Back Office" matching "BA")
+ */
+export const normalizeRoleToken = (role?: string): string => {
+  if (!role) return '';
+  const r = role.toLowerCase().trim();
+  if (r === 'designer' || r === 'design' || r.includes('thiết kế')) return 'design';
+  if (r === 'fe' || r === 'frontend' || r.includes('front-end') || r.includes('giao diện')) return 'fe';
+  if (r === 'be' || r === 'backend' || r.includes('back-end') || r.includes('máy chủ')) return 'be';
+  if (r === 'ba' || r.includes('business analyst') || r.includes('nghiệp vụ')) return 'ba';
+  if (r === 'devops' || r.includes('hạ tầng') || r.includes('cloud')) return 'devops';
+  if (r === 'ai' || r.includes('trí tuệ') || r.includes('machine learning')) return 'ai';
+  if (r === 'po' || r.includes('product owner')) return 'po';
+  if (r === 'qa' || r.includes('qc') || r.includes('kiểm thử') || r.includes('tester')) return 'qa';
+  if (r === 'sa' || r.includes('kiến trúc')) return 'sa';
+  if (r === 'pm' || r === 'project manager' || r.includes('quản lý dự án')) return 'pm';
+  if (r === 'back office' || r === 'backoffice' || r.includes('hành chính') || r.includes('văn phòng')) return 'back office';
+  return r;
+};
+
+/**
+ * Check if a specialization string matches a target role code accurately
+ */
+export const isSpecializationMatchingRole = (spec?: string, roleCode?: string): boolean => {
+  if (!spec || !roleCode) return false;
+  const sNorm = normalizeRoleToken(spec);
+  const rNorm = normalizeRoleToken(roleCode);
+  return sNorm === rNorm;
+};
+
+/**
  * Lấy vai trò của người dùng trong một nghiệp vụ chuyên môn cụ thể.
- * Ưu tiên specializationRoles[spec], nếu không có thì lấy role tổng thể của user.
+ * Ưu tiên specializationRoles[spec]. Nếu user thuộc chuyên môn đó thì lấy role của user.
+ * Nếu user KHÔNG thuộc chuyên môn đó thì trả về 'Member' (không có quyền Leader/Advisor trong team khác).
  */
 export const getUserRoleInSpec = (user?: User | null, spec?: string): UserRole => {
   if (!user) return 'Member';
   if (user.role === 'Admin') return 'Admin';
   if (!spec || spec === 'ALL') return user.role;
-
-  const normalizedSpec = spec.trim().toLowerCase().replace(/^team\s+/i, '');
 
   if (user.specializationRoles) {
     // 1. Exact key match
@@ -52,18 +81,48 @@ export const getUserRoleInSpec = (user?: User | null, spec?: string): UserRole =
     }
     // 2. Case-insensitive or alias key match (e.g. Design vs Designer)
     for (const [key, roleVal] of Object.entries(user.specializationRoles)) {
-      const normalizedKey = key.trim().toLowerCase().replace(/^team\s+/i, '');
-      if (
-        normalizedKey === normalizedSpec ||
-        ((normalizedKey === 'design' || normalizedKey === 'designer') &&
-          (normalizedSpec === 'design' || normalizedSpec === 'designer'))
-      ) {
+      if (isSpecializationMatchingRole(key, spec) && roleVal) {
         return roleVal;
       }
     }
   }
 
-  return user.role;
+  // 3. Check if user actually belongs to this specialization
+  const hasSpec = (user.specializations || []).some((s) => isSpecializationMatchingRole(s, spec));
+  if (hasSpec) {
+    return user.role || 'Member';
+  }
+
+  // 4. User does NOT belong to this specialization -> they are a regular Member for this foreign team
+  return 'Member';
+};
+
+/**
+ * Kiểm tra người dùng có phải là Project Manager (PM) hay không.
+ * PM có vai trò điều phối, toàn quyền trên task & milestones tương đương Admin.
+ */
+export const isUserPM = (user?: User | null): boolean => {
+  if (!user) return false;
+  if (user.role === 'Admin') return true;
+  const normalizedSpecs = (user.specializations || []).map((s) => s.trim().toUpperCase());
+  if (normalizedSpecs.includes('PM') || normalizedSpecs.includes('PROJECT MANAGER')) return true;
+  if (user.specializationRoles) {
+    for (const [spec, roleVal] of Object.entries(user.specializationRoles)) {
+      const norm = spec.trim().toUpperCase();
+      if ((norm === 'PM' || norm === 'PROJECT MANAGER') && roleVal) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+/**
+ * Kiểm tra người dùng có quyền quản trị cấp cao (Admin hoặc PM) hay không.
+ */
+export const isUserAdminOrPM = (user?: User | null): boolean => {
+  if (!user) return false;
+  return user.role === 'Admin' || isUserPM(user);
 };
 
 /**
@@ -251,6 +310,7 @@ export interface Task {
   actualEffort: number;
   status: TaskStatus;
   assigneeAccount: string; // e.g. "NhiHT" or "" if unassigned
+  supporterAccounts?: string[]; // Danh sách tài khoản người hỗ trợ task (Supporters)
   milestoneId: string;
   orderInMilestone: number;
   completionPercentage: number; // 0 - 100
@@ -435,35 +495,6 @@ export interface Ticket {
   createdAt: string;
   updatedAt?: string;
 }
-
-/**
- * Standardize role name or specialization string to a canonical token (prevent substring false positives like "Back Office" matching "BA")
- */
-export const normalizeRoleToken = (role?: string): string => {
-  if (!role) return '';
-  const r = role.toLowerCase().trim();
-  if (r === 'designer' || r === 'design' || r.includes('thiết kế')) return 'design';
-  if (r === 'fe' || r === 'frontend' || r.includes('front-end') || r.includes('giao diện')) return 'fe';
-  if (r === 'be' || r === 'backend' || r.includes('back-end') || r.includes('máy chủ')) return 'be';
-  if (r === 'ba' || r.includes('business analyst') || r.includes('nghiệp vụ')) return 'ba';
-  if (r === 'devops' || r.includes('hạ tầng') || r.includes('cloud')) return 'devops';
-  if (r === 'ai' || r.includes('trí tuệ') || r.includes('machine learning')) return 'ai';
-  if (r === 'po' || r.includes('product owner')) return 'po';
-  if (r === 'qa' || r.includes('qc') || r.includes('kiểm thử') || r.includes('tester')) return 'qa';
-  if (r === 'sa' || r.includes('kiến trúc')) return 'sa';
-  if (r === 'back office' || r === 'backoffice' || r.includes('hành chính') || r.includes('văn phòng')) return 'back office';
-  return r;
-};
-
-/**
- * Check if a specialization string matches a target role code accurately
- */
-export const isSpecializationMatchingRole = (spec?: string, roleCode?: string): boolean => {
-  if (!spec || !roleCode) return false;
-  const sNorm = normalizeRoleToken(spec);
-  const rNorm = normalizeRoleToken(roleCode);
-  return sNorm === rNorm;
-};
 
 /**
  * Return tailwind text color class matching the user's role level (Leader: yellow/amber, Advisor: emerald/green, Admin: purple, Member: blue)

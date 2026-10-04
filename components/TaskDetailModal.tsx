@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
-import { Task, TaskActivityLog, getUserRoleColorClass, getUserRoleInSpec, formatDateOnlyDisplay } from '../types/task';
+import { Task, TaskActivityLog, getUserRoleColorClass, getUserRoleInSpec, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
 import {
   X,
   MessageSquare,
@@ -22,6 +22,7 @@ import {
   CheckSquare,
   FileText,
   User,
+  Users,
   Calendar,
   Sparkles,
   Flame,
@@ -363,7 +364,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const isLeaderOrAdmin =
     userRoleInTask === 'Leader' ||
     userRoleInTask === 'Advisor' ||
-    currentUser?.role === 'Admin';
+    isUserAdminOrPM(currentUser);
   const isMember = !isLeaderOrAdmin;
   const isUnassigned = !task.assigneeAccount || task.assigneeAccount.trim() === '';
   const isRequested = Boolean(task.assignmentRequestedBy && task.assignmentRequestStatus === 'PENDING');
@@ -946,6 +947,52 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
             </div>
 
+            {/* Supporters Card (If supporters are assigned to this task) */}
+            {task.supporterAccounts && task.supporterAccounts.length > 0 && (
+              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Người hỗ trợ (Supporter):</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                    {task.supporterAccounts.length} người hỗ trợ
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {task.supporterAccounts.map((supAcc) => {
+                    const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
+                    const supRoleInTask = supUser ? getUserRoleInSpec(supUser, task.role) : 'Member';
+                    return (
+                      <div
+                        key={supAcc}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800/80 border border-indigo-200/80 dark:border-indigo-800/80 rounded-xl"
+                      >
+                        <UserAvatar
+                          user={supUser}
+                          account={supAcc}
+                          name={supUser?.name}
+                          size="xs"
+                          shape="circle"
+                        />
+                        <div className="min-w-0">
+                          <span className={`font-bold text-xs ${getUserRoleColorClass(supRoleInTask)}`}>
+                            {supUser?.name || supAcc}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400 ml-1">
+                            @{supAcc}
+                          </span>
+                        </div>
+                        <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                          Supporter
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Bottom row: Effort and Completion Progress */}
             <div className="grid grid-cols-2 gap-2.5">
               <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
@@ -1256,7 +1303,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
         {/* Fixed Footer */}
         <div className="flex items-center justify-between gap-3 p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900 rounded-b-3xl">
-          {(userRoleInTask === 'Leader' || userRoleInTask === 'Advisor' || currentUser?.role === 'Admin') ? (
+          {(userRoleInTask === 'Leader' || userRoleInTask === 'Advisor' || isUserAdminOrPM(currentUser)) ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"

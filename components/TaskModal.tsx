@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Specialization, TaskStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay } from '../types/task';
-import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar } from 'lucide-react';
+import { Task, Specialization, TaskStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
+import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
+import { UserAvatar } from './common/UserAvatar';
 import { insertCheckboxToText, removeImageFromDescription } from '../lib/descriptionHelper';
 import { uploadAndInsertImage, getImageFilesFromClipboard, getImageFilesFromDrop } from '../lib/imageUploadHelper';
 import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
@@ -50,9 +51,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     return spec;
   };
 
-  // Compute allowed roles for the current user: Admin can define any role, Leader only within specializations
+  // Compute allowed roles for the current user: Admin/PM can define any role, Leader only within specializations
   const allowedRoles: Specialization[] =
-    currentUser?.role === 'Admin'
+    isUserAdminOrPM(currentUser)
       ? allRoleCodes
       : currentUser?.specializations && currentUser.specializations.length > 0
       ? Array.from(new Set(currentUser.specializations.map(matchRoleCode)))
@@ -92,6 +93,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [actualEffort, setActualEffort] = useState<number | string>(0);
   const [completionPercentage, setCompletionPercentage] = useState<number>(0);
   const [assigneeAccount, setAssigneeAccount] = useState<string>('');
+  const [supporterAccounts, setSupporterAccounts] = useState<string[]>([]);
   const [milestoneId, setMilestoneId] = useState<string>('');
   const [status, setStatus] = useState<TaskStatus>('To do');
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
@@ -280,7 +282,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       if (!endDate) setEndDate(todayStr);
     }
 
-    if (currentUser?.role === 'Admin') {
+    if (isUserAdminOrPM(currentUser)) {
       const currActual =
         typeof actualEffort === 'number'
           ? actualEffort
@@ -369,6 +371,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       typeof actualEffort === 'number'
         ? actualEffort
         : parseFloat(String(actualEffort).replace(',', '.')) || 0;
+    const isAdminOrPM = isUserAdminOrPM(currentUser);
 
     if (!task) {
       // Creating new task
@@ -385,8 +388,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         description.trim() !== '' ||
         notes.trim() !== '' ||
         (estimatedEffort !== 2 && estimatedEffort !== '2') ||
-        (currentUser?.role === 'Admin' && (parsedActual !== 0 || completionPercentage !== 0)) ||
+        (isAdminOrPM && (parsedActual !== 0 || completionPercentage !== 0)) ||
         assigneeAccount !== defaultAssigneeVal ||
+        supporterAccounts.length > 0 ||
         milestoneId !== defaultMilestoneVal;
     } else {
       // Editing existing task
@@ -405,6 +409,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         task.assigneeAccount ||
         task.assignmentRequestedBy ||
         (defaultAssignee !== undefined ? defaultAssignee : '');
+      const origSupporters = (task.supporterAccounts || []).slice().sort().join(',');
+      const currSupporters = supporterAccounts.slice().sort().join(',');
       const origMilestone = task.milestoneId || initialMilestoneId || '';
       const origRole = task.role || defaultRole;
       const origStatus = task.status || 'To do';
@@ -416,13 +422,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         notes !== origNotes ||
         String(estimatedEffort) !== String(origEffort) ||
         assigneeAccount !== origAssignee ||
+        currSupporters !== origSupporters ||
         milestoneId !== origMilestone ||
         role !== origRole ||
         status !== origStatus ||
         priority !== origPriority ||
         startDate !== (task.startDate || '') ||
         endDate !== (task.endDate || '') ||
-        (currentUser?.role === 'Admin' &&
+        (isAdminOrPM &&
           (parsedActual !== origActualEffort || completionPercentage !== origCompletion));
     }
 
@@ -451,6 +458,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     startDate,
     endDate,
     assigneeAccount,
+    supporterAccounts,
     milestoneId,
     role,
     status,
@@ -492,6 +500,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         task.assignmentRequestedBy ||
         (defaultAssignee !== undefined ? defaultAssignee : '');
       setAssigneeAccount(initialAssignee);
+      setSupporterAccounts(task.supporterAccounts ? [...task.supporterAccounts] : []);
       setMilestoneId(task.milestoneId || initialMilestoneId || '');
       setStatus(initialStatus);
       setPriority(task.priority || 'Medium');
@@ -514,6 +523,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           ? currentUser.account
           : ''
       );
+      setSupporterAccounts([]);
       // If initialMilestoneId is explicitly passed, use it unconditionally; otherwise Members default to '' (ad-hoc)
       setMilestoneId(initialMilestoneId !== undefined ? initialMilestoneId : '');
       setStatus('To do');
@@ -530,7 +540,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const todayStr = getTodayDateOnlyString(simulatedTime);
   const userRoleInTaskSpec = getUserRoleInSpec(currentUser, role);
-  const isMember = currentUser?.role === 'Admin' ? false : userRoleInTaskSpec === 'Member';
+  const isMember = isUserAdminOrPM(currentUser) ? false : userRoleInTaskSpec === 'Member';
 
   // Filter active team members who hold the specialization matching the task's role (excluding locked accounts)
   const eligibleAssignees = users.filter((u) => {
@@ -552,6 +562,32 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     return u.specializations && u.specializations.includes(role);
   });
 
+  // Candidate supporters: all active users excluding current assignee
+  const eligibleSupporters = users.filter((u) => {
+    const isLocked = u.disabled || u.status === 'disabled';
+    if (isLocked) return false;
+    if (assigneeAccount && u.account.toLowerCase() === assigneeAccount.toLowerCase()) return false;
+    return true;
+  });
+
+  const handleToggleSupporter = (account: string) => {
+    setSupporterAccounts((prev) => {
+      const exists = prev.some((a) => a.toLowerCase() === account.toLowerCase());
+      if (exists) {
+        return prev.filter((a) => a.toLowerCase() !== account.toLowerCase());
+      }
+      return [...prev, account];
+    });
+  };
+
+  const handleAssigneeChange = (newAssignee: string) => {
+    setAssigneeAccount(newAssignee);
+    if (newAssignee) {
+      // Automatically remove from supporters if selected as main assignee
+      setSupporterAccounts((prev) => prev.filter((a) => a.toLowerCase() !== newAssignee.toLowerCase()));
+    }
+  };
+
   const executeSave = (
     finalActualEffort: number,
     finalCompletionPercentage: number,
@@ -561,7 +597,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       typeof estimatedEffort === 'number'
         ? estimatedEffort
         : parseFloat(String(estimatedEffort).replace(',', '.')) || 0;
-    const isAdmin = currentUser?.role === 'Admin';
+    const isAdminOrPM = isUserAdminOrPM(currentUser);
+    const cleanSupporters = supporterAccounts.filter(
+      (a) => !assigneeAccount || a.toLowerCase() !== assigneeAccount.toLowerCase()
+    );
 
     if (task) {
       const isAssigned = Boolean(assigneeAccount && assigneeAccount.trim() !== '');
@@ -575,13 +614,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         role,
         estimatedEffort: parsedEffort,
         assigneeAccount,
+        supporterAccounts: cleanSupporters.length > 0 ? cleanSupporters : undefined,
         milestoneId,
         status: finalStatus,
         priority,
         startDate: startDate.trim() || undefined,
         endDate: endDate.trim() || undefined,
         notes,
-        ...(isAdmin
+        ...(isAdminOrPM
           ? {
               actualEffort: finalActualEffort,
               completionPercentage: finalCompletionPercentage,
@@ -607,6 +647,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         status: finalStatus,
         priority,
         assigneeAccount,
+        supporterAccounts: cleanSupporters.length > 0 ? cleanSupporters : undefined,
         milestoneId,
         completionPercentage: finalCompletionPercentage,
         weekNumber: defaultWeek || selectedWeek,
@@ -614,7 +655,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         startDate: startDate.trim() || undefined,
         endDate: endDate.trim() || undefined,
         notes,
-        ...(isAdmin && (finalCompletionPercentage === 100 || finalStatus === 'Done')
+        ...(isAdminOrPM && (finalCompletionPercentage === 100 || finalStatus === 'Done')
           ? { lastSubmittedAt: new Date().toISOString() }
           : {}),
       });
@@ -636,9 +677,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         ? actualEffort
         : parseFloat(String(actualEffort).replace(',', '.')) || 0;
 
-    const isAdmin = currentUser?.role === 'Admin';
+    const isAdminOrPM = isUserAdminOrPM(currentUser);
 
-    if (isAdmin && rawActualEffort > 0 && completionPercentage === 0) {
+    if (isAdminOrPM && rawActualEffort > 0 && completionPercentage === 0) {
       confirmDialog({
         title: 'Nhắc nhở cập nhật % tiến độ',
         message: `Bạn đang nhập ${rawActualEffort}h làm việc nhưng phần trăm tiến độ vẫn để 0%.\n\n• Theo quy định, nếu tiến độ 0% (coi như chưa làm) thì số giờ làm việc thực tế sẽ tự động chuyển về 0h và trạng thái là "To do" (không thể đánh Done).\n• Bạn có muốn quay lại điều chỉnh % tiến độ không? Hoặc bấm "Vẫn lưu 0%" để lưu task chưa làm (số giờ sẽ tự động về 0h).`,
@@ -653,11 +694,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     }
 
     let parsedActualEffort = rawActualEffort;
-    if (isAdmin && completionPercentage > 0 && parsedActualEffort === 0) {
+    if (isAdminOrPM && completionPercentage > 0 && parsedActualEffort === 0) {
       parsedActualEffort = parsedEffort;
     }
 
-    const finalActualEffort = isAdmin
+    const finalActualEffort = isAdminOrPM
       ? completionPercentage === 0
         ? 0
         : parsedActualEffort
@@ -665,7 +706,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       ? task.actualEffort || 0
       : 0;
 
-    const finalCompletionPercentage = isAdmin
+    const finalCompletionPercentage = isAdminOrPM
       ? completionPercentage
       : task
       ? task.completionPercentage !== undefined
@@ -675,7 +716,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         : 0
       : 0;
 
-    const finalStatus = isAdmin
+    const finalStatus = isAdminOrPM
       ? finalCompletionPercentage === 0
         ? 'To do'
         : finalCompletionPercentage === 100
@@ -1004,7 +1045,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-semibold text-slate-700">
-                      Phân Công Thành Viên:
+                      Người Phụ Trách Chính (Assignee):
                     </label>
                     <span className="text-[10px] text-indigo-600 font-medium">
                       {eligibleAssignees.length} thành viên phù hợp
@@ -1012,7 +1053,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   </div>
                   <Dropdown
                     value={assigneeAccount}
-                    onChange={setAssigneeAccount}
+                    onChange={handleAssigneeChange}
                     options={[
                       { value: '', label: '-- Để trống (Chưa phân công) --' },
                       ...eligibleAssignees.map((u) => {
@@ -1035,6 +1076,81 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     <p className="text-[11px] text-amber-700 mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-1.5">
                       <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Chưa có thành viên nào có chuyên môn {role}. Hãy tạo hoặc cấp chuyên môn trong Quản lý User.
                     </p>
+                  )}
+                </div>
+
+                {/* Supporter Accounts Section (Multi-select supporters with tag) */}
+                <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 rounded-2xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>Người Hỗ Trợ Task (Supporter):</span>
+                    </label>
+                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                      Hiển thị trên bảng công việc của cả người phụ trách và supporters
+                    </span>
+                  </div>
+
+                  {/* Add Supporter Dropdown */}
+                  <Dropdown
+                    value=""
+                    onChange={(selectedAcc) => {
+                      if (selectedAcc) handleToggleSupporter(selectedAcc);
+                    }}
+                    options={[
+                      { value: '', label: '+ Thêm người hỗ trợ (Chọn thành viên)...' },
+                      ...eligibleSupporters
+                        .filter((u) => !supporterAccounts.some((s) => s.toLowerCase() === u.account.toLowerCase()))
+                        .map((u) => ({
+                          value: u.account,
+                          label: `${u.account} - ${u.name}`,
+                          subLabel: `[${(u.specializations || []).join(', ')}]`,
+                        })),
+                    ]}
+                    className="w-full"
+                    buttonClassName="py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-300/90 dark:border-slate-700"
+                  />
+
+                  {/* Selected Supporters Tag Chips */}
+                  {supporterAccounts.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {supporterAccounts.map((supAcc) => {
+                        const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
+                        return (
+                          <div
+                            key={supAcc}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-slate-850 border border-indigo-200 dark:border-indigo-800 rounded-xl shadow-2xs text-xs animate-in fade-in duration-100"
+                          >
+                            <UserAvatar
+                              user={supUser}
+                              account={supAcc}
+                              name={supUser?.name}
+                              size="xs"
+                              shape="circle"
+                            />
+                            <div className="flex items-center gap-1">
+                              <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                                {supUser?.name || supAcc}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-400">
+                                @{supAcc}
+                              </span>
+                            </div>
+                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 ml-0.5">
+                              Supporter
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSupporter(supAcc)}
+                              className="ml-1 p-0.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                              title={`Bỏ hỗ trợ @${supAcc}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
 
@@ -1106,20 +1222,20 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   </div>
                 </div>
 
-                {/* Admin-only Progress & Actual Effort Control Box */}
-                {currentUser?.role === 'Admin' && (
+                {/* Admin/PM-only Progress & Actual Effort Control Box */}
+                {isUserAdminOrPM(currentUser) && (
                   <div className="p-3.5 sm:p-4 bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/90 dark:border-purple-800/80 rounded-2xl space-y-3 shadow-2xs animate-in fade-in duration-150">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/60 dark:text-purple-200 dark:border-purple-700">
-                          👑 Admin Override
+                          👑 Admin / PM Override
                         </span>
                         <span className="text-xs font-bold text-purple-950 dark:text-purple-200">
                           Quản Lý Tiến Độ & Giờ Thực Tế
                         </span>
                       </div>
                       <span className="text-[10.5px] text-purple-700 dark:text-purple-300 font-medium">
-                        Đồng bộ thời gian thực cho người được phân công
+                        Đồng bộ thời gian thực cho người được phân công & supporters
                       </span>
                     </div>
 

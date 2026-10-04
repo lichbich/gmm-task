@@ -13,6 +13,10 @@ import {
   getUserRoleColorClass,
   getUserRoleInSpec,
   getUserLevelRank,
+  isUserPM,
+  isUserAdminOrPM,
+  getTodayDateOnlyString,
+  formatDateOnlyDisplay,
 } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
@@ -23,6 +27,7 @@ import {
   Plus,
   Edit2,
   AlertTriangle,
+  AlertCircle,
   Award,
   Clock,
   UserCheck,
@@ -123,7 +128,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const canManageRoleGroup = useCallback(
     (roleCode: string): boolean => {
       if (!currentUser) return false;
-      if (currentUser.role === 'Admin') return true;
+      if (currentUser.role === 'Admin' || isUserPM(currentUser)) return true;
       if (currentUser.role === 'Leader' || currentUser.role === 'Advisor') {
         if (!currentUser.specializations || currentUser.specializations.length === 0) return true;
         return currentUser.specializations.some((spec) => {
@@ -147,12 +152,14 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
           (t.weekNumber || selectedWeek) === selectedWeek && (t.year || selectedYear) === selectedYear
       );
 
-      // Filter members who currently have 0 tasks assigned in this week
+      // Filter members who currently have 0 tasks assigned (as main assignee or supporter) in this week
       const unassignedMembers = roleMembers.filter((u) => {
         const uAcc = u.account.trim().toLowerCase();
-        const hasAnyTask = weekTasks.some(
-          (t) => t.assigneeAccount && t.assigneeAccount.trim().toLowerCase() === uAcc
-        );
+        const hasAnyTask = weekTasks.some((t) => {
+          const isAssignee = Boolean(t.assigneeAccount && t.assigneeAccount.trim().toLowerCase() === uAcc);
+          const isSupporter = Boolean(t.supporterAccounts && t.supporterAccounts.some((s) => s.trim().toLowerCase() === uAcc));
+          return isAssignee || isSupporter;
+        });
         return !hasAnyTask;
       });
 
@@ -373,24 +380,34 @@ const getRoleOrderRank = (roleCode?: string): number => {
           return false;
         }
 
-        // Sub-tab filter: My Tasks default
+        // Sub-tab filter: My Tasks default (includes primary assignee and supporters)
         if (subTab === 'MY_TASKS') {
-          if (!currentUser || !t.assigneeAccount || t.assigneeAccount.toLowerCase() !== currentUser.account.toLowerCase()) {
+          if (!currentUser) return false;
+          const userAcc = currentUser.account.toLowerCase();
+          const isAssignee = Boolean(t.assigneeAccount && t.assigneeAccount.toLowerCase() === userAcc);
+          const isSupporter = Boolean(t.supporterAccounts && t.supporterAccounts.some((s) => s.toLowerCase() === userAcc));
+          if (!isAssignee && !isSupporter) {
             return false;
           }
         }
 
-        // Sub-tab filter: All Tasks only shows assigned tasks (tasks with an assignee)
+        // Sub-tab filter: All Tasks only shows assigned tasks (tasks with an assignee or supporters)
         if (subTab === 'ALL_TASKS') {
           const acc = (t.assigneeAccount || '').trim();
-          if (!acc || acc.toLowerCase() === 'unassigned') {
+          const hasSupporters = Boolean(t.supporterAccounts && t.supporterAccounts.length > 0);
+          if ((!acc || acc.toLowerCase() === 'unassigned') && !hasSupporters) {
             return false;
           }
         }
 
         if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         if (selectedRole !== 'ALL' && t.role !== selectedRole) return false;
-        if (selectedAccount !== 'ALL' && t.assigneeAccount !== selectedAccount) return false;
+        if (selectedAccount !== 'ALL') {
+          const accLower = selectedAccount.toLowerCase();
+          const isAssignee = Boolean(t.assigneeAccount && t.assigneeAccount.toLowerCase() === accLower);
+          const isSupporter = Boolean(t.supporterAccounts && t.supporterAccounts.some((s) => s.toLowerCase() === accLower));
+          if (!isAssignee && !isSupporter) return false;
+        }
         if (selectedMilestone === 'NO_MILESTONE') {
           if (t.milestoneId && milestones.some((m) => m.id === t.milestoneId)) return false;
         } else if (selectedMilestone !== 'ALL') {
@@ -688,14 +705,9 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
   // Reusable task row renderer
   const renderTaskRow = (t: Task, displayIdx: number) => {
-    const isWeekFinalized = weeklyArchives.some(
-      (a) => a.weekNumber === (t.weekNumber || selectedWeek) && a.year === (t.year || selectedYear)
-    );
-    const isTopEffort = isWeekFinalized && isTopEffortAccount(t.assigneeAccount);
+    const todayStr = getTodayDateOnlyString(simulatedTime);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
-    const deadline = getWeekDeadline(t.weekNumber || selectedWeek, t.year || selectedYear);
     const nowTime = new Date(simulatedTime).getTime();
-    const isPastDeadline = nowTime > deadline.getTime();
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
     const effStatus = getEffectiveTaskStatus(t);
@@ -706,11 +718,10 @@ const getRoleOrderRank = (roleCode?: string): number => {
       (!!t.lastSubmittedAt &&
         new Date(t.lastSubmittedAt).getTime() >= sundayNoon.getTime());
 
-    const isUnsubmittedLate = isWeekFinalized && !isReported && isPastDeadline && !!t.assigneeAccount;
-    const isSubmittedLate = isWeekFinalized && isReported && !isTaskDone && !!t.isSubmittedLate;
-    const isLate = isSubmittedLate || isUnsubmittedLate;
     const isAssignedToMe = canReportTask(t);
-    const hasAlert = isLate || isTopEffort;
+    const hasEndDate = Boolean(t.endDate && t.endDate.trim());
+    const isOverdue = hasEndDate && !isTaskDone && t.endDate! < todayStr;
+    const isDueToday = hasEndDate && !isTaskDone && t.endDate! === todayStr;
     const linkedTicket = getLinkedTicket(t);
     const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
 
@@ -721,11 +732,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
           handleTaskClick(t);
         }}
         className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/70 transition cursor-pointer group ${
-          isLate
-            ? 'bg-red-50/50 dark:bg-red-950/30'
-            : isTopEffort
-            ? 'bg-emerald-50/50 dark:bg-emerald-950/30'
-            : ''
+          isOverdue ? 'bg-red-50/30 dark:bg-red-950/20' : ''
         }`}
       >
         {/* STT */}
@@ -844,27 +851,48 @@ const getRoleOrderRank = (roleCode?: string): number => {
           </span>
         </td>
 
-        {/* Account */}
+        {/* Account & Supporters */}
         <td className="py-3 px-3 font-medium">
-          {t.assigneeAccount ? (() => {
-            const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
-            const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.role) : 'Member';
-            return (
-              <div className="flex items-center gap-1.5">
-                <UserAvatar
-                  user={assigneeUser}
-                  account={t.assigneeAccount}
-                  size="xs"
-                  shape="circle"
-                />
-                <span className={getUserRoleColorClass(assigneeRole)}>{t.assigneeAccount}</span>
+          <div className="space-y-1">
+            {t.assigneeAccount ? (() => {
+              const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+              const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.role) : 'Member';
+              return (
+                <div className="flex items-center gap-1.5">
+                  <UserAvatar
+                    user={assigneeUser}
+                    account={t.assigneeAccount}
+                    size="xs"
+                    shape="circle"
+                  />
+                  <span className={getUserRoleColorClass(assigneeRole)}>{t.assigneeAccount}</span>
+                </div>
+              );
+            })() : (
+              <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
+                <UserX className="w-3.5 h-3.5" /> Task trống
+              </span>
+            )}
+
+            {/* Supporter badges */}
+            {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+              <div className="flex flex-wrap gap-1 items-center pt-0.5">
+                {t.supporterAccounts.map((supAcc) => {
+                  const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
+                  return (
+                    <span
+                      key={supAcc}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800 text-[10px] font-semibold text-indigo-700 dark:text-indigo-300"
+                      title={`Người hỗ trợ (Supporter): ${supUser?.name || supAcc}`}
+                    >
+                      <span className="text-[9px] font-bold text-indigo-500">SP:</span>
+                      <span>{supAcc}</span>
+                    </span>
+                  );
+                })}
               </div>
-            );
-          })() : (
-            <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
-              <UserX className="w-3.5 h-3.5" /> Task trống
-            </span>
-          )}
+            )}
+          </div>
         </td>
 
         {/* Completion Progress Bar */}
@@ -888,39 +916,45 @@ const getRoleOrderRank = (roleCode?: string): number => {
           </div>
         </td>
 
-        {/* Alert Status (Clean: Blank if no alert exists) */}
+        {/* End Date (Hạn hoàn thành) */}
         <td className="py-3 px-3 text-center">
-          {hasAlert ? (
-            <div className="flex items-center justify-center gap-1 flex-wrap">
-              {isUnsubmittedLate && (
-                <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 text-[10px] font-bold rounded-full animate-pulse"
-                  title="Chưa nộp báo cáo quá hạn 22:00 Chủ Nhật (Bị phạt)"
-                >
-                  <AlertTriangle className="w-3 h-3 text-red-500" />
-                  PHẠT (Chưa BC)
-                </span>
-              )}
-              {!isUnsubmittedLate && isSubmittedLate && (
-                <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded-full"
-                  title="Báo cáo nộp sau 22:00 Chủ Nhật (Bị phạt)"
-                >
-                  <Clock className="w-3 h-3 text-amber-600" />
-                  PHẠT (Nộp muộn)
-                </span>
-              )}
-              {isTopEffort && (
-                <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-full"
-                  title="Người có tổng giờ làm nhiều nhất tuần (Được thưởng)"
-                >
-                  <Award className="w-3 h-3 text-emerald-600" />
-                  THƯỞNG
-                </span>
-              )}
-            </div>
-          ) : null}
+          {hasEndDate ? (
+            isOverdue ? (
+              <span
+                className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 shadow-2xs"
+                title={`Quá hạn hoàn thành (${formatDateOnlyDisplay(t.endDate)})`}
+              >
+                <AlertCircle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
+                <span>{formatDateOnlyDisplay(t.endDate)}</span>
+              </span>
+            ) : isDueToday ? (
+              <span
+                className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shadow-2xs"
+                title={`Hạn chót hôm nay (${formatDateOnlyDisplay(t.endDate)})`}
+              >
+                <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>{formatDateOnlyDisplay(t.endDate)}</span>
+              </span>
+            ) : isTaskDone ? (
+              <span
+                className="inline-flex items-center justify-center gap-1 px-2 py-0.5 text-[11px] font-medium font-mono text-slate-500 dark:text-slate-400"
+                title={`Đã hoàn thành: ${formatDateOnlyDisplay(t.endDate)}`}
+              >
+                <span>{formatDateOnlyDisplay(t.endDate)}</span>
+              </span>
+            ) : (
+              <span
+                className="inline-flex items-center justify-center gap-1 px-2 py-0.5 text-[11px] font-semibold font-mono text-slate-700 dark:text-slate-300"
+                title={`Hạn hoàn thành: ${formatDateOnlyDisplay(t.endDate)}`}
+              >
+                <span>{formatDateOnlyDisplay(t.endDate)}</span>
+              </span>
+            )
+          ) : (
+            <span className="text-slate-300 dark:text-slate-600 font-mono text-xs font-normal" title="Chưa đặt hạn hoàn thành">
+              -
+            </span>
+          )}
         </td>
 
         {/* Action Buttons */}
@@ -960,7 +994,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
               );
             })()}
 
-            {/* ONLY RENDER BÁO CÁO BUTTON IF TASK IS ASSIGNED TO CURRENT USER! HIDE COMPLETELY FOR OTHERS */}
+            {/* ONLY RENDER BÁO CÁO BUTTON IF TASK IS ASSIGNED TO CURRENT USER OR CURRENT USER IS SUPPORTER! HIDE COMPLETELY FOR OTHERS */}
             {isAssignedToMe && (
               <button
                 onClick={() => setReportingTask(t)}
@@ -986,8 +1020,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
               </button>
             )}
 
-            {/* Leader/Advisor/Admin Edit & Delete Buttons */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
+            {/* Leader/Advisor/Admin/PM Edit & Delete Buttons */}
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
               <>
                 <button
                   onClick={() => onOpenTaskModal?.(t)}
@@ -1020,19 +1054,10 @@ const getRoleOrderRank = (roleCode?: string): number => {
   };
 
   const renderMobileTaskCard = (t: Task, displayIdx: number) => {
-    const isAssignedToMe =
-      currentUser &&
-      t.assigneeAccount &&
-      t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase();
-
-    const isWeekFinalized = weeklyArchives.some(
-      (a) => a.weekNumber === (t.weekNumber || selectedWeek) && a.year === (t.year || selectedYear)
-    );
-    const isTopEffort = isWeekFinalized && isTopEffortAccount(t.assigneeAccount);
+    const todayStr = getTodayDateOnlyString(simulatedTime);
+    const isAssignedToMe = canReportTask(t);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
-    const deadline = getWeekDeadline(t.weekNumber || selectedWeek, t.year || selectedYear);
     const nowTime = new Date(simulatedTime).getTime();
-    const isPastDeadline = nowTime > deadline.getTime();
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
     const effStatus = getEffectiveTaskStatus(t);
@@ -1042,9 +1067,9 @@ const getRoleOrderRank = (roleCode?: string): number => {
       (!!t.lastSubmittedAt &&
         new Date(t.lastSubmittedAt).getTime() >= sundayNoon.getTime());
 
-    const isUnsubmittedLate = isWeekFinalized && !isReported && isPastDeadline && !!t.assigneeAccount;
-    const isSubmittedLate = isWeekFinalized && isReported && !isTaskDone && !!t.isSubmittedLate;
-    const isLate = isSubmittedLate || isUnsubmittedLate;
+    const hasEndDate = Boolean(t.endDate && t.endDate.trim());
+    const isOverdue = hasEndDate && !isTaskDone && t.endDate! < todayStr;
+    const isDueToday = hasEndDate && !isTaskDone && t.endDate! === todayStr;
 
     const unread = hasUnreadNote(t);
     const milestone = milestones.find((m) => m.id === t.milestoneId);
@@ -1055,7 +1080,9 @@ const getRoleOrderRank = (roleCode?: string): number => {
       <div
         key={t.id}
         className={`bg-white dark:bg-slate-900 border rounded-2xl p-4 shadow-xs space-y-3 transition-all ${
-          isTaskDone
+          isOverdue
+            ? 'border-red-300 dark:border-red-900/60 bg-red-50/15 dark:bg-red-950/15'
+            : isTaskDone
             ? 'border-emerald-200/80 dark:border-emerald-900/40 bg-emerald-50/15 dark:bg-emerald-950/10'
             : t.priority === 'High'
             ? 'border-red-200/80 dark:border-red-900/40 bg-red-50/10 dark:bg-red-950/10'
@@ -1123,31 +1150,48 @@ const getRoleOrderRank = (roleCode?: string): number => {
           </div>
         </div>
 
-        {/* Stats Box: Assignee, Effort, Progress */}
+        {/* Stats Box: Assignee, Supporters, Effort, Progress */}
         <div className="bg-slate-50/80 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            {/* Assignee */}
-            <div className="flex items-center gap-1.5">
-              {t.assigneeAccount ? (() => {
-                const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
-                const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.role) : 'Member';
-                return (
-                  <>
-                    <UserAvatar
-                      user={assigneeUser}
-                      account={t.assigneeAccount}
-                      size="xs"
-                      shape="circle"
-                    />
-                    <span className={`text-xs ${getUserRoleColorClass(assigneeRole)}`}>
-                      {t.assigneeAccount}
+            {/* Assignee & Supporters */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5">
+                {t.assigneeAccount ? (() => {
+                  const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+                  const assigneeRole = assigneeUser ? getUserRoleInSpec(assigneeUser, t.role) : 'Member';
+                  return (
+                    <>
+                      <UserAvatar
+                        user={assigneeUser}
+                        account={t.assigneeAccount}
+                        size="xs"
+                        shape="circle"
+                      />
+                      <span className={`text-xs ${getUserRoleColorClass(assigneeRole)}`}>
+                        {t.assigneeAccount}
+                      </span>
+                    </>
+                  );
+                })() : (
+                  <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
+                    <UserX className="w-3 h-3" /> Chưa giao
+                  </span>
+                )}
+              </div>
+
+              {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                <div className="flex flex-wrap gap-1 items-center">
+                  {t.supporterAccounts.map((supAcc) => (
+                    <span
+                      key={supAcc}
+                      className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800 text-[9.5px] font-semibold text-indigo-700 dark:text-indigo-300"
+                      title={`Người hỗ trợ: @${supAcc}`}
+                    >
+                      <span className="text-[8.5px] font-bold text-indigo-500">SP:</span>
+                      <span>{supAcc}</span>
                     </span>
-                  </>
-                );
-              })() : (
-                <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
-                  <UserX className="w-3 h-3" /> Chưa giao
-                </span>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -1184,31 +1228,35 @@ const getRoleOrderRank = (roleCode?: string): number => {
               />
             </div>
           </div>
-        </div>
 
-        {/* Penalty / Award Alert if any */}
-        {(isLate || isTopEffort) && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {isUnsubmittedLate && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 dark:bg-red-950/80 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 text-[10px] font-bold rounded-full">
-                <AlertTriangle className="w-3 h-3 text-red-500" />
-                PHẠT (Chưa nộp báo cáo - quá 22h CN)
-              </span>
-            )}
-            {!isUnsubmittedLate && isSubmittedLate && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded-full">
-                <Clock className="w-3 h-3 text-amber-600" />
-                PHẠT (Nộp muộn sau 22h CN)
-              </span>
-            )}
-            {isTopEffort && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold rounded-full">
-                <Award className="w-3 h-3 text-emerald-600" />
-                THƯỞNG (Top Effort)
-              </span>
+          {/* End Date row */}
+          <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100 dark:border-slate-800">
+            <span className="text-[11px] text-slate-400 dark:text-slate-400">Hạn chót (End Date):</span>
+            {hasEndDate ? (
+              isOverdue ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold font-mono bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800">
+                  <AlertCircle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
+                  {formatDateOnlyDisplay(t.endDate)} (Quá hạn)
+                </span>
+              ) : isDueToday ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-bold font-mono bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                  <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                  {formatDateOnlyDisplay(t.endDate)} (Hôm nay)
+                </span>
+              ) : isTaskDone ? (
+                <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                  {formatDateOnlyDisplay(t.endDate)}
+                </span>
+              ) : (
+                <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">
+                  {formatDateOnlyDisplay(t.endDate)}
+                </span>
+              )
+            ) : (
+              <span className="text-xs font-mono text-slate-400 dark:text-slate-500">-</span>
             )}
           </div>
-        )}
+        </div>
 
         {/* Action Buttons Row */}
         <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800 gap-2">
@@ -1235,7 +1283,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
             <TaskShareButton task={t} variant="icon" align="left" />
 
             {/* Edit Button */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
               <button
                 onClick={() => onOpenTaskModal?.(t)}
                 className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition shadow-2xs active:scale-95 cursor-pointer"
@@ -1246,7 +1294,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
             )}
 
             {/* Delete Button */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
               <button
                 onClick={() => {
                   confirmDialog({
@@ -1572,7 +1620,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                       <th className="py-3.5 px-3 w-28 text-center">Status</th>
                       <th className="py-3.5 px-3 w-36">Account</th>
                       <th className="py-3.5 px-3 w-36">Tiến độ (%)</th>
-                      <th className="py-3.5 px-3 w-32 text-center">Alert</th>
+                      <th className="py-3.5 px-3 w-36 text-center">End Date</th>
                       <th className="py-3.5 px-4 min-w-[130px] w-36 text-right">Thao tác</th>
                     </tr>
                   </thead>

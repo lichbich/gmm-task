@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, Ticket, getEffectiveTaskStatus, getUserRoleColorClass, formatDateOnlyDisplay } from '../types/task';
+import { Task, TaskStatus, Ticket, getEffectiveTaskStatus, getUserRoleColorClass, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
@@ -141,28 +141,36 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
   };
 
   const canMoveTask = (t: Task) => {
-    if (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') return true;
-    return (
-      !!t.assigneeAccount &&
-      t.assigneeAccount.toLowerCase() === currentUser?.account.toLowerCase()
-    );
+    if (
+      currentUser?.role === 'Leader' ||
+      currentUser?.role === 'Advisor' ||
+      isUserAdminOrPM(currentUser)
+    ) {
+      return true;
+    }
+    const isAssignee = Boolean(t.assigneeAccount && t.assigneeAccount.toLowerCase() === currentUser?.account.toLowerCase());
+    const isSupporter = Boolean(t.supporterAccounts && t.supporterAccounts.some((s) => s.toLowerCase() === currentUser?.account.toLowerCase()));
+    return isAssignee || isSupporter;
   };
 
   const handleStatusChange = (taskId: string, newStatus: TaskStatus) => {
     const currentTask = tasks.find((t) => t.id === taskId);
     if (!currentTask || currentTask.status === newStatus) return;
 
+    const isAssignee = Boolean(currentTask.assigneeAccount && currentTask.assigneeAccount.toLowerCase() === currentUser?.account.toLowerCase());
+    const isSupporter = Boolean(currentTask.supporterAccounts && currentTask.supporterAccounts.some((s) => s.toLowerCase() === currentUser?.account.toLowerCase()));
+
     const hasPermission =
       currentUser?.role === 'Leader' ||
       currentUser?.role === 'Advisor' ||
-      currentUser?.role === 'Admin' ||
-      (currentTask.assigneeAccount &&
-        currentTask.assigneeAccount.toLowerCase() === currentUser?.account.toLowerCase());
+      isUserAdminOrPM(currentUser) ||
+      isAssignee ||
+      isSupporter;
 
     if (!hasPermission) {
       confirmDialog({
         title: 'Không có quyền thao tác',
-        message: 'Chỉ Leader/Advisor/Admin hoặc người được giao task mới có quyền chuyển trạng thái task này.',
+        message: 'Chỉ Leader/Advisor/Admin/PM hoặc người được giao task/supporter mới có quyền chuyển trạng thái task này.',
         confirmText: 'Đã hiểu',
         type: 'warning',
         cancelText: 'Đóng',
@@ -371,74 +379,92 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
           </div>
         )}
 
-        {/* Card Footer: Assignee, Effort & Quick Actions */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-xs">
-          {/* Assignee & Effort */}
-          <div className="flex items-center gap-2 min-w-0">
-            {t.assigneeAccount ? (() => {
-              const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
-              return (
-                <div className="flex items-center gap-1.5 min-w-0" title={`Giao cho @${t.assigneeAccount}`}>
-                  <UserAvatar
-                    user={assigneeUser}
-                    account={t.assigneeAccount}
-                    size="xs"
-                    shape="circle"
-                  />
-                  <span className={`font-mono text-[10px] truncate max-w-[70px] ${getUserRoleColorClass(assigneeUser?.role)}`}>
-                    {t.assigneeAccount}
-                  </span>
-                </div>
-              );
-            })() : (
-              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-0.5">
-                <UserX className="w-3 h-3" /> Trống
+        {/* Card Footer: Assignee, Supporters, Effort & Quick Actions */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-col gap-1.5 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            {/* Assignee & Effort */}
+            <div className="flex items-center gap-2 min-w-0">
+              {t.assigneeAccount ? (() => {
+                const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+                return (
+                  <div className="flex items-center gap-1.5 min-w-0" title={`Giao cho @${t.assigneeAccount}`}>
+                    <UserAvatar
+                      user={assigneeUser}
+                      account={t.assigneeAccount}
+                      size="xs"
+                      shape="circle"
+                    />
+                    <span className={`font-mono text-[10px] truncate max-w-[70px] ${getUserRoleColorClass(assigneeUser?.role)}`}>
+                      {t.assigneeAccount}
+                    </span>
+                  </div>
+                );
+              })() : (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-0.5">
+                  <UserX className="w-3 h-3" /> Trống
+                </span>
+              )}
+
+              <span className="text-slate-300 dark:text-slate-600 text-[10px]">•</span>
+
+              <span className="font-mono text-[10px] font-semibold text-slate-600 dark:text-slate-300 shrink-0">
+                {t.actualEffort ?? t.estimatedEffort}h
               </span>
-            )}
+            </div>
 
-            <span className="text-slate-300 dark:text-slate-600 text-[10px]">•</span>
+            {/* Quick Action Icons */}
+            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <TaskShareButton task={t} variant="icon" align="right" />
 
-            <span className="font-mono text-[10px] font-semibold text-slate-600 dark:text-slate-300 shrink-0">
-              {t.actualEffort ?? t.estimatedEffort}h
-            </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDiscussingTask(t);
+                }}
+                className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg transition cursor-pointer"
+                title="Ghi chú & Trao đổi luồng task"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+              </button>
+
+              {isAssignedToMe && (
+                <button
+                  onClick={() => setReportingTask(t)}
+                  className="whitespace-nowrap inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 hover:text-white border border-indigo-200/90 dark:border-indigo-800 rounded-lg text-[10px] font-semibold transition shadow-2xs cursor-pointer"
+                  title="Nộp báo cáo"
+                >
+                  <Clock className="w-3 h-3 shrink-0" />
+                  <span>Báo cáo</span>
+                </button>
+              )}
+
+              {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
+                <button
+                  onClick={() => onOpenTaskModal?.(t)}
+                  className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition cursor-pointer"
+                  title="Chỉnh sửa task"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Quick Action Icons */}
-          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-            <TaskShareButton task={t} variant="icon" align="right" />
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setDiscussingTask(t);
-              }}
-              className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 rounded-lg transition cursor-pointer"
-              title="Ghi chú & Trao đổi luồng task"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-            </button>
-
-            {isAssignedToMe && (
-              <button
-                onClick={() => setReportingTask(t)}
-                className="whitespace-nowrap inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 hover:text-white border border-indigo-200/90 dark:border-indigo-800 rounded-lg text-[10px] font-semibold transition shadow-2xs cursor-pointer"
-                title="Nộp báo cáo"
-              >
-                <Clock className="w-3 h-3 shrink-0" />
-                <span>Báo cáo</span>
-              </button>
-            )}
-
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || currentUser?.role === 'Admin') && (
-              <button
-                onClick={() => onOpenTaskModal?.(t)}
-                className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition cursor-pointer"
-                title="Chỉnh sửa task"
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+          {/* Supporter Chips on Kanban card if any */}
+          {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+            <div className="flex flex-wrap gap-1 items-center">
+              {t.supporterAccounts.map((supAcc) => (
+                <span
+                  key={supAcc}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800 text-[9px] font-semibold text-indigo-700 dark:text-indigo-300"
+                  title={`Người hỗ trợ: @${supAcc}`}
+                >
+                  <span className="text-[8px] font-bold text-indigo-500">SP:</span>
+                  <span>{supAcc}</span>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Mobile Quick Status Switcher */}

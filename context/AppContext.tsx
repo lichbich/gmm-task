@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, TicketActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, TicketActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, update, remove, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
@@ -83,6 +83,14 @@ export function getWeekDeadline(weekNo: number, year: number = 2026): Date {
 }
 
 export const DEFAULT_ROLES: RoleItem[] = [
+  {
+    id: 'role-pm',
+    code: 'PM',
+    name: 'Project Manager (Quản lý dự án)',
+    description: 'Quản lý tiến độ, điều phối & giám sát toàn bộ hoạt động dự án',
+    color: 'purple',
+    order: 0,
+  },
   {
     id: 'role-ba',
     code: 'BA',
@@ -1260,19 +1268,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Permission Checks:
-  // Leader/Advisor of task's specific team, Admin, or the task's assignee can edit task
+  // Leader/Advisor of task's specific team, Admin, PM, or the task's assignee/supporter can edit task
   const canEditTask = (task: Task, user: User | null = authSession): boolean => {
     if (!user) return false;
-    if (user.role === 'Admin') return true;
+    if (user.role === 'Admin' || isUserPM(user)) return true;
     const roleInTaskSpec = getUserRoleInSpec(user, task.role);
     if (roleInTaskSpec === 'Leader' || roleInTaskSpec === 'Advisor') return true;
-    return Boolean(task.assigneeAccount && task.assigneeAccount.toLowerCase() === user.account.toLowerCase());
+    const isAssignee = Boolean(task.assigneeAccount && task.assigneeAccount.toLowerCase() === user.account.toLowerCase());
+    const isSupporter = Boolean(task.supporterAccounts && task.supporterAccounts.some((s) => s.toLowerCase() === user.account.toLowerCase()));
+    return isAssignee || isSupporter;
   };
 
-  // STRICT REPORT PERMISSION: ONLY ASSIGNEE CAN REPORT THIS TASK!
+  // REPORT PERMISSION: ASSIGNEE OR SUPPORTERS CAN REPORT THIS TASK!
   const canReportTask = (task: Task, user: User | null = authSession): boolean => {
-    if (!user || !task.assigneeAccount) return false;
-    return task.assigneeAccount.toLowerCase() === user.account.toLowerCase();
+    if (!user) return false;
+    const isAssignee = Boolean(task.assigneeAccount && task.assigneeAccount.toLowerCase() === user.account.toLowerCase());
+    const isSupporter = Boolean(task.supporterAccounts && task.supporterAccounts.some((s) => s.toLowerCase() === user.account.toLowerCase()));
+    return isAssignee || isSupporter;
   };
 
   // Helper: remove undefined values so Firebase doesn't reject the payload
@@ -2390,13 +2402,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Finish Week & Rollover Unfinished Tasks to Next Week (Admin & PO only)
+  // Finish Week & Rollover Unfinished Tasks to Next Week (Admin, PM & PO only)
   const finishWeekAndRollover = () => {
     const isPOOrAdmin = (u?: any): boolean => {
       if (!u) return false;
-      if (u.role === 'Admin' || u.role === 'PO') return true;
+      if (u.role === 'Admin' || u.role === 'PO' || isUserPM(u)) return true;
       const specs = u.specializations || [];
-      return specs.some((s: string) => s.toUpperCase() === 'PO');
+      return specs.some((s: string) => s.toUpperCase() === 'PO' || s.toUpperCase() === 'PM');
     };
 
     if (!isPOOrAdmin(authSession)) {
