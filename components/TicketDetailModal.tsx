@@ -47,6 +47,9 @@ import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
 import { ImageLightbox } from './common/ImageLightbox';
 import { DecryptedImage } from './common/DecryptedImage';
 import { DescriptionEditor } from './common/DescriptionEditor';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { TaskTitleInput } from './common/TaskTitleInput';
+import { RichDescriptionViewer } from './common/RichDescriptionViewer';
 import { UserAvatar } from './common/UserAvatar';
 import { MentionInput } from './common/MentionInput';
 import { renderFormattedMessage } from '../lib/notesHelper';
@@ -756,7 +759,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white leading-snug break-words">
-                  {ticket.title}
+                  <FormattedTaskTitle title={ticket.title} />
                 </h2>
                 <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1.5 flex-wrap">
                   <span>
@@ -809,12 +812,11 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Tiêu đề yêu cầu <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <TaskTitleInput
                     value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
+                    onChange={setEditTitle}
                     placeholder="Nhập tiêu đề yêu cầu..."
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-900 dark:text-slate-100"
+                    required
                   />
                 </div>
 
@@ -1013,59 +1015,10 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                     Nội dung yêu cầu chi tiết
                   </label>
                   <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
-                    <div className="space-y-1.5">
-                      {parsedTicketDesc.items.map((item) => {
-                        if (item.isImage && item.imageUrl) {
-                          return (
-                            <div key={item.id} className="my-2 group/img relative inline-block max-w-full">
-                              <div
-                                onClick={() => setLightboxImage({ url: item.imageUrl!, alt: 'Ảnh đính kèm' })}
-                                className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer shadow-2xs hover:shadow-md transition duration-200 group-hover/img:border-indigo-400"
-                              >
-                                <DecryptedImage
-                                  src={item.imageUrl}
-                                  alt="Ảnh đính kèm"
-                                  className="max-h-64 sm:max-h-72 w-auto max-w-full object-contain rounded-xl transition duration-200 group-hover/img:scale-[1.01]"
-                                  loading="lazy"
-                                />
-
-                                {/* Hover Overlay */}
-                                <div className="absolute inset-0 bg-slate-900/0 group-hover/img:bg-slate-900/25 transition-all flex items-center justify-center opacity-0 group-hover/img:opacity-100">
-                                  <span className="px-3 py-1.5 rounded-xl bg-slate-900/85 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
-                                    <Maximize2 className="w-3.5 h-3.5" />
-                                    Phóng to ảnh
-                                  </span>
-                                </div>
-
-                                {/* Hover Quick Delete Button */}
-                                {canEdit && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRemoveImageFromTicket(item.imageUrl!);
-                                    }}
-                                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition duration-150 shadow-md cursor-pointer active:scale-90 z-10"
-                                    title="Xóa ảnh này khỏi ticket"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <p
-                            key={item.id}
-                            className="whitespace-pre-wrap text-slate-800 dark:text-slate-200 text-xs leading-relaxed font-normal"
-                          >
-                            {item.text}
-                          </p>
-                        );
-                      })}
-                    </div>
+                    <RichDescriptionViewer
+                      content={ticket.description}
+                      onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
+                    />
                   </div>
                 </div>
               </>

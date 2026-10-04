@@ -54,6 +54,8 @@ import { TaskShareButton } from './common/TaskShareButton';
 import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
 import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { AssignTaskToMemberModal } from './common/AssignTaskToMemberModal';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 
@@ -367,8 +369,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
     if (rankA !== rankB) {
       return rankA - rankB;
     }
-    const titleA = a.title || '';
-    const titleB = b.title || '';
+    const titleA = stripMarkdownForSearch(a.title);
+    const titleB = stripMarkdownForSearch(b.title);
     const cmpTitle = titleA.localeCompare(titleB, undefined, { sensitivity: 'base', numeric: true });
     if (cmpTitle !== 0) return cmpTitle;
     return (a.id || '').localeCompare(b.id || '');
@@ -403,7 +405,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
           }
         }
 
-        if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        if (searchQuery && !stripMarkdownForSearch(t.title).toLowerCase().includes(searchQuery.toLowerCase())) return false;
         if (selectedRole !== 'ALL') {
           const isTaskRole = isSpecializationMatchingRole(t.role, selectedRole);
           const isSupporterInRole = Boolean(
@@ -803,7 +805,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="line-clamp-2 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
-                {t.title}
+                <FormattedTaskTitle title={t.title} />
               </span>
               {isTicketTask && (
                 <span
@@ -1200,7 +1202,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
             onClick={() => handleTaskClick(t)}
             className="text-left font-bold text-slate-800 dark:text-slate-100 text-sm hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors block w-full leading-snug cursor-pointer"
           >
-            {t.title}
+            <FormattedTaskTitle title={t.title} />
           </button>
 
           {/* Milestone Info */}

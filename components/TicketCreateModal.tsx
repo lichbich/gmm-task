@@ -26,6 +26,7 @@ import {
 import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
 import { ImageLightbox } from './common/ImageLightbox';
 import { DescriptionEditor } from './common/DescriptionEditor';
+import { TaskTitleInput } from './common/TaskTitleInput';
 
 interface TicketCreateModalProps {
   isOpen: boolean;
@@ -357,12 +358,10 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
               Tiêu đề Request <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
+            <TaskTitleInput
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={setTitle}
               placeholder="VD: Cần tài liệu đặc tả luồng lấy account thành viên đăng nhập..."
-              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               required
             />
           </div>

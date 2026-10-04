@@ -11,6 +11,7 @@ import { uploadAndInsertImage, getImageFilesFromClipboard, getImageFilesFromDrop
 import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
 import { ImageLightbox } from './common/ImageLightbox';
 import { DescriptionEditor } from './common/DescriptionEditor';
+import { TaskTitleInput } from './common/TaskTitleInput';
 import { AITaskChatBox } from './AITaskChatBox';
 import { SubTaskSuggestion, requestAIEffortSuggestion, isAIFeatureEnabled } from '../lib/geminiService';
 
@@ -910,12 +911,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   <label className="text-xs font-semibold text-slate-700 block mb-1">
                     Tên Đầu Việc (Task Name): <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <TaskTitleInput
                     placeholder="VD: BA | Viết tài liệu phần 'Working schedule'..."
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300/90 rounded-xl px-3 py-2.5 text-slate-800 text-xs focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition"
+                    onChange={setTitle}
                     required
                   />
                 </div>

@@ -43,6 +43,8 @@ import {
 import { Dropdown } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
 import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
 import { AssignTaskToMemberModal } from './common/AssignTaskToMemberModal';
 
 // Helper to parse deliverable lines/bullets/commas into individual clean items
@@ -782,7 +784,7 @@ export const MilestonesView: React.FC = () => {
                     isDone ? 'line-through text-slate-400' : 'text-slate-800 group-hover:text-indigo-600'
                   }`}
                 >
-                  {t.title}
+                  <FormattedTaskTitle title={t.title} />
                 </span>
                 {(() => {
                   const linkedTicket = getLinkedTicket(t);
@@ -1084,7 +1086,7 @@ export const MilestonesView: React.FC = () => {
           </div>
 
           <h4 className={`text-xs font-bold leading-snug ${isDone ? 'line-through text-slate-400' : 'text-slate-800'}`}>
-            {t.title}
+            <FormattedTaskTitle title={t.title} />
           </h4>
 
           {t.description && (

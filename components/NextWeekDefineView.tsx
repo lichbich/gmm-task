@@ -8,6 +8,8 @@ import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown } from './common/Dropdown';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskSupportersBadge } from './common/TaskSupportersBadge';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
 import { getWeekDateRangeStr } from './WorkHistoryView';
 import {
   ClipboardList,
@@ -558,7 +560,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                       <span className="text-[10px] text-slate-400 font-mono">#{t.id.replace('tsk-', '')}</span>
                     </div>
 
-                    <h4 className="text-xs font-bold text-slate-800 leading-snug">{t.title}</h4>
+                    <h4 className="text-xs font-bold text-slate-800 leading-snug">
+                      <FormattedTaskTitle title={t.title} />
+                    </h4>
 
                     {milestone && (
                       <span className="inline-flex items-center gap-1 text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
@@ -823,7 +827,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                     className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition"
                                     title="Bấm để xem chi tiết task"
                                   >
-                                    {t.title}
+                                    <FormattedTaskTitle title={t.title} />
                                   </h5>
                                   {(() => {
                                     const linkedTicket = getLinkedTicket(t);
@@ -1084,7 +1088,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                             onClick={() => handleTaskClick(t)}
                                             className="font-bold text-slate-800 hover:text-indigo-600 transition cursor-pointer leading-snug"
                                           >
-                                            {t.title}
+                                            <FormattedTaskTitle title={t.title} />
                                           </span>
 
                                           {(() => {
@@ -1314,7 +1318,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                     </div>
 
                                     <h4 className="text-xs font-bold text-slate-800 leading-snug">
-                                      {t.title}
+                                      <FormattedTaskTitle title={t.title} />
                                     </h4>
 
                                     {milestone && (
@@ -1559,7 +1563,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                   className="text-xs font-bold text-slate-800 leading-snug line-clamp-2 hover:text-indigo-600 transition cursor-pointer"
                                   title="Bấm để xem chi tiết task"
                                 >
-                                  {t.title}
+                                  <FormattedTaskTitle title={t.title} />
                                 </h5>
 
                                 {t.description && (

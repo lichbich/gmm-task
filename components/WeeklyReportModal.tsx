@@ -8,6 +8,7 @@ import { useModalAnimation } from '../hooks/useModalAnimation';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { UserAvatar } from './common/UserAvatar';
 import { DatePicker } from './common/DatePicker';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 
 interface WeeklyReportModalProps {
   task: Task | null;
@@ -252,7 +253,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               {isBeforeSundayNoon ? 'Cập Nhật Tiến Độ Task' : 'Báo Cáo Tiến Độ Tuần'}
             </span>
             <h3 className="text-sm sm:text-base font-bold text-slate-900 mt-0.5 leading-snug break-words">
-              {task.title}
+              <FormattedTaskTitle title={task.title} />
             </h3>
           </div>
           <button

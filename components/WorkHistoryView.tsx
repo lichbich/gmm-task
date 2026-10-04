@@ -8,6 +8,8 @@ import { Dropdown } from './common/Dropdown';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
 import { TaskSupportersBadge } from './common/TaskSupportersBadge';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
 import {
   History,
   FolderArchive,
@@ -484,7 +486,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                         onClick={() => handleTaskClick(t)}
                                         className="font-bold text-slate-800 hover:text-indigo-600 transition cursor-pointer leading-snug"
                                       >
-                                        {t.title}
+                                        <FormattedTaskTitle title={t.title} />
                                       </span>
 
                                       {(() => {
@@ -726,7 +728,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                               </div>
 
                               <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
-                                {t.title}
+                                <FormattedTaskTitle title={t.title} />
                               </h4>
 
                               <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-700/80">

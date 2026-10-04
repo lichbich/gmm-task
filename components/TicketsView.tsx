@@ -7,6 +7,7 @@ import { TicketCreateModal } from './TicketCreateModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { UserAvatar } from './common/UserAvatar';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import {
   Sparkles,
   Plus,
@@ -603,7 +604,7 @@ export const TicketsView: React.FC<TicketsViewProps> = ({
                   {/* Middle Content: Title & Excerpt */}
                   <div className="space-y-1.5">
                     <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-snug line-clamp-2">
-                      {t.title}
+                      <FormattedTaskTitle title={t.title} />
                     </h3>
                     <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
                       {t.description}

@@ -18,6 +18,8 @@ import {
   Check,
 } from 'lucide-react';
 
+import { FormattedTaskTitle } from './FormattedTaskTitle';
+
 interface AssignTaskToMemberModalProps {
   isOpen: boolean;
   targetUser: User | null;
@@ -145,7 +147,7 @@ export const AssignTaskToMemberModal: React.FC<AssignTaskToMemberModalProps> = (
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-snug line-clamp-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
-                          {t.title}
+                          <FormattedTaskTitle title={t.title} />
                         </span>
                         {t.priority === 'High' && (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 font-bold text-[9px] shrink-0">

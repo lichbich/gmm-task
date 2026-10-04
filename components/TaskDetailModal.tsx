@@ -58,8 +58,10 @@ import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
 import { ImageLightbox } from './common/ImageLightbox';
 import { DecryptedImage } from './common/DecryptedImage';
 import { DescriptionEditor } from './common/DescriptionEditor';
+import { RichDescriptionViewer } from './common/RichDescriptionViewer';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -590,7 +592,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
             {/* Task Title */}
             <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug break-words pt-1">
-              {task.title}
+              <FormattedTaskTitle title={task.title} />
             </h3>
           </div>
 
@@ -793,88 +795,13 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             ) : (
               <div>
                 {task.description ? (
-                  <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3">
-                    {/* Description Items & Interactive Checkboxes & Images */}
-                    <div className="space-y-1 text-xs sm:text-sm leading-relaxed">
-                      {parsedDesc.items.map((item) => {
-                        if (item.isImage && item.imageUrl) {
-                          return (
-                            <div key={item.id} className="my-2 group/img relative inline-block max-w-full">
-                              <div
-                                onClick={() => setLightboxImage({ url: item.imageUrl!, alt: 'Ảnh đính kèm' })}
-                                className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer shadow-2xs hover:shadow-md transition duration-200 group-hover/img:border-indigo-400"
-                              >
-                                <DecryptedImage
-                                  src={item.imageUrl}
-                                  alt="Ảnh đính kèm"
-                                  className="max-h-72 sm:max-h-80 w-auto max-w-full object-contain rounded-xl transition duration-200 group-hover/img:scale-[1.01]"
-                                  loading="lazy"
-                                />
-
-                                {/* Hover Overlay */}
-                                <div className="absolute inset-0 bg-slate-900/0 group-hover/img:bg-slate-900/25 transition-all flex items-center justify-center opacity-0 group-hover/img:opacity-100">
-                                  <span className="px-3 py-1.5 rounded-xl bg-slate-900/85 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
-                                    <Maximize2 className="w-3.5 h-3.5" />
-                                    Phóng to ảnh
-                                  </span>
-                                </div>
-
-                                {/* Hover Quick Delete Button */}
-                                {isEditable && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRemoveImageFromTask(item.imageUrl!);
-                                    }}
-                                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-slate-900/80 hover:bg-rose-600 text-white flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition duration-150 shadow-md cursor-pointer active:scale-90 z-10"
-                                    title="Xóa ảnh này khỏi task"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        if (item.isCheckbox) {
-                          return (
-                            <div
-                              key={item.id}
-                              onClick={() => handleToggleCheckbox(item.id)}
-                              className="flex items-start gap-2.5 py-1 px-2 -mx-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer transition select-none group"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={item.isChecked}
-                                onChange={() => handleToggleCheckbox(item.id)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600 cursor-pointer accent-indigo-600"
-                              />
-                              <span
-                                className={`text-xs leading-relaxed transition flex-1 break-words ${
-                                  item.isChecked
-                                    ? 'line-through text-slate-400 dark:text-slate-500'
-                                    : 'text-slate-700 dark:text-slate-200 font-medium'
-                                }`}
-                              >
-                                {item.text}
-                              </span>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <p
-                            key={item.id}
-                            className="text-slate-700 dark:text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-normal"
-                          >
-                            {item.text}
-                          </p>
-                        );
-                      })}
-                    </div>
+                  <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3.5">
+                    <RichDescriptionViewer
+                      content={task.description}
+                      onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
+                      allowToggleCheckboxes={true}
+                      onToggleCheckbox={(lineIndex) => handleToggleCheckbox(lineIndex)}
+                    />
                   </div>
                 ) : (
                   <div

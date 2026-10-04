@@ -10,6 +10,7 @@ import { TicketDetailModal } from './TicketDetailModal';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
 import { TaskSupportersBadge } from './common/TaskSupportersBadge';
+import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import {
   AlertTriangle,
   Award,
@@ -337,7 +338,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
         {/* Title & Description Preview */}
         <div>
           <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
-            {t.title}
+            <FormattedTaskTitle title={t.title} />
           </h4>
 
           {t.description && (

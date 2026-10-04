@@ -2,13 +2,23 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Highlighter,
+  Heading2,
+  List,
+  ListOrdered,
+  CheckSquare,
+  Quote,
+  Code,
   ImageIcon,
   Trash2,
   Maximize2,
   Loader2,
   FileCode,
   Eye,
-  CheckSquare,
 } from 'lucide-react';
 import { DecryptedImage } from './DecryptedImage';
 import {
@@ -16,6 +26,12 @@ import {
   getImageFilesFromClipboard,
   getImageFilesFromDrop,
 } from '../../lib/imageUploadHelper';
+import {
+  applyInlineFormatting,
+  applyLinePrefix,
+  handleSmartEnter,
+} from '../../lib/textFormattingHelper';
+import { RichDescriptionViewer } from './RichDescriptionViewer';
 
 export interface DescriptionEditorProps {
   value: string;
@@ -128,74 +144,11 @@ function serializeBlocksToMarkdown(blocks: EditorBlock[]): string {
   return parts.join('\n').replace(/\n{4,}/g, '\n\n\n');
 }
 
-/**
- * Auto-resizing textarea subcomponent
- */
-const AutoResizeTextarea: React.FC<{
-  value: string;
-  placeholder?: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
-  onDrop?: (e: React.DragEvent<HTMLTextAreaElement>) => void;
-  onFocus?: () => void;
-  autoFocus?: boolean;
-  minRows?: number;
-  disabled?: boolean;
-  inputRef?: React.RefObject<HTMLTextAreaElement | null>;
-}> = ({
-  value,
-  placeholder,
-  onChange,
-  onKeyDown,
-  onPaste,
-  onDrop,
-  onFocus,
-  autoFocus,
-  minRows = 2,
-  disabled,
-  inputRef,
-}) => {
-  const internalRef = useRef<HTMLTextAreaElement | null>(null);
-  const ref = inputRef || internalRef;
-
-  const adjustHeight = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(el.scrollHeight, minRows * 20)}px`;
-  }, [minRows, ref]);
-
-  useEffect(() => {
-    adjustHeight();
-  }, [value, adjustHeight]);
-
-  return (
-    <textarea
-      ref={ref as any}
-      value={value}
-      onChange={(e) => {
-        onChange(e);
-        adjustHeight();
-      }}
-      onKeyDown={onKeyDown}
-      onPaste={onPaste}
-      onDrop={onDrop}
-      onFocus={onFocus}
-      autoFocus={autoFocus}
-      placeholder={placeholder}
-      disabled={disabled}
-      rows={minRows}
-      className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 resize-none leading-relaxed font-sans"
-    />
-  );
-};
-
 export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
   value,
   onChange,
-  placeholder = 'Nhập mô tả chi tiết...',
-  minRows = 4,
+  placeholder = 'Mô tả chi tiết nội dung đầu việc, hướng dẫn thực hiện, hoặc checklist việc con...',
+  minRows = 3,
   className = '',
   onPreviewImage,
   disabled = false,
@@ -203,12 +156,13 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
 }) => {
   const [blocks, setBlocks] = useState<EditorBlock[]>(() => parseMarkdownToBlocks(value));
   const [isUploading, setIsUploading] = useState(false);
-  const [rawMode, setRawMode] = useState(false);
+  const [editorMode, setEditorMode] = useState<'visual' | 'preview' | 'raw'>('visual');
   const lastSerializedRef = useRef<string>(value);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const focusedBlockIndexRef = useRef<number>(0);
+  const textareaRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
 
-  // Sync external value changes into blocks if changed externally
+  // Sync external value changes into blocks
   useEffect(() => {
     if (value !== lastSerializedRef.current) {
       lastSerializedRef.current = value;
@@ -237,13 +191,109 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
     }
   };
 
+  const getActiveTextarea = (): HTMLTextAreaElement | null => {
+    const idx = focusedBlockIndexRef.current;
+    return textareaRefs.current[idx] || textareaRefs.current[0] || null;
+  };
+
+  // Inline formatting helper
+  const applyInline = (prefix: string, suffix: string = prefix, placeholderText: string = 'văn bản') => {
+    const textarea = getActiveTextarea();
+    if (!textarea || disabled) return;
+
+    const idx = focusedBlockIndexRef.current;
+    const { newValue, newSelection } = applyInlineFormatting(textarea, prefix, suffix, placeholderText);
+
+    handleTextChange(idx, newValue);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newSelection.start, newSelection.end);
+    }, 0);
+  };
+
+  // Line prefix formatting helper
+  const applyPrefix = (linePrefix: string, isNumbered: boolean = false) => {
+    const textarea = getActiveTextarea();
+    if (!textarea || disabled) return;
+
+    const idx = focusedBlockIndexRef.current;
+    const { newValue, newSelection } = applyLinePrefix(textarea, linePrefix, isNumbered);
+
+    handleTextChange(idx, newValue);
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newSelection.start, newSelection.end);
+    }, 0);
+  };
+
+  // Keyboard Shortcuts Handler
+  const handleKeyDown = (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = textareaRefs.current[idx];
+    if (!textarea) return;
+
+    // Ctrl / Cmd shortcuts
+    if (e.ctrlKey || e.metaKey) {
+      const key = e.key.toLowerCase();
+
+      // Bold: Ctrl + B
+      if (key === 'b') {
+        e.preventDefault();
+        applyInline('**', '**', 'in đậm');
+        return;
+      }
+
+      // Italic: Ctrl + I
+      if (key === 'i') {
+        e.preventDefault();
+        applyInline('*', '*', 'in nghiêng');
+        return;
+      }
+
+      // Underline: Ctrl + U
+      if (key === 'u') {
+        e.preventDefault();
+        applyInline('<u>', '</u>', 'gạch chân');
+        return;
+      }
+
+      // Strikethrough: Ctrl + Shift + X
+      if (e.shiftKey && key === 'x') {
+        e.preventDefault();
+        applyInline('~~', '~~', 'gạch ngang');
+        return;
+      }
+
+      // Highlight: Ctrl + Shift + H
+      if (e.shiftKey && key === 'h') {
+        e.preventDefault();
+        applyInline('<mark>', '</mark>', 'nổi bật');
+        return;
+      }
+
+      // Inline code: Ctrl + E
+      if (key === 'e') {
+        e.preventDefault();
+        applyInline('`', '`', 'mã');
+        return;
+      }
+    }
+
+    // Smart Enter list continuation
+    if (e.key === 'Enter') {
+      const handled = handleSmartEnter(textarea, e, (newVal) => handleTextChange(idx, newVal));
+      if (handled) return;
+    }
+  };
+
   const handleRemoveImageBlock = (blockId: string) => {
     const blockIndex = blocks.findIndex((b) => b.id === blockId);
     if (blockIndex === -1) return;
 
     const newBlocks = blocks.filter((b) => b.id !== blockId);
 
-    // Merge adjacent text blocks if any
+    // Merge adjacent text blocks
     const mergedBlocks: EditorBlock[] = [];
     for (let i = 0; i < newBlocks.length; i++) {
       const curr = newBlocks[i];
@@ -296,10 +346,8 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
         };
 
         if (targetIdx >= 0 && targetIdx < newBlocks.length) {
-          // Insert right after current block
           newBlocks.splice(targetIdx + 1, 0, newImgBlock, newTrailingTextBlock);
         } else {
-          // Insert at the end
           newBlocks.push(newImgBlock, newTrailingTextBlock);
         }
 
@@ -344,31 +392,9 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
     }
   };
 
-  const handleInsertCheckbox = () => {
-    const targetIdx = focusedBlockIndexRef.current;
-    const newBlocks = [...blocks];
-
-    if (newBlocks[targetIdx] && newBlocks[targetIdx].type === 'text') {
-      const current = (newBlocks[targetIdx] as TextBlock).content;
-      const prefix = current.length > 0 && !current.endsWith('\n') ? '\n' : '';
-      newBlocks[targetIdx] = {
-        ...(newBlocks[targetIdx] as TextBlock),
-        content: `${current}${prefix}- [ ] `,
-      };
-    } else {
-      newBlocks.push({
-        type: 'text',
-        id: `text-${Date.now()}`,
-        content: '- [ ] ',
-      });
-    }
-
-    updateBlocksAndNotify(newBlocks);
-  };
-
   return (
     <div className={`space-y-1.5 ${className}`}>
-      {/* Hidden file input */}
+      {/* Hidden file input for image upload */}
       <input
         type="file"
         ref={fileInputRef}
@@ -378,71 +404,211 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
         onChange={handleFileInputChange}
       />
 
-      {/* Editor Toolbar Header */}
-      <div className="flex items-center justify-between gap-2 flex-wrap pb-0.5">
-        <div className="flex items-center gap-1.5">
+      {/* RICH TEXT FORMATTING TOOLBAR */}
+      <div className="bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-xl p-1 px-1.5 flex items-center justify-between gap-1 flex-wrap shadow-2xs">
+        {/* Left Toolbar Actions */}
+        <div className="flex items-center gap-0.5 flex-wrap">
+          {/* Bold */}
           <button
             type="button"
-            disabled={disabled || isUploading}
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyInline('**', '**', 'in đậm')}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="In đậm (Ctrl + B)"
+          >
+            <Bold className="w-3.5 h-3.5 stroke-[2.5]" />
+          </button>
+
+          {/* Italic */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyInline('*', '*', 'in nghiêng')}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="In nghiêng (Ctrl + I)"
+          >
+            <Italic className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Underline */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyInline('<u>', '</u>', 'gạch chân')}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="Gạch chân (Ctrl + U)"
+          >
+            <Underline className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Strikethrough */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyInline('~~', '~~', 'gạch ngang')}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="Gạch ngang (Ctrl + Shift + X)"
+          >
+            <Strikethrough className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Highlight */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyInline('<mark>', '</mark>', 'nổi bật')}
+            className="p-1.5 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-100/70 dark:hover:bg-amber-950/60 transition cursor-pointer disabled:opacity-40"
+            title="Highlight làm nổi bật (Ctrl + Shift + H)"
+          >
+            <Highlighter className="w-3.5 h-3.5 stroke-[2.2]" />
+          </button>
+
+          <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-0.5" />
+
+          {/* Heading */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyPrefix('## ')}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="Tiêu đề mục con (Heading 2)"
+          >
+            <Heading2 className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Bullet list */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyPrefix('- ')}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="Danh sách gạch đầu dòng"
+          >
+            <List className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Numbered list */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyPrefix('1. ', true)}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="Danh sách đánh số thứ tự"
+          >
+            <ListOrdered className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Checklist */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyPrefix('- [ ] ')}
+            className="p-1.5 rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/80 transition cursor-pointer disabled:opacity-40 font-bold"
+            title="Việc con / Checklist (- [ ])"
+          >
+            <CheckSquare className="w-3.5 h-3.5 stroke-[2.2]" />
+          </button>
+
+          {/* Quote */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyPrefix('> ')}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="Trích dẫn / Ghi chú quan trọng"
+          >
+            <Quote className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Code */}
+          <button
+            type="button"
+            disabled={disabled || editorMode === 'preview'}
+            onClick={() => applyInline('`', '`', 'mã')}
+            className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
+            title="Code / Thông số kỹ thuật (Ctrl + E)"
+          >
+            <Code className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-0.5" />
+
+          {/* Image Upload Button */}
+          <button
+            type="button"
+            disabled={disabled || isUploading || editorMode === 'preview'}
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 rounded-lg border border-emerald-200/80 dark:border-emerald-800/80 transition shadow-2xs cursor-pointer disabled:opacity-50"
-            title="Thêm ảnh từ máy hoặc Paste (Ctrl+V) / Kéo thả trực tiếp"
+            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 rounded-lg border border-emerald-200/80 dark:border-emerald-800/80 transition shadow-2xs cursor-pointer disabled:opacity-40"
+            title="Thêm ảnh từ máy hoặc Paste (Ctrl+V) / Kéo thả"
           >
             {isUploading ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
             ) : (
               <ImageIcon className="w-3.5 h-3.5" />
             )}
-            <span>{isUploading ? 'Đang tải ảnh...' : '+ Thêm Ảnh'}</span>
-          </button>
-
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={handleInsertCheckbox}
-            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 rounded-lg border border-indigo-200/80 dark:border-indigo-800/80 transition shadow-2xs cursor-pointer"
-            title="Chèn việc con / checkbox"
-          >
-            <CheckSquare className="w-3.5 h-3.5" />
-            <span>+ Checkbox</span>
+            <span>{isUploading ? 'Đang tải...' : 'Ảnh'}</span>
           </button>
         </div>
 
-        {/* Mode Toggle & Tips */}
-        <div className="flex items-center gap-2">
-          <span className="hidden sm:inline text-[10px] text-slate-400 dark:text-slate-500">
-            Paste (Ctrl+V) ảnh hoặc gõ <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded font-mono text-indigo-600 dark:text-indigo-400">- [ ]</code>
-          </span>
-
-          <button
-            type="button"
-            onClick={() => setRawMode((prev) => !prev)}
-            className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 flex items-center gap-1 transition cursor-pointer"
-            title="Chuyển chế độ xem trực quan / mã nguồn"
-          >
-            {rawMode ? (
-              <>
-                <Eye className="w-3 h-3 text-indigo-500" />
-                <span>Trực quan</span>
-              </>
-            ) : (
-              <>
-                <FileCode className="w-3 h-3 text-slate-400" />
-                <span>Markdown</span>
-              </>
-            )}
-          </button>
+        {/* Right View Modes Toggle */}
+        <div className="flex items-center gap-1">
+          <div className="bg-slate-200/80 dark:bg-slate-700/80 p-0.5 rounded-lg flex items-center text-[10px] font-medium">
+            <button
+              type="button"
+              onClick={() => setEditorMode('visual')}
+              className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                editorMode === 'visual'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+              title="Chế độ soạn thảo trực quan"
+            >
+              Soạn thảo
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditorMode('preview')}
+              className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                editorMode === 'preview'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+              title="Xem trước kết quả hiển thị"
+            >
+              Xem trước
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditorMode('raw')}
+              className={`px-2 py-0.5 rounded-md transition cursor-pointer ${
+                editorMode === 'raw'
+                  ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+              title="Chế độ mã nguồn Markdown"
+            >
+              Mã nguồn
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Editor Card */}
+      {/* Main Editor Body */}
       <div
         onPaste={handlePaste}
         onDrop={handleDrop}
-        className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition shadow-2xs relative min-h-[110px]"
+        className="w-full bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition shadow-2xs relative min-h-[110px]"
       >
-        {rawMode ? (
-          // Raw Markdown Textarea Mode (fallback)
+        {editorMode === 'preview' ? (
+          // Preview Render
+          <div className="p-1">
+            <RichDescriptionViewer
+              content={value}
+              onPreviewImage={onPreviewImage}
+            />
+          </div>
+        ) : editorMode === 'raw' ? (
+          // Raw Markdown Textarea
           <textarea
             rows={minRows}
             value={value}
@@ -452,22 +618,27 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
             className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 font-mono resize-none leading-relaxed"
           />
         ) : (
-          // Visual Block-based Flow
+          // Visual Flow Mode
           <div className="space-y-2">
             {blocks.map((block, idx) => {
               if (block.type === 'text') {
                 return (
-                  <AutoResizeTextarea
+                  <textarea
                     key={block.id}
+                    ref={(el) => {
+                      textareaRefs.current[idx] = el;
+                    }}
                     value={block.content}
                     placeholder={idx === 0 && blocks.length === 1 ? placeholder : ''}
-                    minRows={idx === 0 && blocks.length === 1 ? minRows : 1}
+                    rows={Math.max(minRows, (block.content.match(/\n/g) || []).length + 1)}
                     disabled={disabled}
                     autoFocus={autoFocus && idx === 0}
                     onChange={(e) => handleTextChange(idx, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(idx, e)}
                     onFocus={() => {
                       focusedBlockIndexRef.current = idx;
                     }}
+                    className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 resize-none leading-relaxed font-sans"
                   />
                 );
               }
@@ -540,6 +711,13 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
             <span>Đang xử lý ảnh lên...</span>
           </div>
         )}
+      </div>
+
+      {/* Helper Shortcut Legend */}
+      <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 px-1 pt-0.5">
+        <span>
+          Phím tắt: <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+B</code> (Đậm), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+I</code> (Nghiêng), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+U</code> (Gạch chân), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Enter</code> (Nối list)
+        </span>
       </div>
     </div>
   );
