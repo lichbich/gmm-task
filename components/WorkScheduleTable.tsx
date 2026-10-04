@@ -81,6 +81,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     selectedYear,
     simulatedTime,
     weeklyArchives,
+    rollbackWeekArchive,
     tickets,
   } = useApp();
 
@@ -1510,7 +1511,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
       <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight">
                 <span className="sm:hidden">Work Schedules</span>
                 <span className="hidden sm:inline">Work Schedules (Bảng Công Việc Chi Tiết)</span>
@@ -1523,6 +1524,20 @@ const getRoleOrderRank = (roleCode?: string): number => {
               Quản lý tiến độ, giờ làm thực tế (Effort) và trao đổi ghi chú với Leader.
             </p>
           </div>
+
+          {/* Quick Rollback Button for Admin/PO if current week is finalized */}
+          {(isUserAdminOrPM(currentUser) || currentUser?.specializations?.includes('PO')) &&
+            weeklyArchives.some((a) => a.weekNumber === selectedWeek && (a.year || 2026) === selectedYear) && (
+              <button
+                type="button"
+                onClick={() => rollbackWeekArchive(selectedWeek, selectedYear)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer shrink-0"
+                title={`Rollback / Hoàn tác chốt Tuần ${selectedWeek}, khôi phục lại toàn bộ dữ liệu task để kiểm tra lại`}
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                <span>Rollback Chốt Tuần {selectedWeek}</span>
+              </button>
+            )}
         </div>
 
         {/* Navigation Sub-Tabs Switcher */}

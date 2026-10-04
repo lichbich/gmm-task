@@ -360,7 +360,9 @@ export interface WeeklyHistoryArchive {
 
 export const isTaskUnworked = (t: Task): boolean => {
   const pct = t.completionPercentage || 0;
-  return pct === 0;
+  const effort = t.actualEffort || 0;
+  const isDone = t.status === 'Done';
+  return pct === 0 && effort === 0 && !isDone;
 };
 
 export const getEffectiveTaskStatus = (t: Task): TaskStatus => {

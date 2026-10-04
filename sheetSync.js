@@ -4,8 +4,15 @@
  * - Tự động màu sắc ô Status (Cột G):
  *   + "Done": Xanh lá (#137333), Chữ trắng
  *   + "In Progress": Xanh biển (#0B57D0), Chữ trắng
- *   + "To do": Xám (#E5E7EB), Chữ đậm
- * - Tự động tính toán & quản lý số Tuần chuẩn (VD: Week 93 (14/09-20/09), Week 94 (21/09-27/09)...)
+ *   + "To do": Xám (#E5E7EB), Chữ đậm (#374151)
+ * - Nghiệp vụ đồng bộ chuẩn xác:
+ *   + Tuần 95 trở xuống (Tuần đã làm / báo cáo):
+ *     - Thành viên đã nộp báo cáo / có tiến độ: Status = "Done", Effort = actualEffort thực tế.
+ *     - Task 0% tiến độ (chưa làm): Effort = 0, Status = "To do".
+ *   + Tuần 96 trở đi (Tuần mới / tuần kế hoạch):
+ *     - Tất cả task 0% tiến độ: Status = "To do", Effort = 0.
+ *     - Tất cả task làm dở (>0% và <100%): Status = "In Progress", Effort = 0.
+ *     - Tuyệt đối không có task nào là "Done" ở Tuần 96.
  * - Banner Tuần Chữ Đỏ + Banner Role Vàng + Cách 1 hàng trống giữa các nhân sự
  * ========================================================================= */
 
@@ -14,7 +21,7 @@ const FIREBASE_URL = "https://docugen-676bf-default-rtdb.asia-southeast1.firebas
 const SHEET_NAME = "Work Schedules";
 
 // Thứ tự sắp xếp các Role theo chuẩn ưu tiên
-const ROLE_ORDER = ['BA', 'Design', 'Designer', 'FE', 'BE', 'Dev', 'SA', 'QA', 'DevOps'];
+const ROLE_ORDER = ['BA', 'Design', 'Designer', 'FE', 'BE', 'Dev', 'SA', 'QA', 'DevOps', 'PO', 'PM'];
 
 function getRoleOrderIndex(roleName) {
     const index = ROLE_ORDER.findIndex(r => r.toLowerCase() === String(roleName || '').trim().toLowerCase());
@@ -88,14 +95,15 @@ function syncTasksFormattedToSheet() {
     }
 
     // A. Lấy danh sách Staff Code (Account) TRỰC TIẾP DỘNG từ Firebase DB /users.json
+    let usersList = [];
     let userAccounts = [];
     try {
         const userRes = UrlFetchApp.fetch(`${FIREBASE_URL}/users.json`);
         const userContent = userRes.getContentText();
         if (userContent && userContent !== 'null') {
             const usersData = JSON.parse(userContent);
-            userAccounts = Object.values(usersData)
-                .filter(u => u && !u.disabled && u.status !== 'disabled')
+            usersList = Object.values(usersData).filter(u => u && !u.disabled && u.status !== 'disabled');
+            userAccounts = usersList
                 .map(u => (u && u.account) ? String(u.account).trim() : '')
                 .filter(Boolean);
         }
@@ -143,19 +151,15 @@ function syncTasksFormattedToSheet() {
         .setAllowInvalid(true)
         .build();
 
-    // C. Nhóm toàn bộ Task theo từng Tuần khác nhau (Tuần 93, Tuần 94, Tuần 95...)
+    // C. Nhóm toàn bộ Task theo từng Tuần khác nhau (Tuần 93, Tuần 94, Tuần 95, Tuần 96...)
     const tasksByWeekAndRole = {};
 
     taskList.forEach(t => {
         const titleClean = String(t.title || '').trim();
         if (!titleClean) return;
 
-        // Chỉ đồng bộ các công việc ĐÃ ĐƯỢC PHÂN CÔNG (Có người phụ trách / assigneeAccount)
-        const assignee = (t.assigneeAccount || '').trim();
-        if (!assignee) return;
-
         const rawWeek = Number(t.weekNumber) || 38;
-        // Task weekNumber trên hệ thống Saho đã là số tuần cộng dồn (VD: 93, 94). Nếu <= 53 mới cần + 55.
+        // Task weekNumber trên hệ thống Saho đã là số tuần cộng dồn (VD: 93, 94, 95, 96). Nếu <= 53 mới cần + 55.
         const sahoWeekNum = rawWeek > 50 ? rawWeek : rawWeek + 55;
         const yr = t.year || 2026;
         const dateRangeStr = getWeekDateRangeStr(sahoWeekNum, yr);
@@ -169,15 +173,59 @@ function syncTasksFormattedToSheet() {
             };
         }
 
-        const roleCode = (t.role || 'BA').trim();
-        if (!tasksByWeekAndRole[weekHeaderKey].roles[roleCode]) {
-            tasksByWeekAndRole[weekHeaderKey].roles[roleCode] = [];
+        const pushTask = (roleName, taskItem) => {
+            let r = (roleName || 'BA').trim();
+            if (r.toLowerCase() === 'designer') r = 'Design';
+            if (!tasksByWeekAndRole[weekHeaderKey].roles[r]) {
+                tasksByWeekAndRole[weekHeaderKey].roles[r] = [];
+            }
+            tasksByWeekAndRole[weekHeaderKey].roles[r].push(taskItem);
+        };
+
+        const primaryAcc = (t.assigneeAccount || '').trim();
+
+        // 1. Primary Assignee Task Row
+        if (primaryAcc && primaryAcc.toLowerCase() !== 'unassigned') {
+            pushTask(t.role, {
+                ...t,
+                syncAccount: primaryAcc,
+                isCollab: false
+            });
         }
 
-        tasksByWeekAndRole[weekHeaderKey].roles[roleCode].push(t);
+        // 2. Collab Supporter Members Task Rows (Break out cho từng thành viên Collab!)
+        if (t.supporterAccounts && Array.isArray(t.supporterAccounts) && t.supporterAccounts.length > 0) {
+            t.supporterAccounts.forEach(supAcc => {
+                const cleanSupAcc = String(supAcc || '').trim();
+                if (!cleanSupAcc || (primaryAcc && cleanSupAcc.toLowerCase() === primaryAcc.toLowerCase())) return;
+
+                const supUser = usersList.find(u => u.account && u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
+                const supRoles = (supUser && supUser.specializations && supUser.specializations.length > 0)
+                    ? supUser.specializations
+                    : (supUser && supUser.role)
+                    ? [supUser.role]
+                    : [t.role];
+
+                // Xác định role phù hợp cho thành viên Collab này
+                let targetRole = t.role;
+                for (let r of supRoles) {
+                    const matched = ROLE_ORDER.find(ro => ro.toLowerCase() === r.toLowerCase() || (ro === 'Design' && r.toLowerCase() === 'designer'));
+                    if (matched) {
+                        targetRole = matched;
+                        break;
+                    }
+                }
+
+                pushTask(targetRole, {
+                    ...t,
+                    syncAccount: cleanSupAcc,
+                    isCollab: true
+                });
+            });
+        }
     });
 
-    // Sắp xếp các Tuần theo thứ tự tăng dần (Tuần 93 -> Tuần 94 -> Tuần 95...)
+    // Sắp xếp các Tuần theo thứ tự tăng dần (Tuần 93 -> Tuần 94 -> Tuần 95 -> Tuần 96...)
     const sortedWeekKeys = Object.keys(tasksByWeekAndRole).sort((a, b) => {
         return tasksByWeekAndRole[a].sahoWeekNum - tasksByWeekAndRole[b].sahoWeekNum;
     });
@@ -197,7 +245,7 @@ function syncTasksFormattedToSheet() {
             const colAValues = sheet.getRange(1, 1, lastRow, 1).getValues();
             for (let r = colAValues.length - 1; r >= 0; r--) {
                 const val = String(colAValues[r][0] || '').trim();
-                // Khớp chính xác tiêu đề "Week 93", "Week 94"...
+                // Khớp chính xác tiêu đề "Week 93", "Week 94", "Week 95", "Week 96"...
                 if (new RegExp(`^Week\\s+${weekData.sahoWeekNum}\\b`, 'i').test(val)) {
                     weekRowIdx = r + 1;
                     break;
@@ -205,13 +253,13 @@ function syncTasksFormattedToSheet() {
             }
         }
 
-        // Nếu chưa có Tuần này trong Sheet (VD: Tuần 94 mới) -> Thêm ở cuối bảng tính
+        // Nếu chưa có Tuần này trong Sheet (VD: Tuần 96 mới) -> Thêm ở cuối bảng tính
         if (weekRowIdx === -1) {
             weekRowIdx = sheet.getLastRow() + 1;
             if (weekRowIdx === 1) weekRowIdx = 2;
         }
 
-        // Ghi tiêu đề Tuần Chữ Đỏ (VD: Week 93 (14/09-20/09), Week 94 (21/09-27/09))
+        // Ghi tiêu đề Tuần Chữ Đỏ (VD: Week 95 (28/09-04/10), Week 96 (05/10-11/10))
         const weekCell = sheet.getRange(weekRowIdx, 1);
         weekCell.setValue(weekData.headerText);
         weekCell.setFontWeight("bold").setFontColor("#CC0000").setFontSize(14).setFontFamily("Arial");
@@ -230,66 +278,84 @@ function syncTasksFormattedToSheet() {
             allRowsToInsert.push([bannerName, "", "", "", "", "", "", "", "", ""]);
             rowFormats.push({ type: 'BANNER', name: bannerName });
 
-            // Nhóm Task theo Assignee
+            // Nhóm Task theo Assignee / SyncAccount
             const tasksByAssignee = {};
             tasksInRole.forEach(t => {
-                const acc = (t.assigneeAccount || 'Chưa phân công').trim();
+                const acc = (t.syncAccount || t.assigneeAccount || 'Chưa phân công').trim();
                 if (!tasksByAssignee[acc]) tasksByAssignee[acc] = [];
                 tasksByAssignee[acc].push(t);
             });
 
-            const assignees = Object.keys(tasksByAssignee);
+            // Sắp xếp thứ tự các thành viên theo cấp bậc (Leader/Advisor trước) rồi đến bảng chữ cái
+            const assignees = Object.keys(tasksByAssignee).sort((a, b) => {
+                const userA = usersList.find(u => u.account && u.account.trim().toLowerCase() === a.toLowerCase());
+                const userB = usersList.find(u => u.account && u.account.trim().toLowerCase() === b.toLowerCase());
+                const getRank = (u) => {
+                    if (!u) return 99;
+                    if (u.role === 'Admin') return 0;
+                    if (u.role === 'Leader') return 1;
+                    if (u.role === 'Advisor') return 2;
+                    return 3;
+                };
+                const rankDiff = getRank(userA) - getRank(userB);
+                if (rankDiff !== 0) return rankDiff;
+                return a.localeCompare(b);
+            });
 
             assignees.forEach((accName, accIdx) => {
                 const personTasks = tasksByAssignee[accName];
 
                 personTasks.forEach(t => {
-                    const currentSahoWeek = getCurrentSahoWeekNum();
-                    const isFutureWeek = weekData.sahoWeekNum > currentSahoWeek;
-                    const isReported = !!t.lastSubmittedAt || t.status === 'Done';
+                    const rawPct = (t.completionPercentage !== undefined && t.completionPercentage !== null)
+                        ? Number(t.completionPercentage)
+                        : 0;
+
+                    const isWeek96OrFuture = weekData.sahoWeekNum >= 96;
 
                     let finalStatus = "To do";
-                    let pctStr = "";
+                    let effortVal = 0;
+                    let pctStr = `${rawPct}%`;
 
-                    if (isFutureWeek) {
-                        // Task thuộc tuần tới (Week 94+): Luôn ở trạng thái To do
-                        finalStatus = "To do";
-                        if (t.completionPercentage !== undefined && t.completionPercentage !== null && Number(t.completionPercentage) > 0) {
-                            pctStr = `${t.completionPercentage}%`;
-                        }
-                    } else {
-                        // Task thuộc tuần hiện tại / quá khứ (Week 93 trở xuống):
-                        if (isReported) {
-                            // Đã nộp báo cáo tuần này -> Đánh 'Done' trên Sheet
-                            finalStatus = "Done";
+                    if (isWeek96OrFuture) {
+                        // ==========================================
+                        // TUẦN 96+: Tuần mới / tuần kế hoạch chưa làm
+                        // ==========================================
+                        // 1. Task 0% tiến độ -> Status "To do", Effort = 0
+                        // 2. Task làm dở (>0% và <100%) -> Status "In Progress", Effort = 0
+                        // 3. Tuyệt đối không có task nào là "Done"
+                        if (rawPct > 0 && rawPct < 100) {
+                            finalStatus = "In Progress";
                         } else {
-                            finalStatus = t.status || "To do";
+                            finalStatus = "To do";
                         }
-
-                        // Lấy % tiến độ thực tế từ hệ thống (0%, 50%, 100%...)
-                        const comp = (t.completionPercentage !== undefined && t.completionPercentage !== null)
-                            ? Number(t.completionPercentage)
-                            : (isReported ? 100 : 0);
-                        
-                        pctStr = `${comp}%`;
+                        effortVal = 0;
+                    } else {
+                        // ==========================================
+                        // TUẦN 95 TRỞ XUỐNG: Tuần đã làm / đã báo cáo
+                        // ==========================================
+                        if (rawPct === 0) {
+                            // Task 0% tiến độ: Effort luôn là 0 (để khi chốt tuần sẽ chuyển sang tuần sau)
+                            effortVal = 0;
+                            finalStatus = "To do";
+                        } else {
+                            // Task có tiến độ > 0%:
+                            // Ai đã làm và nộp báo cáo tuần -> Status là "Done"
+                            finalStatus = "Done";
+                            effortVal = Number(t.actualEffort) || 0;
+                        }
                     }
-
-                    // Số giờ làm (Col F)
-                    const effortVal = (t.actualEffort !== undefined && t.actualEffort !== null && t.actualEffort > 0)
-                        ? t.actualEffort
-                        : (t.estimatedEffort || 0);
 
                     allRowsToInsert.push([
                         "",                      // Col A (1): Trống (Bỏ STT)
                         t.title,                 // Col B (2): Tên Task
                         t.role || bannerName,    // Col C (3): Role
                         "",                      // Col D (4): Trống
-                        pctStr,                  // Col E (5): Phần trăm công việc (%) (ô trước số giờ làm)
-                        effortVal,               // Col F (6): Effort (Số giờ làm)
+                        pctStr,                  // Col E (5): Phần trăm công việc (%)
+                        effortVal,               // Col F (6): Effort (Số giờ làm thực tế)
                         finalStatus,             // Col G (7): Status ("Done", "In Progress", "To do")
-                        t.assigneeAccount || "", // Col H (8): Account
+                        accName,                 // Col H (8): Account (Được gán chính xác theo thành viên bao gồm cả Collab!)
                         "",                      // Col I (9): Trống
-                        ""                       // Col J (10): Bỏ số 0
+                        ""                       // Col J (10): Trống
                     ]);
                     rowFormats.push({ type: 'TASK', task: t, finalStatus: finalStatus });
                 });

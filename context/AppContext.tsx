@@ -261,6 +261,7 @@ interface AppContextType {
   
   weeklyArchives: WeeklyHistoryArchive[];
   finishWeekAndRollover: () => void;
+  rollbackWeekArchive: (targetWeek: number, targetYear?: number) => void;
   
   resetToDefaultData: () => void;
   isFirebaseConnected: boolean;
@@ -2441,10 +2442,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unworkedTasks = currentWeekAssignedTasks.filter((t) => isTaskUnworked(t));
 
     const completedTasksCount = workedTasks.filter((t) => (t.completionPercentage || 0) >= 100).length;
-    const rolledOverTasksCount = workedTasks.filter((t) => (t.completionPercentage || 0) < 100).length;
+    const rolledOverTasksCount = currentWeekAssignedTasks.length - completedTasksCount;
 
     // Create Archive Record for current week:
-    // IMPORTANT: Exclude 0%/0h unworked tasks from tasksSnapshot so they do NOT pollute historical logs!
     const archiveRecord: WeeklyHistoryArchive = {
       id: `archive-${selectedWeek}-${Date.now()}`,
       weekNumber: selectedWeek,
@@ -2455,9 +2455,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       awards: calculateWeeklyAwardsForWeek(selectedWeek, selectedYear, true),
       tasksSnapshot: JSON.parse(
         JSON.stringify(
-          workedTasks.map((t) => ({
+          currentWeekAssignedTasks.map((t) => ({
             ...t,
-            actualEffort: t.completionPercentage === 0 ? 0 : (t.actualEffort || 0),
+            actualEffort: t.actualEffort || 0,
           }))
         )
       ),
@@ -2470,36 +2470,151 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setWeeklyArchives(updatedArchives);
     syncArchivesToFirebase(updatedArchives);
 
-    // Update tasks array:
-    // Unfinished tasks (completionPercentage < 100%) in selectedWeek are directly transferred to nextWeek
-    // maintaining the exact same unique task ID (NO task cloning, NO duplicate task records).
-    const newTasksList = tasks.map((t) => {
-      const isFinished = (t.completionPercentage !== undefined && t.completionPercentage >= 100) || (t.completionPercentage === undefined && t.status === 'Done');
-      if (
-        t.weekNumber === selectedWeek &&
-        t.year === selectedYear &&
-        ((t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
-          (t.supporterAccounts && t.supporterAccounts.length > 0)) &&
-        !isFinished
-      ) {
-        return {
-          ...t,
-          weekNumber: nextWeek,
-          actualEffort: 0,
-          status: (t.completionPercentage && t.completionPercentage > 0) ? ('In Progress' as TaskStatus) : ('To do' as TaskStatus),
-          lastSubmittedAt: undefined,
-          isSubmittedLate: undefined,
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return t;
+    // Create continuation tasks for nextWeek for ALL unfinished tasks (both working progress < 100% and 0% unworked)
+    // while PRESERVING current week tasks 100%!
+    const continuationTasks: Task[] = [];
+    const unfinishedTasks = currentWeekAssignedTasks.filter((t) => {
+      const isFinished =
+        (t.completionPercentage !== undefined && t.completionPercentage >= 100) ||
+        (t.completionPercentage === undefined && t.status === 'Done');
+      return !isFinished;
     });
 
+    unfinishedTasks.forEach((t) => {
+      const rootId = t.parentTaskId || t.id;
+      const alreadyExistsInNextWeek = tasks.some(
+        (nt) =>
+          nt.weekNumber === nextWeek &&
+          nt.year === selectedYear &&
+          (nt.parentTaskId === rootId || nt.id === rootId)
+      );
+
+      if (!alreadyExistsInNextWeek) {
+        const isProgress = (t.completionPercentage !== undefined && t.completionPercentage > 0);
+        continuationTasks.push({
+          ...t,
+          id: `tsk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          parentTaskId: rootId,
+          weekNumber: nextWeek,
+          year: selectedYear,
+          actualEffort: 0,
+          status: isProgress ? 'In Progress' : 'To do',
+          completionPercentage: t.completionPercentage || 0,
+          lastSubmittedAt: undefined,
+          isSubmittedLate: undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          activityLogs: [
+            ...(t.activityLogs || []),
+            {
+              id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              timestamp: new Date().toISOString(),
+              authorName: authSession?.name || 'Admin',
+              authorAccount: authSession?.account || 'admin',
+              authorRole: authSession?.role || 'Admin',
+              actionType: 'GENERAL_UPDATE',
+              summary: isProgress
+                ? `Chốt Tuần ${selectedWeek} & chuyển tiếp sang Tuần ${nextWeek} (Tiến độ kế thừa: ${t.completionPercentage || 0}%)`
+                : `Chốt Tuần ${selectedWeek} & chuyển tiếp công việc sang Tuần ${nextWeek} (Chưa thực hiện - To do)`,
+            },
+          ],
+        });
+      }
+    });
+
+    const newTasksList = [...tasks, ...continuationTasks];
     setTasks(newTasksList);
     saveLocalTasksCache(newTasksList);
     syncTasksToFirebase(newTasksList).catch(console.error);
 
     setSelectedWeek(nextWeek);
+  };
+
+  // Rollback / Hoàn tác chốt tuần: Khôi phục lại toàn bộ dữ liệu task từ snapshot và xóa các task chuyển tiếp tự động
+  const rollbackWeekArchive = (targetWeek: number, targetYear: number = selectedYear) => {
+    const isPOOrAdmin = (u?: any): boolean => {
+      if (!u) return false;
+      if (u.role === 'Admin' || u.role === 'PO' || isUserPM(u)) return true;
+      const specs = u.specializations || [];
+      return specs.some((s: string) => s.toUpperCase() === 'PO' || s.toUpperCase() === 'PM');
+    };
+
+    if (!isPOOrAdmin(authSession)) {
+      confirmDialog({
+        title: 'Không có quyền',
+        message: 'Chỉ có Admin hoặc PO mới có quyền Rollback / Hoàn tác chốt tuần!',
+        type: 'danger',
+        confirmText: 'Đã hiểu',
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    const targetArchive = weeklyArchives.find(
+      (a) => a.weekNumber === targetWeek && (a.year || 2026) === targetYear
+    );
+
+    if (!targetArchive) {
+      confirmDialog({
+        title: 'Không tìm thấy lịch sử',
+        message: `Không tìm thấy bản ghi lịch sử đã lưu trữ của Tuần ${targetWeek} (${targetYear}).`,
+        type: 'warning',
+        confirmText: 'Đóng',
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    confirmDialog({
+      title: `Rollback / Hoàn tác Chốt Tuần ${targetWeek}`,
+      message: `Bạn có chắc chắn muốn Rollback (Hoàn tác chốt tuần) cho Tuần ${targetWeek}? Toàn bộ dữ liệu task và báo cáo của Tuần ${targetWeek} sẽ được khôi phục nguyên vẹn 100% từ bản lưu trữ snapshot (${targetArchive.tasksSnapshot?.length || 0} task), đồng thời các task tự động chuyển tiếp sang Tuần ${targetWeek + 1} sẽ được thu hồi.`,
+      type: 'warning',
+      confirmText: `Xác nhận Rollback Tuần ${targetWeek}`,
+      onConfirm: () => {
+        const nextWeek = targetWeek + 1;
+        const snapshotTasks: Task[] = targetArchive.tasksSnapshot || [];
+
+        // 1. Get snapshot task root IDs and task IDs
+        const snapshotRootIds = new Set(
+          snapshotTasks.map((t) => t.parentTaskId || t.id)
+        );
+        const snapshotTaskIds = new Set(snapshotTasks.map((t) => t.id));
+
+        // 2. Remove continuation tasks in nextWeek that were rolled over from this targetWeek
+        // and remove existing tasks of targetWeek that will be replaced by snapshot tasks
+        const filteredTasks = tasks.filter((t) => {
+          if (t.weekNumber === nextWeek && (t.year || 2026) === targetYear) {
+            if (t.parentTaskId && snapshotRootIds.has(t.parentTaskId)) {
+              return false; // Remove auto continuation task in nextWeek
+            }
+          }
+          if (t.weekNumber === targetWeek && (t.year || 2026) === targetYear) {
+            return false;
+          }
+          if (snapshotTaskIds.has(t.id)) {
+            return false;
+          }
+          return true;
+        });
+
+        // 3. Add back snapshot tasks into targetWeek
+        const restoredTasksList = [...filteredTasks, ...snapshotTasks];
+
+        // 4. Remove targetWeek from weeklyArchives
+        const updatedArchives = weeklyArchives.filter(
+          (a) => !(a.weekNumber === targetWeek && (a.year || 2026) === targetYear)
+        );
+
+        setTasks(restoredTasksList);
+        saveLocalTasksCache(restoredTasksList);
+        syncTasksToFirebase(restoredTasksList).catch(console.error);
+
+        setWeeklyArchives(updatedArchives);
+        syncArchivesToFirebase(updatedArchives).catch(console.error);
+
+        setSelectedWeek(targetWeek);
+      },
+    });
   };
 
   // Helper to calculate weekly awards (with optional reward/penalty enablement)
@@ -3290,6 +3405,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedYear,
         weeklyArchives,
         finishWeekAndRollover,
+        rollbackWeekArchive,
         resetToDefaultData,
         isFirebaseConnected,
         confirmDialog,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket, getUserRoleColorClass, isUserAdminOrPM } from '../types/task';
+import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket, getUserRoleColorClass, isUserAdminOrPM, getUserLevelRank, isSpecializationMatchingRole } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
@@ -30,12 +30,47 @@ import {
   ArrowRight,
   Sparkles,
   Info,
+  RotateCcw,
   Ticket as TicketIcon,
 } from 'lucide-react';
 
 interface WorkHistoryViewProps {
   onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
 }
+
+const getRoleOrderRank = (roleCode?: string): number => {
+  if (!roleCode) return 999;
+  const normalized = roleCode.trim().toLowerCase();
+  if (normalized === 'ba') return 1;
+  if (normalized === 'designer' || normalized === 'design') return 2;
+  if (normalized === 'fe' || normalized === 'frontend') return 3;
+  if (normalized === 'be' || normalized === 'backend') return 4;
+  if (normalized === 'devops') return 5;
+  if (normalized === 'ai') return 6;
+  if (normalized === 'po') return 7;
+  if (normalized === 'sa') return 8;
+  if (normalized === 'qa' || normalized === 'qc') return 9;
+  return 100;
+};
+
+const getPriorityRank = (priority?: string): number => {
+  if (priority === 'High') return 1;
+  if (priority === 'Low') return 3;
+  return 2; // Medium or undefined
+};
+
+const sortByPriority = (a: Task, b: Task): number => {
+  const rankA = getPriorityRank(a.priority);
+  const rankB = getPriorityRank(b.priority);
+  if (rankA !== rankB) {
+    return rankA - rankB;
+  }
+  const titleA = stripMarkdownForSearch(a.title);
+  const titleB = stripMarkdownForSearch(b.title);
+  const cmpTitle = titleA.localeCompare(titleB, undefined, { sensitivity: 'base', numeric: true });
+  if (cmpTitle !== 0) return cmpTitle;
+  return (a.id || '').localeCompare(b.id || '');
+};
 
 export const getWeekDateRangeStr = (weekNo: number, year: number = 2026): { startDate: string; endDate: string; label: string } => {
   // Convert Google Sheet cumulative week (e.g. Week 93) to ISO week (e.g. Week 38)
@@ -110,6 +145,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     selectedWeek,
     selectedYear,
     finishWeekAndRollover,
+    rollbackWeekArchive,
     currentUser,
     confirmDialog,
     roles,
@@ -234,25 +270,80 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     });
   }, [archivedTasksSnapshot, roleFilter, searchQuery]);
 
-  // Group filtered archived tasks by Role
+  // Group filtered archived tasks by Role and sort in standard engineering order (including Collab members)
   const tasksByRole = React.useMemo(() => {
-    const map = new Map<string, Task[]>();
+    const roleMap = new Map<string, Task[]>();
 
-    roles.forEach((r) => {
-      map.set(r.code, []);
-    });
+    const findMatchingRoleKey = (roleCode: string): string => {
+      for (const k of roleMap.keys()) {
+        if (isSpecializationMatchingRole(k, roleCode)) {
+          return k;
+        }
+      }
+      return roleCode;
+    };
 
     filteredArchivedTasks.forEach((t) => {
-      const existing = map.get(t.role);
-      if (existing) {
-        existing.push(t);
+      // 1. Add to primary task role group
+      const primaryKey = findMatchingRoleKey(t.role);
+      const list = roleMap.get(primaryKey);
+      if (list) {
+        if (!list.some((item) => item.id === t.id)) {
+          list.push(t);
+        }
       } else {
-        map.set(t.role, [t]);
+        const existing = roleMap.get(t.role) || [];
+        if (!existing.some((item) => item.id === t.id)) {
+          existing.push(t);
+        }
+        roleMap.set(t.role, existing);
+      }
+
+      // 2. Also add to Collab members' role groups so Collab tasks appear under their team/account!
+      if (t.supporterAccounts && t.supporterAccounts.length > 0) {
+        t.supporterAccounts.forEach((supAcc) => {
+          const cleanSupAcc = supAcc.trim();
+          if (t.assigneeAccount && cleanSupAcc.toLowerCase() === t.assigneeAccount.trim().toLowerCase()) return;
+          const supUser = users.find((u) => u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
+          if (!supUser) return;
+
+          const supRoles =
+            supUser.specializations && supUser.specializations.length > 0
+              ? supUser.specializations
+              : supUser.role
+              ? [supUser.role]
+              : [t.role];
+
+          supRoles.forEach((sRole) => {
+            const sKey = findMatchingRoleKey(sRole);
+            const sList = roleMap.get(sKey);
+            if (sList) {
+              if (!sList.some((item) => item.id === t.id)) {
+                sList.push(t);
+              }
+            } else {
+              const existing = roleMap.get(sRole) || [];
+              if (!existing.some((item) => item.id === t.id)) {
+                existing.push(t);
+              }
+              roleMap.set(sRole, existing);
+            }
+          });
+        });
       }
     });
 
-    return Array.from(map.entries()).filter(([_, list]) => list.length > 0);
-  }, [filteredArchivedTasks, roles]);
+    const groups: [string, Task[]][] = Array.from(roleMap.entries()).filter(([_, list]) => list.length > 0);
+
+    groups.sort(([roleA], [roleB]) => {
+      const rankA = getRoleOrderRank(roleA);
+      const rankB = getRoleOrderRank(roleB);
+      if (rankA !== rankB) return rankA - rankB;
+      return roleA.localeCompare(roleB);
+    });
+
+    return groups;
+  }, [filteredArchivedTasks, users]);
 
   const completedCount = React.useMemo(() => {
     return archivedTasksSnapshot.filter((t) => (t.completionPercentage || 0) >= 100).length;
@@ -419,6 +510,18 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                     {rolledOverCount} Task
                   </span>
                 </div>
+
+                {canFinalizeWeek && (
+                  <button
+                    type="button"
+                    onClick={() => rollbackWeekArchive(activeArchive.weekNumber, activeArchive.year || 2026)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 cursor-pointer shrink-0 border border-rose-400"
+                    title={`Hoàn tác / Rollback Tuần ${activeArchive.weekNumber}, khôi phục lại toàn bộ dữ liệu vào bảng công việc`}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Rollback Tuần {activeArchive.weekNumber}</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -448,346 +551,550 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {tasksByRole.map(([roleCode, roleTasks]) => (
-                        <React.Fragment key={roleCode}>
-                          {/* Role Group Header */}
-                          <tr className="bg-indigo-50/50 border-y border-indigo-100/80">
-                            <td colSpan={9} className="py-2.5 px-4">
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold text-indigo-900 text-xs uppercase tracking-wide">
-                                  Role: {roleCode} ({roleTasks.length} đầu việc)
-                                </span>
-                                <span className="text-[11px] text-indigo-600 font-semibold">
-                                  Tổng Effort: {roleTasks.reduce((acc, curr) => acc + (curr.completionPercentage === 0 ? 0 : (curr.actualEffort || 0)), 0)}h
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
+                      {tasksByRole.map(([roleCode, roleTasks]) => {
+                        const tasksByAccountMap = new Map<string, Task[]>();
+                        roleTasks.forEach((t) => {
+                          const primaryAcc = (t.assigneeAccount || '').trim();
 
-                          {/* Tasks in Role */}
-                          {roleTasks.map((t) => {
-                            const milestone = milestones.find((m) => m.id === t.milestoneId);
-                            const unreadNotes = hasUnreadNote(t);
-                            const effectiveEffort = t.completionPercentage === 0 ? 0 : (t.actualEffort || 0);
+                          // 1. Primary assignee
+                          if (primaryAcc && primaryAcc.toLowerCase() !== 'unassigned') {
+                            const primaryUser = users.find((u) => u.account.trim().toLowerCase() === primaryAcc.toLowerCase());
+                            const primaryRoles =
+                              primaryUser?.specializations && primaryUser.specializations.length > 0
+                                ? primaryUser.specializations
+                                : [t.role];
+                            const isPrimaryInThisRole =
+                              primaryRoles.some((r) => isSpecializationMatchingRole(r, roleCode)) ||
+                              isSpecializationMatchingRole(t.role, roleCode);
 
-                            return (
-                              <tr
-                                key={t.id}
-                                className="hover:bg-slate-50/80 transition-colors group"
-                              >
-                                <td className="py-3 px-4 text-center text-slate-400 font-mono text-[11px]">
-                                  {t.id.replace('tsk-', '')}
-                                </td>
+                            if (isPrimaryInThisRole) {
+                              const list = tasksByAccountMap.get(primaryAcc) || [];
+                              if (!list.some((item) => item.id === t.id)) {
+                                list.push(t);
+                                tasksByAccountMap.set(primaryAcc, list);
+                              }
+                            }
+                          }
 
-                                <td className="py-3 px-4">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span
-                                        onClick={() => handleTaskClick(t)}
-                                        className="font-bold text-slate-800 hover:text-indigo-600 transition cursor-pointer leading-snug"
-                                      >
-                                        <FormattedTaskTitle title={t.title} />
-                                      </span>
+                          // 2. Collab members who belong to this role
+                          if (t.supporterAccounts && t.supporterAccounts.length > 0) {
+                            t.supporterAccounts.forEach((supAcc) => {
+                              const cleanSupAcc = supAcc.trim();
+                              if (primaryAcc && cleanSupAcc.toLowerCase() === primaryAcc.toLowerCase()) return;
+                              const supUser = users.find((u) => u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
+                              const supRoles =
+                                supUser?.specializations && supUser.specializations.length > 0
+                                  ? supUser.specializations
+                                  : supUser?.role
+                                  ? [supUser.role]
+                                  : [t.role];
 
-                                      {(() => {
-                                        const linkedTicket = getLinkedTicket(t);
-                                        const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
-                                        if (!isTicketTask) return null;
-                                        return (
-                                          <span
-                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 font-bold text-[10px] shrink-0 shadow-2xs"
-                                            title="Ticket yêu cầu liên team"
-                                          >
-                                            <TicketIcon className="w-3 h-3 text-purple-600 shrink-0" />
-                                            Ticket yêu cầu
-                                          </span>
-                                        );
-                                      })()}
+                              const isMemberInThisRole = supRoles.some((r) => isSpecializationMatchingRole(r, roleCode));
+                              if (
+                                isMemberInThisRole ||
+                                (!supUser?.specializations?.length && isSpecializationMatchingRole(t.role, roleCode))
+                              ) {
+                                const targetAcc = supUser?.account || cleanSupAcc;
+                                const list = tasksByAccountMap.get(targetAcc) || [];
+                                if (!list.some((item) => item.id === t.id)) {
+                                  list.push(t);
+                                  tasksByAccountMap.set(targetAcc, list);
+                                }
+                              }
+                            });
+                          }
 
-                                      {/* High Priority Badge */}
-                                      {t.priority === 'High' && (
-                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 border border-red-200 text-red-700 font-bold text-[10px] shrink-0 shadow-2xs">
-                                          <Flame className="w-3 h-3 text-red-500 fill-red-500" />
-                                          Ưu tiên cao
-                                        </span>
-                                      )}
-                                    </div>
+                          // 3. Fallback: If task has no primary assignee and no supporters matched this group, but t.role matches roleCode
+                          if (!primaryAcc || primaryAcc.toLowerCase() === 'unassigned') {
+                            const hasAnyMatchedSupporter =
+                              t.supporterAccounts &&
+                              t.supporterAccounts.some((supAcc) => {
+                                const supUser = users.find((u) => u.account.trim().toLowerCase() === supAcc.trim().toLowerCase());
+                                const supRoles =
+                                  supUser?.specializations && supUser.specializations.length > 0
+                                    ? supUser.specializations
+                                    : [t.role];
+                                return supRoles.some((r) => isSpecializationMatchingRole(r, roleCode));
+                              });
+                            if (!hasAnyMatchedSupporter && isSpecializationMatchingRole(t.role, roleCode)) {
+                              const unassignedKey = '';
+                              const list = tasksByAccountMap.get(unassignedKey) || [];
+                              if (!list.some((item) => item.id === t.id)) {
+                                list.push(t);
+                                tasksByAccountMap.set(unassignedKey, list);
+                              }
+                            }
+                          }
+                        });
 
-                                    <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
-                                      {milestone ? (
-                                        <span className="inline-flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
-                                          <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
-                                          {milestone.title}
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                          <FolderOpen className="w-2.5 h-2.5 text-slate-400 shrink-0" />
-                                          Ngoài Milestone
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
+                        const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
+                          if (!accA) return 1;
+                          if (!accB) return -1;
+                          const userA = users.find((u) => u.account.trim().toLowerCase() === accA.toLowerCase());
+                          const userB = users.find((u) => u.account.trim().toLowerCase() === accB.toLowerCase());
 
-                                <td className="py-3 px-3 text-center">
-                                  <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold border border-slate-200">
-                                    {t.role}
+                          const rankA = getUserLevelRank(userA?.role);
+                          const rankB = getUserLevelRank(userB?.role);
+
+                          if (rankA !== rankB) {
+                            return rankA - rankB;
+                          }
+
+                          return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
+                        });
+
+                        const roleTotalEffort = accountGroups.reduce((accTotal, [_, accTasks]) => {
+                          return accTotal + accTasks.reduce((mTotal, curr) => mTotal + (curr.completionPercentage === 0 ? 0 : (curr.actualEffort || 0)), 0);
+                        }, 0);
+
+                        const totalRoleTaskCount = accountGroups.reduce((accTotal, [_, accTasks]) => accTotal + accTasks.length, 0);
+
+                        return (
+                          <React.Fragment key={roleCode}>
+                            {/* Role Group Header */}
+                            <tr className="bg-indigo-50/50 border-y border-indigo-100/80">
+                              <td colSpan={9} className="py-2.5 px-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-indigo-900 text-xs uppercase tracking-wide">
+                                    Role: {roleCode} ({totalRoleTaskCount} đầu việc)
                                   </span>
-                                </td>
-
-                                <td className="py-3 px-3 text-center font-mono font-bold text-indigo-600">
-                                  {effectiveEffort}h
-                                </td>
-
-                                <td className="py-3 px-3 text-center">
-                                  <span
-                                    className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${
-                                      t.status === 'Done'
-                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                                        : t.status === 'In Progress'
-                                        ? 'bg-blue-50 text-blue-700 border-blue-300'
-                                        : 'bg-slate-100 text-slate-700 border-slate-300'
-                                    }`}
-                                  >
-                                    {t.status}
+                                  <span className="text-[11px] text-indigo-600 font-semibold">
+                                    Tổng Effort: {roleTotalEffort}h
                                   </span>
-                                </td>
+                                </div>
+                              </td>
+                            </tr>
 
-                                <td className="py-3 px-3">
-                                  <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
-                                      <UserAvatar
-                                        user={users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase())}
-                                        account={t.assigneeAccount}
-                                        size="xs"
-                                        shape="circle"
-                                      />
-                                      {(() => {
-                                        const assigneeUser = users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase());
-                                        return (
-                                          <span className={`truncate ${t.assigneeAccount ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}`}>
-                                            {t.assigneeAccount || 'Chưa phân công'}
-                                          </span>
-                                        );
-                                      })()}
-                                    </div>
-                                    {t.supporterAccounts && t.supporterAccounts.length > 0 && (
-                                      <div className="pt-0.5">
-                                        <TaskSupportersBadge
-                                          supporterAccounts={t.supporterAccounts}
-                                          users={users}
-                                          size="xs"
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
+                            {/* Account Groups inside this Role */}
+                            {accountGroups.map(([acc, accTasks], accIdx) => (
+                              <React.Fragment key={`acc-group-${roleCode}-${acc || 'unassigned'}`}>
+                                {accIdx > 0 && (
+                                  <tr className="h-4 bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-100/80 dark:border-slate-800 select-none">
+                                    <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
+                                  </tr>
+                                )}
+                                {[...accTasks].sort(sortByPriority).map((t) => {
+                                  const milestone = milestones.find((m) => m.id === t.milestoneId);
+                                  const unreadNotes = hasUnreadNote(t);
+                                  const effectiveEffort = t.completionPercentage === 0 ? 0 : (t.actualEffort || 0);
+                                  const currentAcc = acc || t.assigneeAccount;
+                                  const assigneeUser = users.find((u) => u.account.toLowerCase() === (currentAcc || '').toLowerCase());
 
-                                <td className="py-3 px-3">
-                                  <div className="space-y-1">
-                                    <div className="flex justify-between text-[10px] text-slate-500 font-bold">
-                                      <span>{t.completionPercentage}%</span>
-                                    </div>
-                                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
-                                      <div
-                                        className={`h-full transition-all duration-300 ${
-                                          t.completionPercentage === 100
-                                            ? 'bg-emerald-500'
-                                            : t.completionPercentage > 0
-                                            ? 'bg-indigo-500'
-                                            : 'bg-slate-300'
-                                        }`}
-                                        style={{ width: `${t.completionPercentage}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                </td>
-
-                                <td className="py-3 px-3 text-center">
-                                  {(() => {
-                                    const assigneeAward = activeArchive.awards.find(
-                                      (a) => a.account === t.assigneeAccount
-                                    );
-                                    const isTopEffort = assigneeAward?.isTopEffort || false;
-                                    const isLate = assigneeAward?.isLate || t.isSubmittedLate || false;
-
-                                    return (
-                                      <div className="flex items-center justify-center gap-1">
-                                        {isTopEffort && (
-                                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-300 text-[10px] font-bold rounded-full inline-flex items-center gap-1">
-                                            <Award className="w-3 h-3 text-emerald-600" /> THƯỞNG
-                                          </span>
-                                        )}
-                                        {isLate && (
-                                          <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[10px] font-bold rounded-full inline-flex items-center gap-1">
-                                            <AlertTriangle className="w-3 h-3 text-red-500" /> PHẠT
-                                          </span>
-                                        )}
-                                        {!isTopEffort && !isLate && (
-                                          <span className="text-[10px] text-slate-400 font-normal">
-                                            Đúng hạn
-                                          </span>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
-                                </td>
-
-                                <td className="py-3 px-4 text-center">
-                                  <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                    <TaskShareButton task={t} variant="icon" align="right" />
-                                    <button
-                                      onClick={() => setDiscussingTask(t)}
-                                      className={`p-1.5 rounded-lg border transition ${
-                                        unreadNotes
-                                          ? 'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200'
-                                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
-                                      }`}
-                                      title="Xem luồng trao đổi & ghi chú"
+                                  return (
+                                    <tr
+                                      key={`${t.id}-${currentAcc}`}
+                                      className="hover:bg-slate-50/80 transition-colors group"
                                     >
-                                      <MessageSquare className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </React.Fragment>
-                      ))}
+                                      <td className="py-3 px-4 text-center text-slate-400 font-mono text-[11px]">
+                                        {t.id.replace('tsk-', '')}
+                                      </td>
+
+                                      <td className="py-3 px-4">
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span
+                                              onClick={() => handleTaskClick(t)}
+                                              className="font-bold text-slate-800 hover:text-indigo-600 transition cursor-pointer leading-snug"
+                                            >
+                                              <FormattedTaskTitle title={t.title} />
+                                            </span>
+
+                                            {(() => {
+                                              const linkedTicket = getLinkedTicket(t);
+                                              const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                                              if (!isTicketTask) return null;
+                                              return (
+                                                <span
+                                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 font-bold text-[10px] shrink-0 shadow-2xs"
+                                                  title="Ticket yêu cầu liên team"
+                                                >
+                                                  <TicketIcon className="w-3 h-3 text-purple-600 shrink-0" />
+                                                  Ticket yêu cầu
+                                                </span>
+                                              );
+                                            })()}
+
+                                            {/* High Priority Badge */}
+                                            {t.priority === 'High' && (
+                                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 border border-red-200 text-red-700 font-bold text-[10px] shrink-0 shadow-2xs">
+                                                <Flame className="w-3 h-3 text-red-500 fill-red-500" />
+                                                Ưu tiên cao
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
+                                            {milestone ? (
+                                              <span className="inline-flex items-center gap-1 text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                                <Flag className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+                                                {milestone.title}
+                                              </span>
+                                            ) : (
+                                              <span className="inline-flex items-center gap-1 text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                <FolderOpen className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                                                Ngoài Milestone
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      <td className="py-3 px-3 text-center">
+                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold border border-slate-200">
+                                          {t.role}
+                                        </span>
+                                      </td>
+
+                                      <td className="py-3 px-3 text-center font-mono font-bold text-indigo-600">
+                                        {effectiveEffort}h
+                                      </td>
+
+                                      <td className="py-3 px-3 text-center">
+                                        <span
+                                          className={`inline-block whitespace-nowrap px-2.5 py-1 rounded-full text-[10px] font-extrabold border ${
+                                            t.status === 'Done'
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                              : t.status === 'In Progress'
+                                              ? 'bg-blue-50 text-blue-700 border-blue-300'
+                                              : 'bg-slate-100 text-slate-700 border-slate-300'
+                                          }`}
+                                        >
+                                          {t.status}
+                                        </span>
+                                      </td>
+
+                                      <td className="py-3 px-3">
+                                        <div className="flex flex-col gap-1">
+                                          <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200">
+                                            <UserAvatar
+                                              user={assigneeUser}
+                                              account={currentAcc}
+                                              size="xs"
+                                              shape="circle"
+                                            />
+                                            <span className={`truncate ${currentAcc ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}`}>
+                                              {currentAcc || 'Chưa phân công'}
+                                            </span>
+                                          </div>
+                                          {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                                            <div className="pt-0.5">
+                                              <TaskSupportersBadge
+                                                supporterAccounts={t.supporterAccounts}
+                                                users={users}
+                                                primaryAssignee={t.assigneeAccount}
+                                                currentViewingAccount={acc}
+                                                size="xs"
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+
+                                      <td className="py-3 px-3">
+                                        <div className="space-y-1">
+                                          <div className="flex justify-between text-[10px] text-slate-500 font-bold">
+                                            <span>{t.completionPercentage}%</span>
+                                          </div>
+                                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                                            <div
+                                              className={`h-full transition-all duration-300 ${
+                                                t.completionPercentage === 100
+                                                  ? 'bg-emerald-500'
+                                                  : t.completionPercentage > 0
+                                                  ? 'bg-indigo-500'
+                                                  : 'bg-slate-300'
+                                              }`}
+                                              style={{ width: `${t.completionPercentage}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      <td className="py-3 px-3 text-center">
+                                        {(() => {
+                                          const assigneeAward = activeArchive.awards.find(
+                                            (a) => a.account.toLowerCase() === (currentAcc || '').toLowerCase()
+                                          );
+                                          const isTopEffort = assigneeAward?.isTopEffort || false;
+                                          const isLate = assigneeAward?.isLate || t.isSubmittedLate || false;
+
+                                          return (
+                                            <div className="flex items-center justify-center gap-1">
+                                              {isTopEffort && (
+                                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-300 text-[10px] font-bold rounded-full inline-flex items-center gap-1">
+                                                  <Award className="w-3 h-3 text-emerald-600" /> THƯỞNG
+                                                </span>
+                                              )}
+                                              {isLate && (
+                                                <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[10px] font-bold rounded-full inline-flex items-center gap-1">
+                                                  <AlertTriangle className="w-3 h-3 text-red-500" /> PHẠT
+                                                </span>
+                                              )}
+                                              {!isTopEffort && !isLate && (
+                                                <span className="text-[10px] text-slate-400 font-normal">
+                                                  Đúng hạn
+                                                </span>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
+                                      </td>
+
+                                      <td className="py-3 px-4 text-center">
+                                        <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                          <TaskShareButton task={t} variant="icon" align="right" />
+                                          <button
+                                            onClick={() => setDiscussingTask(t)}
+                                            className={`p-1.5 rounded-lg border transition ${
+                                              unreadNotes
+                                                ? 'bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200'
+                                                : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                                            }`}
+                                            title="Xem luồng trao đổi & ghi chú"
+                                          >
+                                            <MessageSquare className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </React.Fragment>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
                 {/* MOBILE VIEW: History Cards */}
                 <div className="md:hidden space-y-3 p-3">
-                  {tasksByRole.map(([roleCode, roleTasks]) => (
-                    <div key={`mobile-hist-${roleCode}`} className="space-y-2.5">
-                      <div className="bg-indigo-50/70 dark:bg-indigo-950/60 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-800 flex items-center justify-between text-xs font-bold text-indigo-900 dark:text-indigo-200">
-                        <span>Role: {roleCode} ({roleTasks.length} task)</span>
-                        <span className="font-mono text-indigo-600 dark:text-indigo-400">
-                          {roleTasks.reduce((acc, curr) => acc + (curr.completionPercentage === 0 ? 0 : (curr.actualEffort || 0)), 0)}h
-                        </span>
-                      </div>
+                  {tasksByRole.map(([roleCode, roleTasks]) => {
+                    const tasksByAccountMap = new Map<string, Task[]>();
+                    roleTasks.forEach((t) => {
+                      const primaryAcc = (t.assigneeAccount || '').trim();
 
-                      <div className="space-y-2">
-                        {roleTasks.map((t) => {
-                          const milestone = milestones.find((m) => m.id === t.milestoneId);
-                          const unreadNotes = hasUnreadNote(t);
-                          const assigneeAward = activeArchive.awards.find((a) => a.account === t.assigneeAccount);
-                          const isTopEffort = assigneeAward?.isTopEffort || false;
-                          const isLate = assigneeAward?.isLate || t.isSubmittedLate || false;
-                          const effectiveEffort = t.completionPercentage === 0 ? 0 : (t.actualEffort || 0);
+                      // 1. Primary assignee
+                      if (primaryAcc && primaryAcc.toLowerCase() !== 'unassigned') {
+                        const primaryUser = users.find((u) => u.account.trim().toLowerCase() === primaryAcc.toLowerCase());
+                        const primaryRoles =
+                          primaryUser?.specializations && primaryUser.specializations.length > 0
+                            ? primaryUser.specializations
+                            : [t.role];
+                        const isPrimaryInThisRole =
+                          primaryRoles.some((r) => isSpecializationMatchingRole(r, roleCode)) ||
+                          isSpecializationMatchingRole(t.role, roleCode);
 
-                          return (
-                            <div
-                              key={t.id}
-                              onClick={() => handleTaskClick(t)}
-                              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2 shadow-2xs cursor-pointer"
-                            >
-                              <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-[10px] font-mono text-slate-400 font-bold">
-                                    #{t.id.replace('tsk-', '')}
-                                  </span>
-                                  {(() => {
-                                    const linkedTicket = getLinkedTicket(t);
-                                    const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
-                                    if (!isTicketTask) return null;
-                                    return (
-                                      <span
-                                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-[9px]"
-                                        title="Ticket yêu cầu liên team"
-                                      >
-                                        <TicketIcon className="w-2.5 h-2.5 text-purple-600 shrink-0" />
-                                        Ticket yêu cầu
-                                      </span>
-                                    );
-                                  })()}
-                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                    {t.role}
-                                  </span>
-                                  {t.priority === 'High' && (
-                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold text-[9px]">
-                                      <Flame className="w-2.5 h-2.5 text-red-500 fill-red-500" />
-                                      Ưu tiên cao
-                                    </span>
-                                  )}
-                                </div>
+                        if (isPrimaryInThisRole) {
+                          const list = tasksByAccountMap.get(primaryAcc) || [];
+                          if (!list.some((item) => item.id === t.id)) {
+                            list.push(t);
+                            tasksByAccountMap.set(primaryAcc, list);
+                          }
+                        }
+                      }
 
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border ${
-                                    t.status === 'Done'
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                                      : t.status === 'In Progress'
-                                      ? 'bg-blue-50 text-blue-700 border-blue-300'
-                                      : 'bg-slate-100 text-slate-700 border-slate-300'
-                                  }`}
-                                >
-                                  {t.status}
-                                </span>
-                              </div>
+                      // 2. Collab members who belong to this role
+                      if (t.supporterAccounts && t.supporterAccounts.length > 0) {
+                        t.supporterAccounts.forEach((supAcc) => {
+                          const cleanSupAcc = supAcc.trim();
+                          if (primaryAcc && cleanSupAcc.toLowerCase() === primaryAcc.toLowerCase()) return;
+                          const supUser = users.find((u) => u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
+                          const supRoles =
+                            supUser?.specializations && supUser.specializations.length > 0
+                              ? supUser.specializations
+                              : supUser?.role
+                              ? [supUser.role]
+                              : [t.role];
 
-                              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
-                                <FormattedTaskTitle title={t.title} />
-                              </h4>
+                          const isMemberInThisRole = supRoles.some((r) => isSpecializationMatchingRole(r, roleCode));
+                          if (
+                            isMemberInThisRole ||
+                            (!supUser?.specializations?.length && isSpecializationMatchingRole(t.role, roleCode))
+                          ) {
+                            const targetAcc = supUser?.account || cleanSupAcc;
+                            const list = tasksByAccountMap.get(targetAcc) || [];
+                            if (!list.some((item) => item.id === t.id)) {
+                              list.push(t);
+                              tasksByAccountMap.set(targetAcc, list);
+                            }
+                          }
+                        });
+                      }
 
-                              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-700/80">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                                    <UserAvatar
-                                      user={users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase())}
-                                      account={t.assigneeAccount}
-                                      size="xs"
-                                      shape="circle"
-                                    />
-                                    {(() => {
-                                      const assigneeUser = users.find((u) => u.account.toLowerCase() === (t.assigneeAccount || '').toLowerCase());
-                                      return (
-                                        <span className={t.assigneeAccount ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}>
-                                          {t.assigneeAccount || 'Chưa phân công'}
+                      // 3. Fallback: If task has no primary assignee and no supporters matched this group, but t.role matches roleCode
+                      if (!primaryAcc || primaryAcc.toLowerCase() === 'unassigned') {
+                        const hasAnyMatchedSupporter =
+                          t.supporterAccounts &&
+                          t.supporterAccounts.some((supAcc) => {
+                            const supUser = users.find((u) => u.account.trim().toLowerCase() === supAcc.trim().toLowerCase());
+                            const supRoles =
+                              supUser?.specializations && supUser.specializations.length > 0
+                                ? supUser.specializations
+                                : [t.role];
+                            return supRoles.some((r) => isSpecializationMatchingRole(r, roleCode));
+                          });
+                        if (!hasAnyMatchedSupporter && isSpecializationMatchingRole(t.role, roleCode)) {
+                          const unassignedKey = '';
+                          const list = tasksByAccountMap.get(unassignedKey) || [];
+                          if (!list.some((item) => item.id === t.id)) {
+                            list.push(t);
+                            tasksByAccountMap.set(unassignedKey, list);
+                          }
+                        }
+                      }
+                    });
+
+                    const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
+                      if (!accA) return 1;
+                      if (!accB) return -1;
+                      const userA = users.find((u) => u.account.trim().toLowerCase() === accA.toLowerCase());
+                      const userB = users.find((u) => u.account.trim().toLowerCase() === accB.toLowerCase());
+                      const rankA = getUserLevelRank(userA?.role);
+                      const rankB = getUserLevelRank(userB?.role);
+                      if (rankA !== rankB) return rankA - rankB;
+                      return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
+                    });
+
+                    const roleTotalEffort = accountGroups.reduce((accTotal, [_, accTasks]) => {
+                      return accTotal + accTasks.reduce((mTotal, curr) => mTotal + (curr.completionPercentage === 0 ? 0 : (curr.actualEffort || 0)), 0);
+                    }, 0);
+
+                    const totalRoleTaskCount = accountGroups.reduce((accTotal, [_, accTasks]) => accTotal + accTasks.length, 0);
+
+                    return (
+                      <div key={`mobile-hist-${roleCode}`} className="space-y-2.5">
+                        <div className="bg-indigo-50/70 dark:bg-indigo-950/60 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-800 flex items-center justify-between text-xs font-bold text-indigo-900 dark:text-indigo-200">
+                          <span>Role: {roleCode} ({totalRoleTaskCount} task)</span>
+                          <span className="font-mono text-indigo-600 dark:text-indigo-400">
+                            {roleTotalEffort}h
+                          </span>
+                        </div>
+
+                        <div className="space-y-3">
+                          {accountGroups.map(([acc, accTasks]) => (
+                            <div key={`mobile-acc-${roleCode}-${acc || 'unassigned'}`} className="space-y-2">
+                              {[...accTasks].sort(sortByPriority).map((t) => {
+                                const milestone = milestones.find((m) => m.id === t.milestoneId);
+                                const unreadNotes = hasUnreadNote(t);
+                                const currentAcc = acc || t.assigneeAccount;
+                                const assigneeAward = activeArchive.awards.find((a) => a.account.toLowerCase() === (currentAcc || '').toLowerCase());
+                                const isTopEffort = assigneeAward?.isTopEffort || false;
+                                const isLate = assigneeAward?.isLate || t.isSubmittedLate || false;
+                                const effectiveEffort = t.completionPercentage === 0 ? 0 : (t.actualEffort || 0);
+                                const assigneeUser = users.find((u) => u.account.toLowerCase() === (currentAcc || '').toLowerCase());
+
+                                return (
+                                  <div
+                                    key={`mobile-${t.id}-${currentAcc}`}
+                                    onClick={() => handleTaskClick(t)}
+                                    className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-2 shadow-2xs cursor-pointer"
+                                  >
+                                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-[10px] font-mono text-slate-400 font-bold">
+                                          #{t.id.replace('tsk-', '')}
                                         </span>
-                                      );
-                                    })()}
+                                        {(() => {
+                                          const linkedTicket = getLinkedTicket(t);
+                                          const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
+                                          if (!isTicketTask) return null;
+                                          return (
+                                            <span
+                                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-bold text-[9px]"
+                                              title="Ticket yêu cầu liên team"
+                                            >
+                                              <TicketIcon className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                                              Ticket yêu cầu
+                                            </span>
+                                          );
+                                        })()}
+                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                          {t.role}
+                                        </span>
+                                        {t.priority === 'High' && (
+                                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-bold text-[9px]">
+                                            <Flame className="w-2.5 h-2.5 text-red-500 fill-red-500" />
+                                            Ưu tiên cao
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <span
+                                        className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold border ${
+                                          t.status === 'Done'
+                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                            : t.status === 'In Progress'
+                                            ? 'bg-blue-50 text-blue-700 border-blue-300'
+                                            : 'bg-slate-100 text-slate-700 border-slate-300'
+                                        }`}
+                                      >
+                                        {t.status}
+                                      </span>
+                                    </div>
+
+                                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2">
+                                      <FormattedTaskTitle title={t.title} />
+                                    </h4>
+
+                                    <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-700/80">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                                          <UserAvatar
+                                            user={assigneeUser}
+                                            account={currentAcc}
+                                            size="xs"
+                                            shape="circle"
+                                          />
+                                          <span className={currentAcc ? getUserRoleColorClass(assigneeUser?.role) : 'text-slate-400 italic'}>
+                                            {currentAcc || 'Chưa phân công'}
+                                          </span>
+                                        </div>
+                                        {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                                          <TaskSupportersBadge
+                                            supporterAccounts={t.supporterAccounts}
+                                            users={users}
+                                            primaryAssignee={t.assigneeAccount}
+                                            currentViewingAccount={acc}
+                                            size="xs"
+                                          />
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                          {effectiveEffort}h
+                                        </span>
+                                        <span className="text-slate-400 font-mono">
+                                          ({t.completionPercentage}%)
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {(isTopEffort || isLate) && (
+                                      <div className="flex items-center gap-1 pt-1">
+                                        {isTopEffort && (
+                                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-300 text-[9px] font-bold rounded-full inline-flex items-center gap-1">
+                                            <Award className="w-3 h-3 text-emerald-600" /> THƯỞNG
+                                          </span>
+                                        )}
+                                        {isLate && (
+                                          <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[9px] font-bold rounded-full inline-flex items-center gap-1">
+                                            <AlertTriangle className="w-3 h-3 text-red-500" /> PHẠT
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
-                                  {t.supporterAccounts && t.supporterAccounts.length > 0 && (
-                                    <TaskSupportersBadge
-                                      supporterAccounts={t.supporterAccounts}
-                                      users={users}
-                                      size="xs"
-                                    />
-                                  )}
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                  <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                                    {effectiveEffort}h
-                                  </span>
-                                  <span className="text-slate-400 font-mono">
-                                    ({t.completionPercentage}%)
-                                  </span>
-                                </div>
-                              </div>
-
-                              {(isTopEffort || isLate) && (
-                                <div className="flex items-center gap-1 pt-1">
-                                  {isTopEffort && (
-                                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 border border-emerald-300 text-[9px] font-bold rounded-full inline-flex items-center gap-1">
-                                      <Award className="w-3 h-3 text-emerald-600" /> THƯỞNG
-                                    </span>
-                                  )}
-                                  {isLate && (
-                                    <span className="px-2 py-0.5 bg-red-100 text-red-700 border border-red-300 text-[9px] font-bold rounded-full inline-flex items-center gap-1">
-                                      <AlertTriangle className="w-3 h-3 text-red-500" /> PHẠT
-                                    </span>
-                                  )}
-                                </div>
-                              )}
+                                );
+                              })}
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
