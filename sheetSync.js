@@ -161,6 +161,10 @@ function syncTasksFormattedToSheet() {
         const rawWeek = Number(t.weekNumber) || 38;
         // Task weekNumber trên hệ thống Saho đã là số tuần cộng dồn (VD: 93, 94, 95, 96). Nếu <= 53 mới cần + 55.
         const sahoWeekNum = rawWeek > 50 ? rawWeek : rawWeek + 55;
+        
+        // BỎ QUA CÁC TUẦN < 95: Tuần 94 trở xuống chỉ lưu trong Lịch Sử Công Việc, đồng bộ từ Tuần 95 trở đi làm chuẩn
+        if (sahoWeekNum < 95) return;
+
         const yr = t.year || 2026;
         const dateRangeStr = getWeekDateRangeStr(sahoWeekNum, yr);
         const weekHeaderKey = `Week ${sahoWeekNum} ${dateRangeStr}`;
@@ -303,7 +307,23 @@ function syncTasksFormattedToSheet() {
             });
 
             assignees.forEach((accName, accIdx) => {
-                const personTasks = tasksByAssignee[accName];
+                const rawPersonTasks = tasksByAssignee[accName];
+                // Deduplicate tasks for this person in this week by title
+                const personTasksMap = new Map();
+                rawPersonTasks.forEach(t => {
+                    const titleKey = String(t.title || '').trim().toLowerCase();
+                    const existing = personTasksMap.get(titleKey);
+                    if (!existing) {
+                        personTasksMap.set(titleKey, t);
+                    } else {
+                        const timeCurr = t.updatedAt ? new Date(t.updatedAt).getTime() : 0;
+                        const timeExisting = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+                        if (timeCurr >= timeExisting) {
+                            personTasksMap.set(titleKey, t);
+                        }
+                    }
+                });
+                const personTasks = Array.from(personTasksMap.values());
 
                 personTasks.forEach(t => {
                     const rawPct = (t.completionPercentage !== undefined && t.completionPercentage !== null)

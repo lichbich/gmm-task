@@ -478,9 +478,10 @@ export const MilestonesView: React.FC = () => {
     });
     if (hasSpecMatch) return true;
 
-    // 2. Check if user has any tasks assigned under this role
+    // 2. Check if user has any tasks assigned under this role (from Week 95 onwards)
     const hasTaskInRole = tasks.some(
       (t) =>
+        (t.weekNumber === undefined || t.weekNumber >= 95) &&
         isSpecializationMatchingRole(t.role, roleCode) &&
         (t.assigneeAccount?.toLowerCase() === u.account.toLowerCase() ||
           t.supporterAccounts?.some((sp) => sp.toLowerCase() === u.account.toLowerCase()))
@@ -526,43 +527,62 @@ export const MilestonesView: React.FC = () => {
     return 2;
   };
 
-  // Deduplicate tasks by root task ID for Milestone & Ad-hoc views, picking the latest active version
+  // Deduplicate tasks by root task ID and (title + assignee + role) for Milestone & Ad-hoc views, picking the latest active version
   const deduplicateTasksForMilestoneView = (taskList: Task[]): Task[] => {
     const rootMap = new Map<string, Task>();
+    const titleAssigneeMap = new Map<string, Task>();
 
     taskList.forEach((t) => {
       const rootId = t.parentTaskId || t.id;
-      const existing = rootMap.get(rootId);
+      const titleKey = `${(t.title || '').trim().toLowerCase()}___${(t.assigneeAccount || '').trim().toLowerCase()}___${(t.role || '').trim().toLowerCase()}`;
+
+      const existingByRoot = rootMap.get(rootId);
+      const existingByTitle = titleAssigneeMap.get(titleKey);
+      const existing = existingByRoot || existingByTitle;
 
       if (!existing) {
         rootMap.set(rootId, t);
+        titleAssigneeMap.set(titleKey, t);
       } else {
         // Pick the version with higher weekNumber or newer updatedAt
         const weekCurr = t.weekNumber || 0;
         const weekExisting = existing.weekNumber || 0;
+        let shouldUseCurrent = false;
+
         if (weekCurr > weekExisting) {
-          rootMap.set(rootId, t);
+          shouldUseCurrent = true;
         } else if (weekCurr === weekExisting) {
           const timeCurr = t.updatedAt ? new Date(t.updatedAt).getTime() : 0;
           const timeExisting = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
           if (timeCurr >= timeExisting) {
-            rootMap.set(rootId, t);
+            shouldUseCurrent = true;
           }
+        }
+
+        if (shouldUseCurrent) {
+          const oldRootId = existing.parentTaskId || existing.id;
+          rootMap.delete(oldRootId);
+          rootMap.set(rootId, t);
+          titleAssigneeMap.set(titleKey, t);
         }
       }
     });
 
-    return Array.from(rootMap.values());
+    return Array.from(titleAssigneeMap.values());
   };
 
-  // Filtered milestones and adhoc tasks
+  // Filtered milestones and adhoc tasks (strictly from Week 95 onwards for active operational views)
   const filteredMilestones = milestones
     .filter(isMilestoneRoleMatch)
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   const filteredAdhocTasks = deduplicateTasksForMilestoneView(
     tasks.filter(
-      (t) => (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) && isTaskRoleMatch(t.role) && isTaskAssigneeMatch(t)
+      (t) =>
+        (t.weekNumber === undefined || t.weekNumber >= 95) &&
+        (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) &&
+        isTaskRoleMatch(t.role) &&
+        isTaskAssigneeMatch(t)
     )
   );
 
@@ -1561,7 +1581,7 @@ export const MilestonesView: React.FC = () => {
           {filteredMilestones.length > 0 && (
             <div className="flex items-center justify-between text-xs text-slate-500 pb-0.5 px-0.5">
               <span className="font-semibold text-slate-700">
-                Hiển thị {filteredMilestones.length} cột mốc ({tasks.filter((t) => t.milestoneId && isTaskRoleMatch(t.role)).length} đầu việc)
+                Hiển thị {filteredMilestones.length} cột mốc ({tasks.filter((t) => (t.weekNumber === undefined || t.weekNumber >= 95) && t.milestoneId && isTaskRoleMatch(t.role)).length} đầu việc)
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -1604,7 +1624,11 @@ export const MilestonesView: React.FC = () => {
               const displayTitle = formatMilestoneTitle(ms.title, msOrderNumber);
               const msTasksAll = deduplicateTasksForMilestoneView(
                 tasks.filter(
-                  (t) => t.milestoneId === ms.id && isTaskRoleMatch(t.role) && isTaskAssigneeMatch(t)
+                  (t) =>
+                    (t.weekNumber === undefined || t.weekNumber >= 95) &&
+                    t.milestoneId === ms.id &&
+                    isTaskRoleMatch(t.role) &&
+                    isTaskAssigneeMatch(t)
                 )
               );
               const activeMsTasks = sortActiveTasks(msTasksAll.filter((t) => !isTaskDoneInMilestone(t)));

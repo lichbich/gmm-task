@@ -89,7 +89,7 @@ export const AwardLeaderboard: React.FC = () => {
               <Dropdown
                 value={selectedWeek}
                 onChange={(val) => setSelectedWeek(Number(val))}
-                options={Array.from({ length: 15 }, (_, i) => selectedWeek - 5 + i).map((w) => {
+                options={Array.from({ length: 10 }, (_, i) => 95 + i).map((w) => {
                   const range = getWeekDateRangeStr(w, selectedYear);
                   return {
                     value: w,

@@ -2482,14 +2482,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     unfinishedTasks.forEach((t) => {
       const rootId = t.parentTaskId || t.id;
-      const alreadyExistsInNextWeek = tasks.some(
-        (nt) =>
-          nt.weekNumber === nextWeek &&
-          nt.year === selectedYear &&
-          (nt.parentTaskId === rootId || nt.id === rootId)
-      );
+      const titleLower = (t.title || '').trim().toLowerCase();
+      const assigneeLower = (t.assigneeAccount || '').trim().toLowerCase();
+      const roleLower = (t.role || '').trim().toLowerCase();
 
-      if (!alreadyExistsInNextWeek) {
+      const alreadyExistsInNextWeek = tasks.some((nt) => {
+        if (nt.weekNumber !== nextWeek || (nt.year || selectedYear) !== selectedYear) return false;
+        if (nt.parentTaskId === rootId || nt.id === rootId) return true;
+        const ntTitle = (nt.title || '').trim().toLowerCase();
+        const ntAssignee = (nt.assigneeAccount || '').trim().toLowerCase();
+        const ntRole = (nt.role || '').trim().toLowerCase();
+        return ntTitle === titleLower && ntAssignee === assigneeLower && ntRole === roleLower;
+      });
+
+      const alreadyInContinuation = continuationTasks.some((ct) => {
+        if (ct.parentTaskId === rootId || ct.id === rootId) return true;
+        const ctTitle = (ct.title || '').trim().toLowerCase();
+        const ctAssignee = (ct.assigneeAccount || '').trim().toLowerCase();
+        const ctRole = (ct.role || '').trim().toLowerCase();
+        return ctTitle === titleLower && ctAssignee === assigneeLower && ctRole === roleLower;
+      });
+
+      if (!alreadyExistsInNextWeek && !alreadyInContinuation) {
         const isProgress = (t.completionPercentage !== undefined && t.completionPercentage > 0);
         continuationTasks.push({
           ...t,
