@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, getUserRoleColorClass, getTodayDateOnlyString, formatDateOnlyDisplay } from '../types/task';
-import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare, Info, Calendar } from 'lucide-react';
+import { Task, TaskStatus, getUserRoleColorClass, getTodayDateOnlyString, formatDateOnlyDisplay, getMemberTaskEffort } from '../types/task';
+import { X, Clock, AlertTriangle, CheckCircle, Save, MessageSquare, Info, Calendar, Users } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { UserAvatar } from './common/UserAvatar';
 import { DatePicker } from './common/DatePicker';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
 
 interface WeeklyReportModalProps {
   task: Task | null;
@@ -21,12 +22,35 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { submitTaskReport, simulatedTime, canReportTask, users, confirmDialog } = useApp();
+  const { submitTaskReport, simulatedTime, canReportTask, users, confirmDialog, tasks, weeklyArchives, authSession } = useApp();
   const [actualEffort, setActualEffort] = useState<number | string>(0);
   const [completionPercentage, setCompletionPercentage] = useState<number>(0);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+
+  const reportingAccount = useMemo(() => {
+    if (!authSession || !task) return task?.assigneeAccount || '';
+    const userAcc = authSession.account.toLowerCase();
+    if (task.assigneeAccount && task.assigneeAccount.toLowerCase() === userAcc) {
+      return task.assigneeAccount;
+    }
+    if (task.supporterAccounts?.some((s) => s.toLowerCase() === userAcc)) {
+      return authSession.account;
+    }
+    return task.assigneeAccount || authSession.account;
+  }, [authSession, task]);
+
+  const accumulatedEffort = useMemo(() => {
+    return calculateTaskAccumulatedEffort(task, tasks, weeklyArchives);
+  }, [task, tasks, weeklyArchives]);
+
+  const priorWeeksEffort = useMemo(() => {
+    if (!accumulatedEffort.hasMultiWeekHistory || !task) return 0;
+    return accumulatedEffort.weeklyBreakdown
+      .filter((item) => item.weekNumber !== task.weekNumber)
+      .reduce((sum, item) => sum + item.effort, 0);
+  }, [accumulatedEffort, task]);
 
   // Track state before user transitioned to Done/100% via End Date
   const prevBeforeDoneRef = React.useRef<{
@@ -37,7 +61,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
 
   const checkDirtyAndConfirmClose = useCallback((): boolean => {
     if (!task) return true;
-    const origEffort = task.actualEffort !== undefined ? task.actualEffort : 0;
+    const origEffort = getMemberTaskEffort(task, reportingAccount);
     const origCompletion = task.completionPercentage || 0;
     const origNotes = task.notes || '';
     const origStartDate = task.startDate || '';
@@ -69,7 +93,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
       return false;
     }
     return true;
-  }, [task, actualEffort, completionPercentage, notes, startDate, endDate, confirmDialog]);
+  }, [task, actualEffort, completionPercentage, notes, startDate, endDate, confirmDialog, reportingAccount]);
 
   const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
     useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
@@ -77,7 +101,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
   useEffect(() => {
     if (!isOpen || !task) return;
     const initialPct = task.completionPercentage || 0;
-    const initialEffort = task.actualEffort !== undefined ? task.actualEffort : 0;
+    const initialEffort = getMemberTaskEffort(task, reportingAccount);
     const initialStartDate = task.startDate || '';
     const initialEndDate = task.endDate || '';
 
@@ -92,7 +116,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
       effort: initialEffort,
       startDate: initialStartDate,
     };
-  }, [isOpen, task?.id]);
+  }, [isOpen, task?.id, reportingAccount]);
 
   if (!isRendered || !task) return null;
 
@@ -197,6 +221,11 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
       parsedEffort = task.estimatedEffort || 0;
     }
 
+    if (parsedEffort > 24) {
+      alert('Số giờ thực tế (Effort) không được vượt quá 24h!');
+      return;
+    }
+
     if (parsedEffort > 0 && completionPercentage === 0) {
       confirmDialog({
         title: 'Nhắc nhở cập nhật % tiến độ',
@@ -208,7 +237,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
           submitTaskReport(task.id, 0, 0, 'To do', notes, {
             startDate: undefined,
             endDate: undefined,
-          });
+          }, reportingAccount);
           forceClose();
         },
       });
@@ -228,9 +257,11 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     submitTaskReport(task.id, finalEffort, completionPercentage, finalStatus, notes, {
       startDate: startDate.trim() || undefined,
       endDate: endDate.trim() || undefined,
-    });
+    }, reportingAccount);
     forceClose();
   };
+
+  const isCollabTask = Boolean(task.supporterAccounts && task.supporterAccounts.length > 0);
 
   return (
     <div
@@ -314,7 +345,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                   <span className="font-semibold text-slate-800">{task.estimatedEffort} giờ</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block text-[11px] mb-1">Người thực hiện:</span>
+                  <span className="text-slate-500 block text-[11px] mb-1">Người thực hiện chính:</span>
                   <div className="flex items-center gap-2">
                     <UserAvatar
                       user={assigneeUser}
@@ -327,7 +358,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                       {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
                       {task.assigneeAccount && (
                         <span className={`text-[10px] font-mono block ${getUserRoleColorClass(assigneeUser?.role)}`}>
-                          @{task.assigneeAccount}
+                          @{task.assigneeAccount} {isCollabTask && `(${getMemberTaskEffort(task, task.assigneeAccount)}h)`}
                         </span>
                       )}
                     </div>
@@ -340,16 +371,27 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
               </div>
 
               {/* Collab row if any */}
-              {task.supporterAccounts && task.supporterAccounts.length > 0 && (
+              {isCollabTask && (
                 <div className="pt-2 border-t border-slate-200/80">
-                  <span className="text-slate-500 block text-[11px] mb-1">Thành viên Collab (Hợp tác):</span>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-slate-500 block text-[11px] font-medium">Thành viên Collab (Hợp tác):</span>
+                    <span className="text-[10px] text-indigo-600 font-semibold font-mono">
+                      Tổng task: {task.actualEffort || 0}h
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {task.supporterAccounts.map((supAcc) => {
+                    {task.supporterAccounts?.map((supAcc) => {
                       const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
+                      const supEffort = getMemberTaskEffort(task, supAcc);
+                      const isReportingSup = reportingAccount.toLowerCase() === supAcc.toLowerCase();
                       return (
                         <span
                           key={supAcc}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-xs font-medium text-slate-800"
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-medium ${
+                            isReportingSup
+                              ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-bold ring-1 ring-indigo-200'
+                              : 'bg-white border-slate-200 text-slate-800'
+                          }`}
                         >
                           <UserAvatar
                             user={supUser}
@@ -359,6 +401,9 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                             shape="circle"
                           />
                           <span>{supUser?.name || supAcc}</span>
+                          <span className="font-mono text-[11px] font-bold text-indigo-600">
+                            {supEffort}h
+                          </span>
                           <span className="px-1 py-0.2 rounded text-[9px] font-bold bg-indigo-100 text-indigo-700">
                             Collab
                           </span>
@@ -374,7 +419,13 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
             <div>
               <div className="flex justify-between items-center mb-1.5">
                 <label className="text-xs font-semibold text-slate-700">
-                  Số Giờ Làm Việc Thực Tế trong tuần (Actual Effort):
+                  {isCollabTask ? (
+                    <span>
+                      Số Giờ Của Bạn <b className="text-indigo-600">(@{reportingAccount})</b>:
+                    </span>
+                  ) : (
+                    'Số Giờ Làm Việc Thực Tế trong tuần (Actual Effort):'
+                  )}
                 </label>
                 <span className="text-xs font-bold text-indigo-600 font-mono">
                   {typeof actualEffort === 'number'
@@ -388,7 +439,7 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                   type="number"
                   step="any"
                   min="0"
-                  max="100"
+                  max="24"
                   disabled={!isMyTaskToReport}
                   value={actualEffort}
                   onChange={(e) => setActualEffort(e.target.value)}
@@ -396,6 +447,22 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 text-sm focus:bg-white focus:outline-none focus:border-indigo-500 disabled:opacity-50 font-semibold"
                 />
               </div>
+              {isCollabTask && (
+                <div className="mt-1.5 px-2.5 py-1.5 bg-indigo-50/70 border border-indigo-200/70 rounded-lg text-[11px] text-indigo-800 flex items-center justify-between">
+                  <span>💡 Đây là task Collab. Bạn đang nhập số giờ của riêng bạn (@{reportingAccount}).</span>
+                </div>
+              )}
+              {accumulatedEffort.hasMultiWeekHistory && priorWeeksEffort > 0 && (
+                <div className="mt-2 p-2.5 bg-indigo-50/80 border border-indigo-200/90 rounded-xl text-xs text-indigo-900 flex flex-wrap items-center justify-between gap-1.5 shadow-2xs">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Các tuần trước đã tích lũy: <b className="font-mono text-indigo-700">{priorWeeksEffort}h</b></span>
+                  </span>
+                  <span className="font-mono font-bold text-xs text-indigo-700 bg-white px-2 py-0.5 rounded-lg border border-indigo-200">
+                    Dự kiến tổng: {priorWeeksEffort + (Number(actualEffort) || 0)}h
+                  </span>
+                </div>
+              )}
               <p className="text-[11px] text-slate-500 mt-1">
                 {isBeforeSundayNoon
                   ? '💡 Đây là cập nhật tiến độ trong tuần. Vào Chủ Nhật (từ 12:00 trưa đến 22:00 tối), bạn hãy vào nộp báo cáo tuần chính thức (kể cả 0h) để được tính là "Đã báo cáo".'

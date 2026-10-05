@@ -8,11 +8,11 @@
  * - Nghiệp vụ đồng bộ chuẩn xác:
  *   + Tuần 95 trở xuống (Tuần đã làm / báo cáo):
  *     - Thành viên đã nộp báo cáo / có tiến độ: Status = "Done", Effort = actualEffort thực tế.
- *     - Task 0% tiến độ (chưa làm): Effort = 0, Status = "To do".
+ *     - Bỏ qua các task 0% & 0h vì đã được chuyển sang Tuần 96.
  *   + Tuần 96 trở đi (Tuần mới / tuần kế hoạch):
- *     - Tất cả task 0% tiến độ: Status = "To do", Effort = 0.
- *     - Tất cả task làm dở (>0% và <100%): Status = "In Progress", Effort = 0.
- *     - Tuyệt đối không có task nào là "Done" ở Tuần 96.
+ *     - Tất cả task 0% tiến độ: Status = "To do", Effort = estimatedEffort (giờ ước tính est).
+ *     - Tất cả task làm dở (>0% và <100%): Status = "In Progress", Effort = estimatedEffort (giờ ước tính est).
+ *     - Task hoàn thành (100%): Status = "Done", Effort = estimatedEffort.
  * - Banner Tuần Chữ Đỏ + Banner Role Vàng + Cách 1 hàng trống giữa các nhân sự
  * ========================================================================= */
 
@@ -229,58 +229,56 @@ function syncTasksFormattedToSheet() {
         }
     });
 
-    // Sắp xếp các Tuần theo thứ tự tăng dần (Tuần 93 -> Tuần 94 -> Tuần 95 -> Tuần 96...)
+    // Sắp xếp các Tuần theo thứ tự tăng dần (Tuần 95 -> Tuần 96...)
     const sortedWeekKeys = Object.keys(tasksByWeekAndRole).sort((a, b) => {
         return tasksByWeekAndRole[a].sahoWeekNum - tasksByWeekAndRole[b].sahoWeekNum;
     });
 
-    // D. Xử lý đồng bộ cho từng Tuần
-    let totalWeeksProcessed = 0;
+    if (sortedWeekKeys.length === 0) {
+        SpreadsheetApp.getUi().alert("ℹ️ Không có task nào từ Tuần 95 trở đi để đồng bộ.");
+        return;
+    }
 
-    sortedWeekKeys.forEach(weekHeaderKey => {
-        const weekData = tasksByWeekAndRole[weekHeaderKey];
-        const rolesMap = weekData.roles;
+    const firstWeekNum = tasksByWeekAndRole[sortedWeekKeys[0]].sahoWeekNum;
 
-        // 1. Quét tìm xem Tuần này đã có vị trí trên Sheet chưa (Tìm chính xác "Week X" từ DƯỚI LÊN TRÊN)
-        let lastRow = sheet.getLastRow();
-        let weekRowIdx = -1;
+    // D. Tìm vị trí dòng bắt đầu cho Tuần đầu tiên (VD: Tuần 95)
+    let lastRow = sheet.getLastRow();
+    let startRow = -1;
 
-        if (lastRow >= 1) {
-            const colAValues = sheet.getRange(1, 1, lastRow, 1).getValues();
-            for (let r = colAValues.length - 1; r >= 0; r--) {
-                const val = String(colAValues[r][0] || '').trim();
-                // Khớp chính xác tiêu đề "Week 93", "Week 94", "Week 95", "Week 96"...
-                if (new RegExp(`^Week\\s+${weekData.sahoWeekNum}\\b`, 'i').test(val)) {
-                    weekRowIdx = r + 1;
-                    break;
-                }
+    if (lastRow >= 1) {
+        const colAValues = sheet.getRange(1, 1, lastRow, 1).getValues();
+        for (let r = 0; r < colAValues.length; r++) {
+            const val = String(colAValues[r][0] || '').trim();
+            if (new RegExp(`^Week\\s+${firstWeekNum}\\b`, 'i').test(val)) {
+                startRow = r + 1;
+                break;
             }
         }
+    }
 
-        // Nếu chưa có Tuần này trong Sheet (VD: Tuần 96 mới) -> Thêm ở cuối bảng tính
-        if (weekRowIdx === -1) {
-            weekRowIdx = sheet.getLastRow() + 1;
-            if (weekRowIdx === 1) weekRowIdx = 2;
-        }
+    if (startRow === -1) {
+        startRow = sheet.getLastRow() + 1;
+        if (startRow === 1) startRow = 2;
+    }
 
-        // Ghi tiêu đề Tuần Chữ Đỏ (VD: Week 95 (28/09-04/10), Week 96 (05/10-11/10))
-        const weekCell = sheet.getRange(weekRowIdx, 1);
-        weekCell.setValue(weekData.headerText);
-        weekCell.setFontWeight("bold").setFontColor("#CC0000").setFontSize(14).setFontFamily("Arial");
+    // E. Xây dựng toàn bộ các dòng dữ liệu và định dạng cho TẤT CẢ các tuần thành một khối liền mạch
+    const allRowsToInsert = [];
+    const rowFormats = [];
 
-        // 2. Dựng các hàng dữ liệu cho Tuần này
-        const allRowsToInsert = [];
-        const rowFormats = [];
+    sortedWeekKeys.forEach((weekHeaderKey, wIdx) => {
+        const weekData = tasksByWeekAndRole[weekHeaderKey];
+        const rolesMap = weekData.roles;
+        const isPastWeek = weekData.sahoWeekNum < 96;
+
+        // 1. Tiêu đề Tuần Chữ Đỏ (VD: Week 95 (28/09-04/10))
+        allRowsToInsert.push([weekData.headerText, "", "", "", "", "", "", "", "", ""]);
+        rowFormats.push({ type: 'WEEK_HEADER', text: weekData.headerText });
 
         const sortedRoles = Object.keys(rolesMap).sort((a, b) => getRoleOrderIndex(a) - getRoleOrderIndex(b));
 
         sortedRoles.forEach(bannerName => {
             const tasksInRole = rolesMap[bannerName];
             if (!tasksInRole || tasksInRole.length === 0) return;
-
-            // Banner Vàng Role (#FFE599)
-            allRowsToInsert.push([bannerName, "", "", "", "", "", "", "", "", ""]);
-            rowFormats.push({ type: 'BANNER', name: bannerName });
 
             // Nhóm Task theo Assignee / SyncAccount
             const tasksByAssignee = {};
@@ -306,7 +304,10 @@ function syncTasksFormattedToSheet() {
                 return a.localeCompare(b);
             });
 
-            assignees.forEach((accName, accIdx) => {
+            // Lọc danh sách nhân sự có task hợp lệ cần hiển thị
+            const validAssignees = [];
+
+            assignees.forEach(accName => {
                 const rawPersonTasks = tasksByAssignee[accName];
                 // Deduplicate tasks for this person in this week by title
                 const personTasksMap = new Map();
@@ -323,7 +324,31 @@ function syncTasksFormattedToSheet() {
                         }
                     }
                 });
-                const personTasks = Array.from(personTasksMap.values());
+
+                // Nếu là tuần cũ đã kết thúc / đã chốt (Tuần 95 trở xuống):
+                // Bỏ qua các task 0% tiến độ & 0h effort vì chúng đã được chuyển tiếp sang Tuần 96!
+                const filteredTasks = Array.from(personTasksMap.values()).filter(t => {
+                    if (!isPastWeek) return true; // Tuần 96+: giữ nguyên toàn bộ (bao gồm cả task 0% kế thừa)
+                    const rawPct = (t.completionPercentage !== undefined && t.completionPercentage !== null) ? Number(t.completionPercentage) : 0;
+                    const effort = Number(t.actualEffort) || 0;
+                    const isUnworked = rawPct === 0 && effort === 0 && t.status !== 'Done';
+                    return !isUnworked; // Chỉ giữ task có tiến độ hoặc đã làm ở tuần cũ
+                });
+
+                if (filteredTasks.length > 0) {
+                    validAssignees.push({ accName, tasks: filteredTasks });
+                }
+            });
+
+            // Nếu role này không có task nào thì bỏ qua banner
+            if (validAssignees.length === 0) return;
+
+            // DUY NHẤT 1 DÒNG Banner Vàng Role (#FFE599)
+            allRowsToInsert.push([bannerName, "", "", "", "", "", "", "", "", ""]);
+            rowFormats.push({ type: 'BANNER', name: bannerName });
+
+            validAssignees.forEach((assigneeItem, accIdx) => {
+                const { accName, tasks: personTasks } = assigneeItem;
 
                 personTasks.forEach(t => {
                     const rawPct = (t.completionPercentage !== undefined && t.completionPercentage !== null)
@@ -340,27 +365,32 @@ function syncTasksFormattedToSheet() {
                         // ==========================================
                         // TUẦN 96+: Tuần mới / tuần kế hoạch chưa làm
                         // ==========================================
-                        // 1. Task 0% tiến độ -> Status "To do", Effort = 0
-                        // 2. Task làm dở (>0% và <100%) -> Status "In Progress", Effort = 0
-                        // 3. Tuyệt đối không có task nào là "Done"
+                        // 1. Task 0% tiến độ (chuyển từ tuần 95 sang hoặc tạo mới) -> Status "To do"
+                        // 2. Task làm dở (>0% và <100%) -> Status "In Progress"
+                        // 3. Task hoàn thành (100%) -> Status "Done"
+                        // Effort: Lấy theo giờ ước tính (estimatedEffort) được define cho tuần mới
                         if (rawPct > 0 && rawPct < 100) {
                             finalStatus = "In Progress";
+                        } else if (rawPct >= 100) {
+                            finalStatus = "Done";
                         } else {
                             finalStatus = "To do";
                         }
-                        effortVal = 0;
+                        if (t.memberEfforts && t.memberEfforts[accName] !== undefined) {
+                            effortVal = Number(t.memberEfforts[accName]) || 0;
+                        } else {
+                            effortVal = (t.estimatedEffort !== undefined && t.estimatedEffort !== null && t.estimatedEffort !== '')
+                                ? Number(t.estimatedEffort) || 0
+                                : (Number(t.actualEffort) || 0);
+                        }
                     } else {
                         // ==========================================
                         // TUẦN 95 TRỞ XUỐNG: Tuần đã làm / đã báo cáo
                         // ==========================================
-                        if (rawPct === 0) {
-                            // Task 0% tiến độ: Effort luôn là 0 (để khi chốt tuần sẽ chuyển sang tuần sau)
-                            effortVal = 0;
-                            finalStatus = "To do";
+                        finalStatus = "Done";
+                        if (t.memberEfforts && typeof t.memberEfforts === 'object' && Object.keys(t.memberEfforts).length > 0) {
+                            effortVal = t.memberEfforts[accName] !== undefined ? (Number(t.memberEfforts[accName]) || 0) : 0;
                         } else {
-                            // Task có tiến độ > 0%:
-                            // Ai đã làm và nộp báo cáo tuần -> Status là "Done"
-                            finalStatus = "Done";
                             effortVal = Number(t.actualEffort) || 0;
                         }
                     }
@@ -373,7 +403,7 @@ function syncTasksFormattedToSheet() {
                         pctStr,                  // Col E (5): Phần trăm công việc (%)
                         effortVal,               // Col F (6): Effort (Số giờ làm thực tế)
                         finalStatus,             // Col G (7): Status ("Done", "In Progress", "To do")
-                        accName,                 // Col H (8): Account (Được gán chính xác theo thành viên bao gồm cả Collab!)
+                        accName,                 // Col H (8): Account
                         "",                      // Col I (9): Trống
                         ""                       // Col J (10): Trống
                     ]);
@@ -381,115 +411,77 @@ function syncTasksFormattedToSheet() {
                 });
 
                 // Hàng trống phân cách 2 người khác nhau
-                if (accIdx < assignees.length - 1) {
+                if (accIdx < validAssignees.length - 1) {
                     allRowsToInsert.push(["", "", "", "", "", "", "", "", "", ""]);
                     rowFormats.push({ type: 'EMPTY' });
                 }
             });
         });
 
-        // 3. Làm sạch phạm vi của riêng Tuần này và ghi lại dữ liệu mới
-        const dataStartRow = weekRowIdx + 1;
-        let nextWeekRowIdx = -1;
-        lastRow = sheet.getLastRow();
-
-        if (lastRow > weekRowIdx) {
-            const colAValues = sheet.getRange(weekRowIdx + 1, 1, lastRow - weekRowIdx, 1).getValues();
-            for (let r = 0; r < colAValues.length; r++) {
-                const val = String(colAValues[r][0] || '').trim();
-                if (/^Week\s+\d+/i.test(val)) {
-                    nextWeekRowIdx = weekRowIdx + 1 + r;
-                    break;
-                }
-            }
+        // Hàng trống phân cách giữa 2 Tuần
+        if (wIdx < sortedWeekKeys.length - 1) {
+            allRowsToInsert.push(["", "", "", "", "", "", "", "", "", ""]);
+            rowFormats.push({ type: 'EMPTY' });
         }
-
-        const rowsToClear = (nextWeekRowIdx !== -1) ? (nextWeekRowIdx - dataStartRow) : (sheet.getLastRow() - weekRowIdx);
-
-        if (rowsToClear > 0) {
-            const currentWeekRange = sheet.getRange(dataStartRow, 1, rowsToClear, 10);
-            currentWeekRange.clearContent();
-            currentWeekRange.clearFormat();
-            currentWeekRange.clearDataValidations();
-        }
-
-        if (allRowsToInsert.length > 0) {
-            const dataRange = sheet.getRange(dataStartRow, 1, allRowsToInsert.length, 10);
-            dataRange.setValues(allRowsToInsert);
-
-            // Định dạng dòng & Tô màu sắc Nổi bật cho Status Chip (Cột G)
-            for (let i = 0; i < rowFormats.length; i++) {
-                const currRow = dataStartRow + i;
-                const fmt = rowFormats[i];
-
-                if (fmt.type === 'BANNER') {
-                    const bannerRange = sheet.getRange(currRow, 1, 1, 10);
-                    bannerRange.setBackground("#FFE599");
-                    sheet.getRange(currRow, 1).setFontWeight("bold").setFontColor("#000000").setFontSize(10).setFontFamily("Arial");
-                } else if (fmt.type === 'TASK') {
-                    const taskRange = sheet.getRange(currRow, 1, 1, 10);
-                    sheet.getRange(currRow, 3).setDataValidation(roleValidation);
-                    sheet.getRange(currRow, 7).setDataValidation(statusValidation);
-                    sheet.getRange(currRow, 8).setDataValidation(accountValidation);
-
-                    // Căn lề
-                    sheet.getRange(currRow, 2).setHorizontalAlignment("left").setWrap(true).setFontFamily("Arial");
-                    sheet.getRange(currRow, 3).setHorizontalAlignment("center");
-                    sheet.getRange(currRow, 5, 1, 4).setHorizontalAlignment("center"); // Căn giữa Col E (%), Col F (Effort), Col G (Status), Col H (Account)
-
-                    // TÔ MÀU SẮC CHO Ô STATUS (CỘT G):
-                    const statusCell = sheet.getRange(currRow, 7);
-                    const stVal = fmt.finalStatus || (fmt.task ? fmt.task.status : "To do");
-                    if (stVal === 'Done') {
-                        statusCell.setBackground("#137333").setFontColor("#FFFFFF").setFontWeight("bold"); // Xanh lá
-                    } else if (stVal === 'In Progress') {
-                        statusCell.setBackground("#0B57D0").setFontColor("#FFFFFF").setFontWeight("bold"); // Xanh biển
-                    } else {
-                        statusCell.setBackground("#E5E7EB").setFontColor("#374151").setFontWeight("bold"); // Xám
-                    }
-
-                    taskRange.setBorder(true, true, true, true, true, true, "#E2E8F0", SpreadsheetApp.BorderStyle.SOLID);
-                } else if (fmt.type === 'EMPTY') {
-                    sheet.getRange(currRow, 1, 1, 10).setBackground(null);
-                }
-            }
-
-            // THÊM ĐỊNH DẠNG ĐIỀU KIỆN (CONDITIONAL FORMATTING) CHO CỘT STATUS (CỘT G)
-            const statusRange = sheet.getRange(dataStartRow, 7, allRowsToInsert.length, 1);
-            const rules = sheet.getConditionalFormatRules();
-
-            const ruleDone = SpreadsheetApp.newConditionalFormatRule()
-                .whenTextEqualTo("Done")
-                .setBackground("#137333")
-                .setFontColor("#FFFFFF")
-                .setBold(true)
-                .setRanges([statusRange])
-                .build();
-
-            const ruleInProgress = SpreadsheetApp.newConditionalFormatRule()
-                .whenTextEqualTo("In Progress")
-                .setBackground("#0B57D0")
-                .setFontColor("#FFFFFF")
-                .setBold(true)
-                .setRanges([statusRange])
-                .build();
-
-            const ruleToDo = SpreadsheetApp.newConditionalFormatRule()
-                .whenTextEqualTo("To do")
-                .setBackground("#E5E7EB")
-                .setFontColor("#374151")
-                .setBold(true)
-                .setRanges([statusRange])
-                .build();
-
-            rules.push(ruleDone, ruleInProgress, ruleToDo);
-            sheet.setConditionalFormatRules(rules);
-        }
-
-        totalWeeksProcessed++;
     });
 
-    SpreadsheetApp.getUi().alert(`✅ Đã đồng bộ hoàn tất! Số tuần đã xử lý: ${totalWeeksProcessed}`);
+    // F. Làm sạch toàn bộ phạm vi cũ từ startRow đến cuối Sheet để xóa triệt để khoảng trắng thừa
+    lastRow = sheet.getLastRow();
+    if (lastRow >= startRow) {
+        const rowsToClear = lastRow - startRow + 1;
+        const clearRange = sheet.getRange(startRow, 1, rowsToClear, 10);
+        clearRange.clearContent();
+        clearRange.clearFormat();
+        clearRange.clearDataValidations();
+    }
+
+    // G. Ghi toàn bộ dữ liệu liền mạch từ startRow
+    if (allRowsToInsert.length > 0) {
+        const dataRange = sheet.getRange(startRow, 1, allRowsToInsert.length, 10);
+        dataRange.setValues(allRowsToInsert);
+
+        // H. Định dạng dòng & Tô màu sắc
+        for (let i = 0; i < rowFormats.length; i++) {
+            const currRow = startRow + i;
+            const fmt = rowFormats[i];
+
+            if (fmt.type === 'WEEK_HEADER') {
+                const weekCell = sheet.getRange(currRow, 1);
+                weekCell.setFontWeight("bold").setFontColor("#CC0000").setFontSize(14).setFontFamily("Arial");
+            } else if (fmt.type === 'BANNER') {
+                const bannerRange = sheet.getRange(currRow, 1, 1, 10);
+                bannerRange.setBackground("#FFE599");
+                sheet.getRange(currRow, 1).setFontWeight("bold").setFontColor("#000000").setFontSize(10).setFontFamily("Arial");
+            } else if (fmt.type === 'TASK') {
+                const taskRange = sheet.getRange(currRow, 1, 1, 10);
+                sheet.getRange(currRow, 3).setDataValidation(roleValidation);
+                sheet.getRange(currRow, 7).setDataValidation(statusValidation);
+                sheet.getRange(currRow, 8).setDataValidation(accountValidation);
+
+                // Căn lề
+                sheet.getRange(currRow, 2).setHorizontalAlignment("left").setWrap(true).setFontFamily("Arial");
+                sheet.getRange(currRow, 3).setHorizontalAlignment("center");
+                sheet.getRange(currRow, 5, 1, 4).setHorizontalAlignment("center");
+
+                // Tô màu Status Chip (Cột G)
+                const statusCell = sheet.getRange(currRow, 7);
+                const stVal = fmt.finalStatus || (fmt.task ? fmt.task.status : "To do");
+                if (stVal === 'Done') {
+                    statusCell.setBackground("#137333").setFontColor("#FFFFFF").setFontWeight("bold");
+                } else if (stVal === 'In Progress') {
+                    statusCell.setBackground("#0B57D0").setFontColor("#FFFFFF").setFontWeight("bold");
+                } else {
+                    statusCell.setBackground("#E5E7EB").setFontColor("#374151").setFontWeight("bold");
+                }
+
+                taskRange.setBorder(true, true, true, true, true, true, "#E2E8F0", SpreadsheetApp.BorderStyle.SOLID);
+            } else if (fmt.type === 'EMPTY') {
+                sheet.getRange(currRow, 1, 1, 10).setBackground(null);
+            }
+        }
+    }
+
+    SpreadsheetApp.getUi().alert(`✅ Đã đồng bộ hoàn tất! Tổng số tuần: ${sortedWeekKeys.length} tuần, tổng số dòng: ${allRowsToInsert.length}`);
 }
 
 /**

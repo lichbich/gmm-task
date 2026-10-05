@@ -16,6 +16,7 @@ import { TaskModal } from '../components/TaskModal';
 import { TaskDetailModal } from '../components/TaskDetailModal';
 import { LoginModal } from '../components/LoginModal';
 import { QuickResourceFloatingButton } from '../components/QuickResourceFloatingButton';
+import { AutoUpdateBanner } from '../components/AutoUpdateBanner';
 import { Task } from '../types/task';
 
 function MainApp() {
@@ -282,6 +283,9 @@ function MainApp() {
           />
         </>
       )}
+
+      {/* Floating Auto Update Banner */}
+      <AutoUpdateBanner />
     </div>
   );
 }

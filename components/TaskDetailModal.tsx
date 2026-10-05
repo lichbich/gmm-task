@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
-import { Task, TaskActivityLog, getUserRoleColorClass, getUserRoleInSpec, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
+import { Task, TaskActivityLog, getUserRoleColorClass, getUserRoleInSpec, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, getMemberTaskEffort } from '../types/task';
 import {
   X,
   MessageSquare,
@@ -62,6 +62,7 @@ import { RichDescriptionViewer } from './common/RichDescriptionViewer';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -115,6 +116,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   // Keep task updated in real-time with context
   const task = tasks.find((t) => t.id === taskProp?.id) || taskProp;
+
+  // Calculate total accumulated effort across all weeks
+  const accumulatedEffort = useMemo(() => {
+    return calculateTaskAccumulatedEffort(task, tasks, weeklyArchives);
+  }, [task, tasks, weeklyArchives]);
 
   const [notesText, setNotesText] = useState('');
   const [quickComment, setQuickComment] = useState('');
@@ -840,7 +846,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {/* Assignee Card */}
               <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
-                <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Người phụ trách:</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium">Người phụ trách chính:</span>
+                  {task.supporterAccounts && task.supporterAccounts.length > 0 && task.assigneeAccount && (
+                    <span className="text-[10.5px] font-bold font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
+                      {getMemberTaskEffort(task, task.assigneeAccount)}h
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2.5">
                   <UserAvatar
                     user={assigneeUser}
@@ -890,16 +903,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Thành viên Collab:</span>
+                    <span>Thành viên Collab ({task.supporterAccounts.length}):</span>
                   </span>
-                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
-                    {task.supporterAccounts.length} thành viên
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                    Tổng task: {task.actualEffort || 0}h
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {task.supporterAccounts.map((supAcc) => {
                     const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
                     const supRoleInTask = supUser ? getUserRoleInSpec(supUser, task.role) : 'Member';
+                    const supEffort = getMemberTaskEffort(task, supAcc);
                     return (
                       <div
                         key={supAcc}
@@ -920,8 +934,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                             @{supAcc}
                           </span>
                         </div>
+                        <span className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
+                          {supEffort}h
+                        </span>
                         <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                          Supporter
+                          Collab
                         </span>
                       </div>
                     );
@@ -933,11 +950,20 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             {/* Bottom row: Effort and Completion Progress */}
             <div className="grid grid-cols-2 gap-2.5">
               <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-                <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Effort Thực tế / Ước tính:</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium">
+                    Effort Tuần {displayWeekNumber}:
+                  </span>
+                  {accumulatedEffort.hasMultiWeekHistory && (
+                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
+                      Tổng: {accumulatedEffort.totalEffort}h
+                    </span>
+                  )}
+                </div>
                 <div className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 flex items-baseline gap-1">
                   <span>{task.actualEffort}h</span>
                   <span className="text-slate-300 dark:text-slate-600 font-normal">/</span>
-                  <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{task.estimatedEffort}h</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{task.estimatedEffort}h (Est)</span>
                 </div>
               </div>
 
@@ -959,6 +985,48 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Multi-week Accumulated Effort Breakdown */}
+            {accumulatedEffort.hasMultiWeekHistory && (
+              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/60 space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span>Tổng Effort Lũy Kế ({accumulatedEffort.chainTaskCount} tuần làm việc):</span>
+                  </span>
+                  <span className="font-mono font-extrabold text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                    Tổng: {accumulatedEffort.totalEffort}h
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-0.5">
+                  {accumulatedEffort.weeklyBreakdown.map((item) => (
+                    <div
+                      key={item.weekNumber}
+                      className={`p-2 rounded-lg border text-xs flex flex-col justify-between transition-colors ${
+                        item.isCurrentWeek
+                          ? 'bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-300 dark:border-indigo-700 shadow-2xs'
+                          : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
+                        <span>Tuần {item.weekNumber}</span>
+                        {item.isCurrentWeek && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-600 text-white font-bold">Tuần này</span>
+                        )}
+                      </div>
+                      <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                        <span className="font-mono font-bold text-xs text-slate-800 dark:text-slate-100">
+                          {item.effort}h
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                          {item.percentage}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Start Date & End Date Row if present */}
             {(task.startDate || task.endDate) && (

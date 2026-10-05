@@ -17,11 +17,13 @@ import {
   isUserAdminOrPM,
   getTodayDateOnlyString,
   formatDateOnlyDisplay,
+  getMemberTaskEffort,
 } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
+import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
 import {
   Search,
   Plus,
@@ -721,7 +723,14 @@ const getRoleOrderRank = (roleCode?: string): number => {
   const totalEstimatedEffort =
     Math.round(filteredTasks.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0) * 100) / 100;
   const totalActualEffort =
-    Math.round(filteredTasks.reduce((acc, t) => acc + (t.actualEffort || 0), 0) * 100) / 100;
+    Math.round(
+      filteredTasks.reduce((acc, t) => {
+        if (subTab === 'MY_TASKS' && currentUser?.account) {
+          return acc + getMemberTaskEffort(t, currentUser.account);
+        }
+        return acc + (t.actualEffort || 0);
+      }, 0) * 100
+    ) / 100;
 
   const getStatusBadge = (status: TaskStatus) => {
     switch (status) {
@@ -772,6 +781,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
     const effStatus = getEffectiveTaskStatus(t);
+    const accEffort = calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
     const isTaskDone = effStatus === 'Done' || t.status === 'Done' || t.completionPercentage === 100;
     // A task is officially reported if it is Done 100% OR submitted at/after Sunday 12:00 PM of that week
     const isReported =
@@ -866,37 +876,57 @@ const getRoleOrderRank = (roleCode?: string): number => {
         {/* Effort */}
         <td className="py-3 px-3 text-center font-mono">
           <div className="flex flex-col items-center">
-            {isReported ? (
-              <>
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                  {t.actualEffort ?? t.estimatedEffort}h
-                </span>
-                {t.actualEffort !== undefined && t.actualEffort !== t.estimatedEffort && (
-                  <span className="text-[9px] text-slate-400 dark:text-slate-400">
-                    est: {t.estimatedEffort}h
+            {(() => {
+              const currentEffort = forAccount ? getMemberTaskEffort(t, forAccount) : (t.actualEffort ?? t.estimatedEffort);
+              if (isReported) {
+                return (
+                  <>
+                    <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                      {currentEffort}h
+                    </span>
+                    {t.estimatedEffort !== undefined && currentEffort !== t.estimatedEffort && (
+                      <span className="text-[9px] text-slate-400 dark:text-slate-400">
+                        est: {t.estimatedEffort}h
+                      </span>
+                    )}
+                  </>
+                );
+              }
+
+              if (currentEffort > 0) {
+                return (
+                  <>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">
+                      {currentEffort}h
+                    </span>
+                    {t.estimatedEffort !== undefined && currentEffort !== t.estimatedEffort && (
+                      <span className="text-[9px] text-slate-400 dark:text-slate-400">
+                        est: {t.estimatedEffort}h
+                      </span>
+                    )}
+                  </>
+                );
+              }
+
+              return (
+                <>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    {t.estimatedEffort}h
                   </span>
-                )}
-              </>
-            ) : t.actualEffort !== undefined && t.actualEffort > 0 ? (
-              <>
-                <span className="font-medium text-slate-700 dark:text-slate-300">
-                  {t.actualEffort}h
-                </span>
-                {t.actualEffort !== t.estimatedEffort && (
-                  <span className="text-[9px] text-slate-400 dark:text-slate-400">
-                    est: {t.estimatedEffort}h
+                  <span className="text-[9px] text-slate-400 dark:text-slate-500">
+                    (est)
                   </span>
-                )}
-              </>
-            ) : (
-              <>
-                <span className="font-medium text-slate-700 dark:text-slate-300">
-                  {t.estimatedEffort}h
-                </span>
-                <span className="text-[9px] text-slate-400 dark:text-slate-500">
-                  (est)
-                </span>
-              </>
+                </>
+              );
+            })()}
+
+            {accEffort.hasMultiWeekHistory && (
+              <span
+                className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/90 dark:bg-indigo-950/80 dark:text-indigo-300 dark:border-indigo-800 cursor-default"
+                title={`Tổng Effort qua ${accEffort.chainTaskCount} tuần: ${accEffort.totalEffort}h (${accEffort.weeklyBreakdown.map(wb => `T${wb.weekNumber}: ${wb.effort}h`).join(' + ')})`}
+              >
+                Tổng: {accEffort.totalEffort}h
+              </span>
             )}
           </div>
         </td>
@@ -1133,6 +1163,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
     const effStatus = getEffectiveTaskStatus(t);
+    const accEffort = calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
     const isTaskDone = effStatus === 'Done' || t.status === 'Done' || t.completionPercentage === 100;
     const isReported =
       isTaskDone ||
@@ -1270,12 +1301,30 @@ const getRoleOrderRank = (roleCode?: string): number => {
             <div className="text-right">
               <span className="text-[11px] text-slate-400 dark:text-slate-400 mr-1">Effort:</span>
               <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs">
-                {isReported ? `${t.actualEffort ?? t.estimatedEffort}h` : t.actualEffort !== undefined && t.actualEffort > 0 ? `${t.actualEffort}h` : `${t.estimatedEffort}h`}
+                {(() => {
+                  const currentEffort = forAccount ? getMemberTaskEffort(t, forAccount) : (t.actualEffort ?? t.estimatedEffort);
+                  return isReported
+                    ? `${currentEffort}h`
+                    : currentEffort > 0
+                    ? `${currentEffort}h`
+                    : `${t.estimatedEffort}h`;
+                })()}
               </span>
-              {((isReported && t.actualEffort !== undefined && t.actualEffort !== t.estimatedEffort) || (!isReported && t.actualEffort !== undefined && t.actualEffort > 0 && t.actualEffort !== t.estimatedEffort)) && (
-                <span className="text-[10px] text-slate-400 ml-1 font-mono">
-                  (est: {t.estimatedEffort}h)
-                </span>
+              {(() => {
+                const currentEffort = forAccount ? getMemberTaskEffort(t, forAccount) : (t.actualEffort ?? t.estimatedEffort);
+                if (t.estimatedEffort !== undefined && currentEffort !== t.estimatedEffort) {
+                  return (
+                    <span className="text-[10px] text-slate-400 ml-1 font-mono">
+                      (est: {t.estimatedEffort}h)
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+              {accEffort.hasMultiWeekHistory && (
+                <div className="text-[9.5px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                  (Tổng: {accEffort.totalEffort}h)
+                </div>
               )}
             </div>
           </div>

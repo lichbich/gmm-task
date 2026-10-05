@@ -1,12 +1,13 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, TicketActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
+import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, TicketActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, getMemberTaskEffort } from '../types/task';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, update, remove, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
 import { ConfirmModal, ConfirmDialogOptions } from '../components/ConfirmModal';
 import { AppNotification } from '../types/notification';
+import { APP_VERSION, APP_RELEASE_NOTE } from '../lib/version';
 import {
   registerDeviceForPushNotifications,
   sendPushNotification,
@@ -242,7 +243,8 @@ interface AppContextType {
     completionPercentage: number,
     status: TaskStatus,
     notes?: string,
-    extraDates?: { startDate?: string; endDate?: string }
+    extraDates?: { startDate?: string; endDate?: string },
+    reportingMemberAccount?: string
   ) => void;
   updateTaskNotes: (taskId: string, notes: string, options?: UpdateTaskNotesOptions) => void;
   
@@ -296,6 +298,9 @@ interface AppContextType {
   theme: 'light' | 'dark';
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
+
+  appVersion: string;
+  broadcastSystemUpdate: (message?: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1815,7 +1820,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `tsk-${Date.now()}`,
       orderInMilestone: milestoneTasks.length + 1,
       status: initialStatus,
-      actualEffort: taskData.actualEffort || 0,
+      estimatedEffort: Math.min(24, Math.max(0, taskData.estimatedEffort !== undefined ? Number(taskData.estimatedEffort) || 0 : 2)),
+      actualEffort: Math.min(24, Math.max(0, Number(taskData.actualEffort) || 0)),
       completionPercentage: pct,
       weekNumber: taskData.weekNumber || selectedWeek,
       year: taskData.year || selectedYear,
@@ -1861,6 +1867,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updated = tasks.map((t) => {
       if (t.id !== id) return t;
+
+      if (updates.estimatedEffort !== undefined) {
+        updates.estimatedEffort = Math.min(24, Math.max(0, Number(updates.estimatedEffort) || 0));
+      }
+      if (updates.actualEffort !== undefined) {
+        updates.actualEffort = Math.min(24, Math.max(0, Number(updates.actualEffort) || 0));
+      }
 
       // If completionPercentage is explicitly set to 0 or is 0, ensure actualEffort is 0 and status is To do (cannot be Done)
       const effectivePct = updates.completionPercentage !== undefined ? updates.completionPercentage : (t.completionPercentage || 0);
@@ -1979,6 +1992,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveLocalTasksCache(updated);
     if (targetTaskUpdated) {
       saveTaskToFirebase(targetTaskUpdated).catch(console.error);
+
+      // Also keep weeklyArchives snapshot synchronized if task is archived
+      const finalTask: Task = targetTaskUpdated;
+      const hasArchiveMatch = weeklyArchives.some((a) =>
+        a.tasksSnapshot?.some((st) => st.id === id)
+      );
+      if (hasArchiveMatch) {
+        const updatedArchives = weeklyArchives.map((a) => {
+          if (!a.tasksSnapshot?.some((st) => st.id === id)) return a;
+          return {
+            ...a,
+            tasksSnapshot: a.tasksSnapshot.map((st) =>
+              st.id === id ? { ...st, ...finalTask } : st
+            ),
+          };
+        });
+        setWeeklyArchives(updatedArchives);
+        syncArchivesToFirebase(updatedArchives).catch(console.error);
+      }
     }
 
     // Push notification if assignee was changed or assigned
@@ -2173,7 +2205,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     completionPercentage: number,
     status: TaskStatus,
     notes?: string,
-    extraDates?: { startDate?: string; endDate?: string }
+    extraDates?: { startDate?: string; endDate?: string },
+    reportingMemberAccount?: string
   ) => {
     const targetTask = tasks.find((t) => t.id === taskId);
     const weekNo = targetTask?.weekNumber || selectedWeek;
@@ -2184,15 +2217,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nowIso = new Date().toISOString();
     const todayStr = getTodayDateOnlyString(simulatedTime);
 
+    const reportingAccount =
+      reportingMemberAccount ||
+      authSession?.account ||
+      targetTask?.assigneeAccount ||
+      'member';
+
     const estEffort = targetTask?.estimatedEffort || 0;
-    // If completion percentage is 0%, actualEffort is automatically 0h and status is To do (cannot be Done)
-    // If completion percentage > 0 and actualEffort is 0, default to estimatedEffort
-    const finalActualEffort =
-      completionPercentage === 0
-        ? 0
-        : actualEffort > 0
-        ? actualEffort
-        : estEffort;
+
+    // Handle memberEfforts map
+    let nextMemberEfforts: Record<string, number> = { ...(targetTask?.memberEfforts || {}) };
+    const hasExistingMemberEfforts = targetTask?.memberEfforts && Object.keys(targetTask.memberEfforts).length > 0;
+
+    if (!hasExistingMemberEfforts) {
+      if (targetTask?.assigneeAccount) {
+        nextMemberEfforts[targetTask.assigneeAccount] = targetTask.actualEffort || 0;
+      }
+      if (targetTask?.supporterAccounts && Array.isArray(targetTask.supporterAccounts)) {
+        targetTask.supporterAccounts.forEach((sup) => {
+          if (sup && nextMemberEfforts[sup] === undefined) {
+            nextMemberEfforts[sup] = 0;
+          }
+        });
+      }
+    }
+
+    const prevMemberEffort = getMemberTaskEffort(targetTask, reportingAccount);
+
+    if (completionPercentage === 0) {
+      if (reportingAccount) {
+        nextMemberEfforts[reportingAccount] = 0;
+      }
+    } else {
+      const finalMemberEffort = Math.min(
+        24,
+        Math.max(
+          0,
+          actualEffort > 0
+            ? actualEffort
+            : estEffort
+        )
+      );
+      if (reportingAccount) {
+        nextMemberEfforts[reportingAccount] = finalMemberEffort;
+      }
+    }
+
+    const hasCollaborators =
+      (targetTask?.supporterAccounts && targetTask.supporterAccounts.length > 0) ||
+      Object.keys(nextMemberEfforts).length > 1;
+
+    let finalTotalActualEffort: number;
+    if (completionPercentage === 0) {
+      finalTotalActualEffort = 0;
+    } else if (hasCollaborators) {
+      finalTotalActualEffort = Math.round(
+        Object.values(nextMemberEfforts).reduce((sum, val) => sum + (Number(val) || 0), 0) * 100
+      ) / 100;
+    } else {
+      finalTotalActualEffort = Math.min(
+        24,
+        Math.max(0, actualEffort > 0 ? actualEffort : estEffort)
+      );
+    }
+
     const isSundayNoonOrLater = now.getTime() >= sundayNoon.getTime();
     const finalStatus: TaskStatus =
       completionPercentage === 0
@@ -2243,8 +2331,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (completionPercentage !== t.completionPercentage) {
         changes.push(`Tiến độ: ${t.completionPercentage}% ➔ ${completionPercentage}%`);
       }
-      if (finalActualEffort !== t.actualEffort) {
-        changes.push(`Effort: ${t.actualEffort}h ➔ ${finalActualEffort}h`);
+      if (hasCollaborators) {
+        const curMemberEff = nextMemberEfforts[reportingAccount] || 0;
+        if (curMemberEff !== prevMemberEffort) {
+          changes.push(`Effort @${reportingAccount}: ${prevMemberEffort}h ➔ ${curMemberEff}h (Tổng task: ${finalTotalActualEffort}h)`);
+        }
+      } else if (finalTotalActualEffort !== t.actualEffort) {
+        changes.push(`Effort: ${t.actualEffort}h ➔ ${finalTotalActualEffort}h`);
       }
       if (finalStartDate !== t.startDate) {
         changes.push(`Ngày bắt đầu: "${formatDateOnlyDisplay(t.startDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(finalStartDate) || 'Chưa đặt'}"`);
@@ -2274,7 +2367,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       updatedReportTask = {
         ...t,
-        actualEffort: finalActualEffort,
+        actualEffort: finalTotalActualEffort,
+        memberEfforts: nextMemberEfforts,
         completionPercentage,
         status: finalStatus,
         startDate: finalStartDate,
@@ -2536,7 +2630,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
-    const newTasksList = [...tasks, ...continuationTasks];
+    // Unworked tasks (0% progress & 0h effort) are MOVED to nextWeek (removed from selectedWeek to prevent clutter)
+    const unworkedIds = new Set(unworkedTasks.map((t) => t.id));
+    const remainingTasks = tasks.filter((t) => !unworkedIds.has(t.id));
+    const newTasksList = [...remainingTasks, ...continuationTasks];
+
+    if (unworkedIds.size > 0) {
+      deleteMultipleTasksFromFirebase(Array.from(unworkedIds), authSession?.account).catch(console.error);
+    }
+
     setTasks(newTasksList);
     saveLocalTasksCache(newTasksList);
     syncTasksToFirebase(newTasksList).catch(console.error);
@@ -2694,7 +2796,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         (!!task.lastSubmittedAt &&
           new Date(task.lastSubmittedAt).getTime() >= sundayNoon.getTime());
 
-      // Credit the full task effort and status to every participant
+      // Credit individual member effort and status to every participant
       activeUsers.forEach((u) => {
         if (!participantAccounts.has(u.account.toLowerCase())) return;
 
@@ -2706,8 +2808,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           hasUnsubmitted: false,
         };
 
+        const memberEffort = task.completionPercentage === 0 ? 0 : getMemberTaskEffort(task, u.account);
+
         entry.total += 1;
-        entry.totalEffort = Math.round((entry.totalEffort + effectiveEffort) * 100) / 100;
+        entry.totalEffort = Math.round((entry.totalEffort + memberEffort) * 100) / 100;
 
         if (isTaskReported) {
           entry.count += 1;
@@ -3370,6 +3474,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     seedFirebaseMockData();
   };
 
+  const broadcastSystemUpdate = useCallback(async (message?: string) => {
+    try {
+      const configRef = ref(database, `${DB_ROOT_NODE}/systemConfig`);
+      await update(configRef, {
+        version: APP_VERSION,
+        lastDeployTime: Date.now(),
+        message: message || APP_RELEASE_NOTE,
+      });
+    } catch (err) {
+      console.error('Failed to broadcast system update:', err);
+    }
+  }, []);
+
   return (
     <AppContext.Provider
       value={{
@@ -3451,6 +3568,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         toggleTheme,
         setTheme,
+
+        appVersion: APP_VERSION,
+        broadcastSystemUpdate,
       }}
     >
       {children}

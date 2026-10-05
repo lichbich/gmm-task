@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket, getUserRoleColorClass, isUserAdminOrPM, getUserLevelRank, isSpecializationMatchingRole } from '../types/task';
+import { Task, WeeklyHistoryArchive, TaskStatus, isTaskUnworked, Ticket, getUserRoleColorClass, isUserAdminOrPM, getUserLevelRank, isSpecializationMatchingRole, getMemberTaskEffort } from '../types/task';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
@@ -10,6 +10,7 @@ import { TaskShareButton } from './common/TaskShareButton';
 import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
+import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
 import {
   History,
   FolderArchive,
@@ -238,11 +239,15 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     );
 
     const map = new Map<string, Task>();
-    snapshot.forEach((t) => map.set(t.id, t));
+    // 1. Load snapshot items, but if live task exists in `tasks`, use the up-to-date task from `tasks`
+    snapshot.forEach((snapTask) => {
+      const liveTask = tasks.find((t) => t.id === snapTask.id);
+      map.set(snapTask.id, liveTask || snapTask);
+    });
+
+    // 2. Add or update with tasks currently assigned to this week
     currentWeekTasks.forEach((t) => {
-      if (!map.has(t.id)) {
-        map.set(t.id, t);
-      }
+      map.set(t.id, t);
     });
 
     // EXCLUDE 0% & 0h unworked tasks from historical log display
@@ -643,8 +648,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                           return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
                         });
 
-                        const roleTotalEffort = accountGroups.reduce((accTotal, [_, accTasks]) => {
-                          return accTotal + accTasks.reduce((mTotal, curr) => mTotal + (curr.completionPercentage === 0 ? 0 : (curr.actualEffort || 0)), 0);
+                        const roleTotalEffort = accountGroups.reduce((accTotal, [acc, accTasks]) => {
+                          return accTotal + accTasks.reduce((mTotal, curr) => mTotal + (curr.completionPercentage === 0 ? 0 : getMemberTaskEffort(curr, acc)), 0);
                         }, 0);
 
                         const totalRoleTaskCount = accountGroups.reduce((accTotal, [_, accTasks]) => accTotal + accTasks.length, 0);
@@ -676,7 +681,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                 {[...accTasks].sort(sortByPriority).map((t) => {
                                   const milestone = milestones.find((m) => m.id === t.milestoneId);
                                   const unreadNotes = hasUnreadNote(t);
-                                  const effectiveEffort = t.completionPercentage === 0 ? 0 : (t.actualEffort || 0);
+                                  const effectiveEffort = t.completionPercentage === 0 ? 0 : getMemberTaskEffort(t, acc || t.assigneeAccount);
+                                  const accEffort = calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
                                   const currentAcc = acc || t.assigneeAccount;
                                   const assigneeUser = users.find((u) => u.account.toLowerCase() === (currentAcc || '').toLowerCase());
 
@@ -745,8 +751,20 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                         </span>
                                       </td>
 
-                                      <td className="py-3 px-3 text-center font-mono font-bold text-indigo-600">
-                                        {effectiveEffort}h
+                                      <td className="py-3 px-3 text-center font-mono">
+                                        <div className="flex flex-col items-center">
+                                          <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                                            {effectiveEffort}h
+                                          </span>
+                                          {accEffort.hasMultiWeekHistory && (
+                                            <span
+                                              className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800 cursor-default"
+                                              title={`Tổng Effort qua ${accEffort.chainTaskCount} tuần: ${accEffort.totalEffort}h (${accEffort.weeklyBreakdown.map((wb) => `T${wb.weekNumber}: ${wb.effort}h`).join(' + ')})`}
+                                            >
+                                              Tổng: {accEffort.totalEffort}h
+                                            </span>
+                                          )}
+                                        </div>
                                       </td>
 
                                       <td className="py-3 px-3 text-center">
@@ -957,8 +975,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                       return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
                     });
 
-                    const roleTotalEffort = accountGroups.reduce((accTotal, [_, accTasks]) => {
-                      return accTotal + accTasks.reduce((mTotal, curr) => mTotal + (curr.completionPercentage === 0 ? 0 : (curr.actualEffort || 0)), 0);
+                    const roleTotalEffort = accountGroups.reduce((accTotal, [acc, accTasks]) => {
+                      return accTotal + accTasks.reduce((mTotal, curr) => mTotal + (curr.completionPercentage === 0 ? 0 : getMemberTaskEffort(curr, acc)), 0);
                     }, 0);
 
                     const totalRoleTaskCount = accountGroups.reduce((accTotal, [_, accTasks]) => accTotal + accTasks.length, 0);
@@ -982,7 +1000,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                 const assigneeAward = activeArchive.awards.find((a) => a.account.toLowerCase() === (currentAcc || '').toLowerCase());
                                 const isTopEffort = assigneeAward?.isTopEffort || false;
                                 const isLate = assigneeAward?.isLate || t.isSubmittedLate || false;
-                                const effectiveEffort = t.completionPercentage === 0 ? 0 : (t.actualEffort || 0);
+                                const effectiveEffort = t.completionPercentage === 0 ? 0 : getMemberTaskEffort(t, currentAcc);
+                                const accEffort = calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
                                 const assigneeUser = users.find((u) => u.account.toLowerCase() === (currentAcc || '').toLowerCase());
 
                                 return (
@@ -1063,9 +1082,16 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                       </div>
 
                                       <div className="flex items-center gap-2">
-                                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                                          {effectiveEffort}h
-                                        </span>
+                                        <div className="text-right">
+                                          <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                            {effectiveEffort}h
+                                          </span>
+                                          {accEffort.hasMultiWeekHistory && (
+                                            <span className="text-[9.5px] font-bold text-indigo-600 dark:text-indigo-400 font-mono block">
+                                              (Tổng: {accEffort.totalEffort}h)
+                                            </span>
+                                          )}
+                                        </div>
                                         <span className="text-slate-400 font-mono">
                                           ({t.completionPercentage}%)
                                         </span>

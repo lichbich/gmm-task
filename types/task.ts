@@ -308,6 +308,7 @@ export interface Task {
   role: Specialization;
   estimatedEffort: number;
   actualEffort: number;
+  memberEfforts?: Record<string, number>; // Bóc tách giờ làm theo từng thành viên (VD: { "ChauNNB": 9, "AnhNHM": 3 })
   status: TaskStatus;
   assigneeAccount: string; // e.g. "NhiHT" or "" if unassigned
   supporterAccounts?: string[]; // Danh sách tài khoản người hỗ trợ task (Supporters)
@@ -328,6 +329,43 @@ export interface Task {
   activityLogs?: TaskActivityLog[]; // Nhật ký lịch sử các lần cập nhật task
   ticketId?: string; // ID của request ticket liên kết nếu task được sinh ra từ ticket
 }
+
+/**
+ * Lấy số giờ Effort thực tế của một thành viên cụ thể trong task (cho cả task đơn và task collab).
+ */
+export const getMemberTaskEffort = (task?: Task | null, account?: string): number => {
+  if (!task) return 0;
+  if (!account || !account.trim()) return Number(task.actualEffort) || 0;
+
+  const cleanAcc = account.trim().toLowerCase();
+
+  if (task.memberEfforts && typeof task.memberEfforts === 'object') {
+    // 1. Direct match
+    if (task.memberEfforts[account] !== undefined) {
+      return Number(task.memberEfforts[account]) || 0;
+    }
+    // 2. Case-insensitive key match
+    for (const [key, val] of Object.entries(task.memberEfforts)) {
+      if (key.trim().toLowerCase() === cleanAcc) {
+        return Number(val) || 0;
+      }
+    }
+  }
+
+  // Fallback: If no memberEfforts map exists yet
+  const primaryAcc = (task.assigneeAccount || '').trim().toLowerCase();
+  const isSupporter = task.supporterAccounts?.some((s) => s.trim().toLowerCase() === cleanAcc);
+
+  if (primaryAcc === cleanAcc) {
+    return Number(task.actualEffort) || 0;
+  }
+
+  if (isSupporter) {
+    return 0;
+  }
+
+  return Number(task.actualEffort) || 0;
+};
 
 export interface WeeklyAwardSummary {
   account: string;

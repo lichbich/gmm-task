@@ -594,10 +594,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     finalCompletionPercentage: number,
     finalStatus: TaskStatus
   ) => {
-    const parsedEffort =
+    const rawParsedEffort =
       typeof estimatedEffort === 'number'
         ? estimatedEffort
         : parseFloat(String(estimatedEffort).replace(',', '.')) || 0;
+    const parsedEffort = Math.min(24, Math.max(0, rawParsedEffort));
+    const safeActualEffort = Math.min(24, Math.max(0, finalActualEffort));
     const isAdminOrPM = isUserAdminOrPM(currentUser);
     const cleanSupporters = supporterAccounts.filter(
       (a) => !assigneeAccount || a.toLowerCase() !== assigneeAccount.toLowerCase()
@@ -624,7 +626,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         notes,
         ...(isAdminOrPM
           ? {
-              actualEffort: finalActualEffort,
+              actualEffort: safeActualEffort,
               completionPercentage: finalCompletionPercentage,
               ...(finalCompletionPercentage === 100 || finalStatus === 'Done'
                 ? { lastSubmittedAt: task.lastSubmittedAt || new Date().toISOString() }
@@ -644,7 +646,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         description,
         role,
         estimatedEffort: parsedEffort,
-        actualEffort: finalActualEffort,
+        actualEffort: safeActualEffort,
         status: finalStatus,
         priority,
         assigneeAccount,
@@ -678,7 +680,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         ? actualEffort
         : parseFloat(String(actualEffort).replace(',', '.')) || 0;
 
+    if (parsedEffort > 24) {
+      alert('Số giờ ước tính (Est) không được vượt quá 24h!');
+      return;
+    }
+
     const isAdminOrPM = isUserAdminOrPM(currentUser);
+
+    if (isAdminOrPM && rawActualEffort > 24) {
+      alert('Số giờ thực tế (Effort) không được vượt quá 24h!');
+      return;
+    }
 
     if (isAdminOrPM && rawActualEffort > 0 && completionPercentage === 0) {
       confirmDialog({
@@ -1015,6 +1027,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       type="number"
                       step="any"
                       min="0.1"
+                      max="24"
                       value={estimatedEffort}
                       onChange={(e) => {
                         setEstimatedEffort(e.target.value);
@@ -1256,6 +1269,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                           type="number"
                           step="any"
                           min="0"
+                          max="24"
                           value={actualEffort}
                           onChange={(e) => setActualEffort(e.target.value)}
                           placeholder="0.0"
