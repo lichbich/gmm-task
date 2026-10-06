@@ -267,6 +267,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     } else {
       setStatus('To do');
       setActualEffort(0);
+      if (task) {
+        setStartDate(task.startDate || '');
+        setEndDate(task.endDate || '');
+      }
     }
   };
 
