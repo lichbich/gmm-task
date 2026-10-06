@@ -216,8 +216,8 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
         ? actualEffort
         : parseFloat(String(actualEffort).replace(',', '.')) || 0;
 
-    // If progress > 0% but actual effort is not filled or is 0, default to estimated effort
-    if (completionPercentage > 0 && parsedEffort === 0) {
+    // Only default to estimated effort if task is Done (100%) and actual effort was left empty (0)
+    if (completionPercentage === 100 && parsedEffort === 0) {
       parsedEffort = task.estimatedEffort || 0;
     }
 
@@ -237,6 +237,26 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
           submitTaskReport(task.id, 0, 0, 'To do', notes, {
             startDate: undefined,
             endDate: undefined,
+          }, reportingAccount);
+          forceClose();
+        },
+      });
+      return;
+    }
+
+    // If progress is In Progress (> 0% and < 100%) but actual effort is 0, prompt user to enter effort
+    if (completionPercentage > 0 && completionPercentage < 100 && parsedEffort === 0) {
+      confirmDialog({
+        title: 'Chưa nhập số giờ thực tế trong tuần',
+        message: `Bạn đang cập nhật tiến độ ${completionPercentage}% (In Progress) nhưng số giờ làm việc thực tế đang để 0h.\n\n• Hãy nhập số giờ thực tế bạn đã làm việc trong tuần này cho task để tính công và ghi nhận báo cáo chuẩn xác.\n• Bấm "Quay lại điền giờ" để nhập số giờ thực tế, hoặc "Vẫn lưu 0h" nếu tuần này chưa làm thêm giờ nào.`,
+        confirmText: 'Vẫn lưu 0h',
+        cancelText: 'Quay lại điền giờ',
+        type: 'warning',
+        onConfirm: () => {
+          const finalStatus: TaskStatus = isSundayOrLate ? 'Done' : 'In Progress';
+          submitTaskReport(task.id, 0, completionPercentage, finalStatus, notes, {
+            startDate: startDate.trim() || undefined,
+            endDate: endDate.trim() || undefined,
           }, reportingAccount);
           forceClose();
         },
@@ -508,12 +528,14 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                     setStartDate((prev) => prev || todayStr);
                     setEndDate((prev) => (!prev || prev > todayStr ? todayStr : prev));
                   } else {
-                    // 0 < val < 100
+                    // 0 < val < 100 (In Progress)
+                    // If user was at 100% (Done) and drags slider back to In Progress, restore previous effort before Done
+                    if (completionPercentage === 100) {
+                      if (prevBeforeDoneRef.current && prevBeforeDoneRef.current.percentage < 100) {
+                        setActualEffort(prevBeforeDoneRef.current.effort);
+                      }
+                    }
                     prevBeforeDoneRef.current = { percentage: val, effort: actualEffort, startDate: startDate || todayStr };
-                    setActualEffort((prev) => {
-                      const p = typeof prev === 'number' ? prev : parseFloat(String(prev).replace(',', '.')) || 0;
-                      return p > 0 ? prev : (task.estimatedEffort || 0);
-                    });
                     // Auto-fill Start Date if not already set
                     setStartDate((prev) => prev || todayStr);
                     // Clear End Date if previously marked 100% with today/past date
@@ -524,6 +546,17 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 }}
                 className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 disabled:opacity-50"
               />
+
+              {/* Reminder when In Progress but effort is 0 */}
+              {(typeof actualEffort === 'number' ? actualEffort : parseFloat(String(actualEffort).replace(',', '.')) || 0) === 0 && completionPercentage > 0 && completionPercentage < 100 && (
+                <div className="mt-2.5 p-3 bg-indigo-50/80 border border-indigo-200/80 rounded-xl flex items-start gap-2.5 text-xs text-indigo-900 animate-in fade-in duration-200">
+                  <Clock className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-indigo-950">Vui lòng nhập số giờ thực tế:</span>
+                    Task đang ở trạng thái <strong>In Progress ({completionPercentage}%)</strong>. Vui lòng nhập số giờ bạn đã làm trong tuần này vào ô <strong>Số Giờ Làm Việc Thực Tế</strong> ở trên.
+                  </div>
+                </div>
+              )}
 
               {/* Warning if effort > 0 but completion percentage is 0 */}
               {(typeof actualEffort === 'number' ? actualEffort : parseFloat(String(actualEffort).replace(',', '.')) || 0) > 0 && completionPercentage === 0 && (

@@ -263,9 +263,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       if (!endDate) setEndDate(todayStr);
     } else if (boundedPct > 0) {
       setStatus('In Progress');
-      if (currActual === 0 && parsedEst > 0) {
-        setActualEffort(parsedEst);
-      }
       if (!startDate) setStartDate(todayStr);
     } else {
       setStatus('To do');
@@ -304,9 +301,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       } else if (newStatus === 'In Progress') {
         const nextPct = (completionPercentage === 0 || completionPercentage === 100) ? 50 : completionPercentage;
         setCompletionPercentage(nextPct);
-        if (currActual === 0 && parsedEst > 0) {
-          setActualEffort(parsedEst);
-        }
       }
     }
   };
@@ -707,7 +701,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     }
 
     let parsedActualEffort = rawActualEffort;
-    if (isAdminOrPM && completionPercentage > 0 && parsedActualEffort === 0) {
+    if (isAdminOrPM && completionPercentage === 100 && parsedActualEffort === 0) {
       parsedActualEffort = parsedEffort;
     }
 
