@@ -48,6 +48,8 @@ import {
   RotateCcw,
   X,
   Ticket as TicketIcon,
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
@@ -60,6 +62,8 @@ import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { useModalAnimation } from '../hooks/useModalAnimation';
+import { AIWeeklySummaryModal } from './AIWeeklySummaryModal';
+import { isAIFeatureEnabled } from '../lib/geminiService';
 
 interface WorkScheduleTableProps {
   onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string, defaultRole?: string) => void;
@@ -85,6 +89,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     weeklyArchives,
     rollbackWeekArchive,
     tickets,
+    isUserAllowedAI,
   } = useApp();
 
   // Sub-tabs state: ALWAYS DEFAULT to 'MY_TASKS' when accessing
@@ -632,6 +637,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
   const [activeRoleInView, setActiveRoleInView] = useState<string>('');
   const [showFloatingRoleBar, setShowFloatingRoleBar] = useState<boolean>(false);
+  const [isAIWeeklySummaryOpen, setIsAIWeeklySummaryOpen] = useState<boolean>(false);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const isProgrammaticScrollRef = useRef<boolean>(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1574,19 +1580,34 @@ const getRoleOrderRank = (roleCode?: string): number => {
             </p>
           </div>
 
-          {/* Quick Rollback Button for Admin/PO if current week is finalized */}
-          {(isUserAdminOrPM(currentUser) || currentUser?.specializations?.includes('PO')) &&
-            weeklyArchives.some((a) => a.weekNumber === selectedWeek && (a.year || 2026) === selectedYear) && (
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            {/* AI Weekly Summary Button for Allowed Accounts */}
+            {isUserAllowedAI(currentUser, 'weeklyReport') && (
               <button
                 type="button"
-                onClick={() => rollbackWeekArchive(selectedWeek, selectedYear)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer shrink-0"
-                title={`Rollback / Hoàn tác chốt Tuần ${selectedWeek}, khôi phục lại toàn bộ dữ liệu task để kiểm tra lại`}
+                onClick={() => setIsAIWeeklySummaryOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 dark:bg-purple-950/40 hover:from-purple-100 hover:to-indigo-100 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700/70 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer shadow-2xs"
+                title={`Sử dụng AI Gemini để phân tích toàn bộ tiến độ, hiệu suất và rủi ro Tuần ${selectedWeek}`}
               >
-                <RotateCcw className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                <span>Rollback Chốt Tuần {selectedWeek}</span>
+                <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 animate-pulse" />
+                <span>AI Báo Cáo Tuần {selectedWeek}</span>
               </button>
             )}
+
+            {/* Quick Rollback Button for Admin/PO if current week is finalized */}
+            {(isUserAdminOrPM(currentUser) || currentUser?.specializations?.includes('PO')) &&
+              weeklyArchives.some((a) => a.weekNumber === selectedWeek && (a.year || 2026) === selectedYear) && (
+                <button
+                  type="button"
+                  onClick={() => rollbackWeekArchive(selectedWeek, selectedYear)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer"
+                  title={`Rollback / Hoàn tác chốt Tuần ${selectedWeek}, khôi phục lại toàn bộ dữ liệu task để kiểm tra lại`}
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                  <span>Rollback Chốt Tuần {selectedWeek}</span>
+                </button>
+              )}
+          </div>
         </div>
 
         {/* Navigation Sub-Tabs Switcher */}
@@ -2392,6 +2413,15 @@ const getRoleOrderRank = (roleCode?: string): number => {
           }}
         />
       )}
+
+      {/* AI Executive Weekly Summary Modal */}
+      <AIWeeklySummaryModal
+        isOpen={isAIWeeklySummaryOpen}
+        onClose={() => setIsAIWeeklySummaryOpen(false)}
+        weekNumber={selectedWeek}
+        year={selectedYear}
+        tasks={tasks}
+      />
     </div>
   );
 };

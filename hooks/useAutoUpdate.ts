@@ -46,9 +46,16 @@ export function isSafeToReload(): boolean {
 }
 
 export function useAutoUpdate() {
+  const isDev =
+    process.env.NODE_ENV === 'development' ||
+    (typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.endsWith('.local')));
+
   const [hasUpdate, setHasUpdate] = useState<boolean>(false);
   const [newVersionInfo, setNewVersionInfo] = useState<Partial<SystemVersionInfo> | null>(null);
-  const [isDismissed, setIsDismissed] = useState<boolean>(false);
+  const [isDismissed, setIsDismissed] = useState<boolean>(isDev);
   const [isIdle, setIsIdle] = useState<boolean>(false);
 
   const lastActivityRef = useRef<number>(Date.now());
@@ -74,7 +81,7 @@ export function useAutoUpdate() {
 
   // 1. Function to inspect remote version
   const checkVersion = useCallback(async () => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || isDev) return;
     try {
       const res = await fetch(`/api/version?t=${Date.now()}`, {
         cache: 'no-store',
@@ -106,10 +113,11 @@ export function useAutoUpdate() {
       // Fail silently on network drop
       console.debug('[AutoUpdate] Version check fetch skipped/failed:', err);
     }
-  }, [reloadNow]);
+  }, [isDev, reloadNow]);
 
   // 2. Realtime Firebase Listener for instant broadcast from Admin/Deploy
   useEffect(() => {
+    if (isDev) return;
     try {
       const configRef = ref(database, `${DB_ROOT_NODE}/systemConfig`);
       const unsubscribe = onValue(
@@ -149,10 +157,12 @@ export function useAutoUpdate() {
     } catch (err) {
       console.debug('[AutoUpdate] Firebase ref error:', err);
     }
-  }, [reloadNow]);
+  }, [isDev, reloadNow]);
 
   // 3. Periodic Polling & Visibility Change
   useEffect(() => {
+    if (isDev) return;
+
     // Initial check after short delay (let app initialize first)
     const initialTimer = setTimeout(() => {
       checkVersion();
@@ -204,10 +214,12 @@ export function useAutoUpdate() {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('online', handleOnline);
     };
-  }, [checkVersion, reloadNow]);
+  }, [isDev, checkVersion, reloadNow]);
 
   // 4. Inactivity / Idle Tracker
   useEffect(() => {
+    if (isDev) return;
+
     let throttleTimer: NodeJS.Timeout | null = null;
 
     const recordActivity = () => {
@@ -247,7 +259,7 @@ export function useAutoUpdate() {
       clearInterval(idleCheckInterval);
       events.forEach((evt) => window.removeEventListener(evt, handleUserInteraction));
     };
-  }, [isIdle, reloadNow]);
+  }, [isDev, isIdle, reloadNow]);
 
   // 5. Global ChunkLoadError Auto-Recovery
   useEffect(() => {

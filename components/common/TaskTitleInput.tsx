@@ -1,13 +1,13 @@
-'use client';
-
 import React, { useRef } from 'react';
-import { Bold, Sparkles } from 'lucide-react';
+import { Bold, Sparkles, Plus } from 'lucide-react';
 import { applyInlineFormatting } from '../../lib/textFormattingHelper';
 import { FormattedTaskTitle } from './FormattedTaskTitle';
+import { getRoleTaskPrefix, hasTaskPrefix, ensureTaskTitlePrefix } from '../../lib/taskPrefixHelper';
 
 interface TaskTitleInputProps {
   value: string;
   onChange: (val: string) => void;
+  role?: string;
   placeholder?: string;
   className?: string;
   inputClassName?: string;
@@ -15,20 +15,30 @@ interface TaskTitleInputProps {
   autoFocus?: boolean;
   disabled?: boolean;
   showPreview?: boolean;
+  autoPrefixOnBlur?: boolean;
 }
 
 export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
   value,
   onChange,
-  placeholder = "VD: BA | Viết tài liệu phần 'Working schedule'...",
+  role,
+  placeholder,
   className = '',
   inputClassName = '',
   required = false,
   autoFocus = false,
   disabled = false,
   showPreview = true,
+  autoPrefixOnBlur = true,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const rolePrefix = role ? getRoleTaskPrefix(role) : '';
+  const alreadyHasPrefix = hasTaskPrefix(value, role);
+  const defaultPlaceholder = rolePrefix
+    ? `VD: ${rolePrefix}Tên công việc...`
+    : "VD: BA | Viết tài liệu phần 'Working schedule'...";
+  const effectivePlaceholder = placeholder || defaultPlaceholder;
 
   // History Stack for Undo / Redo
   interface TitleHistory {
@@ -153,6 +163,24 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
     value.includes('<mark>') ||
     value.includes('==');
 
+  const handleBlur = () => {
+    if (autoPrefixOnBlur && role && value.trim() && !hasTaskPrefix(value, role)) {
+      const formatted = ensureTaskTitlePrefix(value, role);
+      onChange(formatted);
+      pushTitleSnapshot(formatted);
+    }
+  };
+
+  const handleApplyPrefix = () => {
+    if (!rolePrefix) return;
+    const formatted = ensureTaskTitlePrefix(value, role);
+    onChange(formatted);
+    pushTitleSnapshot(formatted);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
   return (
     <div className={`space-y-1.5 ${className}`}>
       <div className="relative flex items-center">
@@ -170,16 +198,30 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
               pushTitleSnapshot(newVal, { start, end });
             }, 300);
           }}
+          onBlur={handleBlur}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={effectivePlaceholder}
           required={required}
           autoFocus={autoFocus}
           disabled={disabled}
-          className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-300/90 dark:border-slate-700 rounded-xl px-3 py-2.5 pr-20 text-slate-800 dark:text-slate-100 text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950 transition font-medium ${inputClassName}`}
+          className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-300/90 dark:border-slate-700 rounded-xl px-3 py-2.5 pr-28 text-slate-800 dark:text-slate-100 text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950 transition font-medium ${inputClassName}`}
         />
 
-        {/* Quick Format Toolbar (Bold Button + Ctrl+B Hint) */}
+        {/* Quick Format Toolbar (Role Prefix Hint + Bold Button) */}
         <div className="absolute right-2 flex items-center gap-1">
+          {rolePrefix && !alreadyHasPrefix && (
+            <button
+              type="button"
+              onClick={handleApplyPrefix}
+              disabled={disabled}
+              className="p-1 px-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 transition cursor-pointer flex items-center gap-1 text-[10.5px] font-bold shadow-2xs active:scale-95 border border-indigo-200 dark:border-indigo-800"
+              title={`Tự động thêm tiền tố [${rolePrefix}] vào đầu task`}
+            >
+              <Plus className="w-3 h-3 stroke-[3]" />
+              <span>{rolePrefix.replace(/\s*\|\s*$/, '')}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={handleBoldToggle}

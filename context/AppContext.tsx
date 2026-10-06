@@ -15,6 +15,9 @@ import {
   showLocalBrowserNotification,
 } from '../lib/notificationService';
 import { extractMentions, extractDiscussionParticipants, parseNoteLine } from '../lib/notesHelper';
+import { AIPermissionsConfig, DEFAULT_AI_ALLOWED_ACCOUNTS, isAIFeatureEnabled } from '../lib/geminiService';
+import { SystemPermissionsMatrix, getDefaultPermissionsMatrix, checkUserSystemPermission } from '../lib/permissionsHelper';
+import { ensureTaskTitlePrefix } from '../lib/taskPrefixHelper';
 
 export interface UpdateTaskNotesOptions {
   isRecall?: boolean;
@@ -299,6 +302,14 @@ interface AppContextType {
   toggleTheme: () => void;
   setTheme: (theme: 'light' | 'dark') => void;
 
+  // AI & System Feature Permissions (Admin Exclusive Config)
+  aiPermissions: AIPermissionsConfig | null;
+  updateAIPermissions: (config: AIPermissionsConfig) => Promise<void>;
+  isUserAllowedAI: (user?: User | null, feature?: 'assistant' | 'weeklyReport') => boolean;
+  systemPermissions: SystemPermissionsMatrix | null;
+  updateSystemPermissions: (matrix: SystemPermissionsMatrix) => Promise<void>;
+  hasPermission: (featureKey: string, user?: User | null) => boolean;
+
   appVersion: string;
   broadcastSystemUpdate: (message?: string) => Promise<void>;
 }
@@ -483,6 +494,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Notification Center State
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isPushEnabled, setIsPushEnabled] = useState(false);
+
+  // AI Feature Permissions State
+  const [aiPermissions, setAiPermissions] = useState<AIPermissionsConfig | null>(null);
+  const [systemPermissions, setSystemPermissions] = useState<SystemPermissionsMatrix | null>(null);
 
   // Theme Management (Default: light, persisted in localStorage)
   const [theme, setThemeState] = useState<'light' | 'dark'>('light');
@@ -799,6 +814,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           } else {
             setTickets([]);
+          }
+
+          // AI Permissions sync from Firebase
+          if (data.aiPermissions) {
+            setAiPermissions(data.aiPermissions);
+          } else {
+            setAiPermissions({
+              allowedAccounts: DEFAULT_AI_ALLOWED_ACCOUNTS,
+              updatedAt: Date.now(),
+            });
+          }
+
+          // System Permissions Matrix sync from Firebase
+          if (data.systemPermissions) {
+            setSystemPermissions(data.systemPermissions);
+          } else {
+            setSystemPermissions(getDefaultPermissionsMatrix());
           }
         } else {
           seedFirebaseMockData();
@@ -1815,8 +1847,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       initialStatus = 'To do';
     }
 
+    const safeTitle = ensureTaskTitlePrefix(taskData.title, taskData.role);
+
     const newTask: Task = {
       ...taskData,
+      title: safeTitle,
       id: `tsk-${Date.now()}`,
       orderInMilestone: milestoneTasks.length + 1,
       status: initialStatus,
@@ -1867,6 +1902,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updated = tasks.map((t) => {
       if (t.id !== id) return t;
+
+      if (updates.title !== undefined) {
+        updates.title = ensureTaskTitlePrefix(updates.title, updates.role || t.role);
+      }
 
       if (updates.estimatedEffort !== undefined) {
         updates.estimatedEffort = Math.min(24, Math.max(0, Number(updates.estimatedEffort) || 0));
@@ -3474,6 +3513,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     seedFirebaseMockData();
   };
 
+  const updateAIPermissions = async (config: AIPermissionsConfig) => {
+    try {
+      const cleanConfig: AIPermissionsConfig = {
+        ...config,
+        allowedAccounts: Array.from(new Set((config.allowedAccounts || []).map((a) => a.trim()))),
+        updatedAt: Date.now(),
+        updatedBy: authSession?.account || 'admin',
+      };
+      await set(ref(database, `${DB_ROOT_NODE}/aiPermissions`), cleanConfig);
+      setAiPermissions(cleanConfig);
+    } catch (err) {
+      console.error('Failed to update AI permissions in Firebase:', err);
+      throw err;
+    }
+  };
+
+  const updateSystemPermissions = async (matrix: SystemPermissionsMatrix) => {
+    try {
+      const cleanMatrix: SystemPermissionsMatrix = {
+        ...matrix,
+        updatedAt: Date.now(),
+        updatedBy: authSession?.account || 'admin',
+      };
+      await set(ref(database, `${DB_ROOT_NODE}/systemPermissions`), cleanMatrix);
+      setSystemPermissions(cleanMatrix);
+
+      // Auto-sync AI permissions for backward compatibility
+      const allowedAI = new Set<string>(['admin']);
+      users.forEach((u) => {
+        if (
+          checkUserSystemPermission(u, 'ai_assistant', cleanMatrix) ||
+          checkUserSystemPermission(u, 'ai_weekly_report', cleanMatrix)
+        ) {
+          allowedAI.add(u.account);
+        }
+      });
+      const aiPerms: AIPermissionsConfig = {
+        allowedAccounts: Array.from(allowedAI),
+        featurePermissions: Object.fromEntries(
+          users.map((u) => [
+            u.account,
+            {
+              assistant: checkUserSystemPermission(u, 'ai_assistant', cleanMatrix),
+              weeklyReport: checkUserSystemPermission(u, 'ai_weekly_report', cleanMatrix),
+            },
+          ])
+        ),
+        updatedAt: Date.now(),
+        updatedBy: authSession?.account || 'admin',
+      };
+      await set(ref(database, `${DB_ROOT_NODE}/aiPermissions`), aiPerms);
+      setAiPermissions(aiPerms);
+    } catch (err) {
+      console.error('Failed to update system permissions in Firebase:', err);
+      throw err;
+    }
+  };
+
+  const hasPermission = useCallback(
+    (featureKey: string, user?: User | null) => {
+      const target = user || authSession;
+      return checkUserSystemPermission(target, featureKey, systemPermissions);
+    },
+    [authSession, systemPermissions]
+  );
+
+  const isUserAllowedAI = useCallback(
+    (user?: User | null, feature?: 'assistant' | 'weeklyReport') => {
+      const target = user || authSession;
+      if (systemPermissions) {
+        const featKey = feature === 'weeklyReport' ? 'ai_weekly_report' : 'ai_assistant';
+        return checkUserSystemPermission(target, featKey, systemPermissions);
+      }
+      return isAIFeatureEnabled(target, feature, aiPermissions);
+    },
+    [authSession, aiPermissions, systemPermissions]
+  );
+
   const broadcastSystemUpdate = useCallback(async (message?: string) => {
     try {
       const configRef = ref(database, `${DB_ROOT_NODE}/systemConfig`);
@@ -3568,6 +3685,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         toggleTheme,
         setTheme,
+
+        aiPermissions,
+        updateAIPermissions,
+        isUserAllowedAI,
+        systemPermissions,
+        updateSystemPermissions,
+        hasPermission,
 
         appVersion: APP_VERSION,
         broadcastSystemUpdate,

@@ -49,6 +49,7 @@ import { Dropdown } from './common/Dropdown';
 import { Modal } from './common/Modal';
 import { UserDetailModal } from './UserDetailModal';
 import { UserAvatar } from './common/UserAvatar';
+import { SystemPermissionsMatrixView } from './SystemPermissionsMatrixView';
 
 export type SheetFieldKey =
   | 'no'
@@ -299,7 +300,7 @@ export const UserManagementView: React.FC = () => {
 
   // SUB-TAB & SEARCH STATE
   const isAdmin = currentUser?.role === 'Admin';
-  const [activeSubTab, setActiveSubTab] = useState<'USERS' | 'ROLES'>('USERS');
+  const [activeSubTab, setActiveSubTab] = useState<'USERS' | 'ROLES' | 'PERMISSIONS'>('USERS');
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const isMouseDownOnBatchBackdrop = useRef(false);
 
@@ -1335,6 +1336,21 @@ export const UserManagementView: React.FC = () => {
               <Shield className="w-3.5 h-3.5 text-indigo-600" />
               <span className="sm:hidden">Role & Chuyên Môn ({roles.length})</span>
               <span className="hidden sm:inline">Danh Mục Role & Chuyên Môn ({roles.length})</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveSubTab('PERMISSIONS');
+                setIsUserFormOpen(false);
+                setIsRoleFormOpen(false);
+              }}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
+                activeSubTab === 'PERMISSIONS'
+                  ? 'bg-white text-purple-700 shadow-sm shadow-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+              <span>Phân Quyền</span>
             </button>
           </div>
         )}
@@ -3595,6 +3611,13 @@ export const UserManagementView: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* ========================================================================= */}
+      {/* SUB-TAB 3: SYSTEM PERMISSIONS MATRIX                                     */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'PERMISSIONS' && (
+        <SystemPermissionsMatrixView />
+      )}
 
       {/* User Detail & Edit Modal */}
       <UserDetailModal

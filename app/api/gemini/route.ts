@@ -15,69 +15,217 @@ export interface ChatHistoryItem {
 
 const VALID_ROLES = ['Designer', 'Frontend', 'Backend', 'Tester', 'DevOps', 'Leader', 'Advisor', 'Other', 'Dev'];
 
+function parseErrorMessage(err: any): string {
+  if (!err) return 'Không thể kết nối với máy chủ AI.';
+  const msg = typeof err === 'string' ? err : err?.message || JSON.stringify(err);
+
+  if (msg.includes('503') || msg.includes('high demand') || msg.includes('UNAVAILABLE')) {
+    return 'Máy chủ AI đang có lưu lượng truy cập cao tạm thời. Vui lòng bấm "Thử lại" sau giây lát nhé.';
+  }
+  if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota') || msg.includes('credit_balance_exhausted') || msg.includes('Insufficient Balance')) {
+    return 'Đạt giới hạn lượt gọi AI tạm thời. Vui lòng chờ vài giây hoặc nạp thêm hạn ngạch nhé.';
+  }
+  if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) {
+    return 'Khóa API Key chưa hợp lệ hoặc đã hết hạn.';
+  }
+  return msg;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function callDeepSeekChat(messages: Array<{ role: string; content: string }>, jsonMode: boolean = false): Promise<string> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('No DEEPSEEK_API_KEY');
+  const t0 = Date.now();
+  const body: any = {
+    model: 'deepseek-chat',
+    messages,
+  };
+  if (jsonMode) {
+    body.response_format = { type: 'json_object' };
+  }
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(35000),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || `DeepSeek HTTP ${res.status}`);
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error('DeepSeek returned empty content');
+  console.log(`[DeepSeek API] Generated in ${Date.now() - t0}ms`);
+  return content;
+}
+
+async function callOpenAIChat(messages: Array<{ role: string; content: string }>, jsonMode: boolean = false): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('No OPENAI_API_KEY');
+  const t0 = Date.now();
+  const body: any = {
+    model: 'gpt-4o-mini',
+    messages,
+  };
+  if (jsonMode) {
+    body.response_format = { type: 'json_object' };
+  }
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(35000),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message || `OpenAI HTTP ${res.status}`);
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error('OpenAI returned empty content');
+  console.log(`[OpenAI API] Generated in ${Date.now() - t0}ms`);
+  return content;
+}
+
 async function generateContentWithFastFallback(
   ai: GoogleGenAI,
   options: {
     contents: any;
-    config: any;
+    config?: any;
   }
 ) {
-  // Prioritize Gemini 3.8 Flash, then fast reliable fallbacks
-  const models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.7-flash'];
+  // Ordered by quota headroom, reliability, and speed:
+  // 1. gemini-3.1-flash-lite (High quota: 500 RPD & 15 RPM!)
+  // 2. gemini-3.7-flash (Smart Flash model)
+  // 3. gemini-3.8-flash
+  // 4. gemini-2.5-flash
+  // 5. gemini-2.5-flash-lite
+  const models = [
+    'gemini-3.1-flash-lite',
+    'gemini-3.7-flash',
+    'gemini-3.8-flash',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+  ];
   let lastError: any = null;
 
-  // Add thinkingBudget: 0 to disable hidden thinking chains and start outputting immediately (< 2s)
-  const fastConfig = {
-    ...options.config,
-    thinkingConfig: { thinkingBudget: 0 },
-  };
-
   for (const model of models) {
-    const t0 = Date.now();
-    try {
-      // 5.5s timeout per model to prevent hanging when Google AI Studio has 503 spikes
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout 5500ms on ${model}`)), 5500)
-      );
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const t0 = Date.now();
+      try {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout 25000ms on ${model}`)), 25000)
+        );
 
-      const callPromise = ai.models.generateContent({
-        ...options,
-        config: fastConfig,
-        model,
-      });
+        const callPromise = ai.models.generateContent({
+          ...options,
+          model,
+        });
 
-      const response = (await Promise.race([callPromise, timeoutPromise])) as any;
-      console.log(`[Gemini API] Successfully generated with ${model} in ${Date.now() - t0}ms`);
-      return response;
-    } catch (err: any) {
-      console.warn(
-        `[Gemini API] Model ${model} failed after ${Date.now() - t0}ms, switching to next fallback:`,
-        err?.message || err
-      );
-      lastError = err;
+        const response = (await Promise.race([callPromise, timeoutPromise])) as any;
+        console.log(`[Gemini API] Successfully generated with ${model} (attempt ${attempt}) in ${Date.now() - t0}ms`);
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        const errMsg = err?.message || String(err);
+        const isTransient =
+          errMsg.includes('503') ||
+          errMsg.includes('UNAVAILABLE') ||
+          errMsg.includes('429') ||
+          errMsg.includes('high demand');
+
+        console.warn(
+          `[Gemini API] Model ${model} (attempt ${attempt}/2) failed in ${Date.now() - t0}ms:`,
+          errMsg
+        );
+
+        if (isTransient && attempt < 2) {
+          await sleep(1000);
+          continue;
+        }
+        break;
+      }
     }
   }
 
-  throw lastError || new Error('Không thể kết nối với các model Gemini khả dụng.');
+  const friendlyMsg = parseErrorMessage(lastError);
+  throw new Error(friendlyMsg);
+}
+
+/**
+ * Universal Multi-Provider AI Fallback Engine
+ * Cascades: DeepSeek -> OpenAI -> Google Gemini
+ */
+async function callUniversalMultiProviderAI(options: {
+  systemInstruction?: string;
+  messages: Array<{ role: 'user' | 'assistant' | 'model' | 'system'; content: string }>;
+  jsonMode?: boolean;
+  geminiSchema?: any;
+}): Promise<string> {
+  const errors: string[] = [];
+
+  // Format messages for OpenAI / DeepSeek format
+  const oaiMessages: Array<{ role: string; content: string }> = [];
+  if (options.systemInstruction) {
+    oaiMessages.push({ role: 'system', content: options.systemInstruction });
+  }
+  for (const m of options.messages) {
+    oaiMessages.push({
+      role: m.role === 'model' ? 'assistant' : m.role,
+      content: m.content,
+    });
+  }
+
+  // 1. Try DeepSeek if key exists
+  if (process.env.DEEPSEEK_API_KEY) {
+    try {
+      return await callDeepSeekChat(oaiMessages, options.jsonMode);
+    } catch (e: any) {
+      console.warn('[AI Multi-Provider] DeepSeek failed:', e?.message || e);
+      errors.push(`DeepSeek: ${e?.message || e}`);
+    }
+  }
+
+  // 2. Try OpenAI if key exists
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      return await callOpenAIChat(oaiMessages, options.jsonMode);
+    } catch (e: any) {
+      console.warn('[AI Multi-Provider] OpenAI failed:', e?.message || e);
+      errors.push(`OpenAI: ${e?.message || e}`);
+    }
+  }
+
+  // 3. Fallback to Google Gemini
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const contents = options.messages.map((m) => ({
+        role: (m.role === 'assistant' ? 'model' : m.role) as 'user' | 'model',
+        parts: [{ text: m.content }],
+      }));
+
+      const config: any = {};
+      if (options.systemInstruction) config.systemInstruction = options.systemInstruction;
+      if (options.jsonMode) {
+        config.responseMimeType = 'application/json';
+        if (options.geminiSchema) config.responseSchema = options.geminiSchema;
+      }
+
+      const res = await generateContentWithFastFallback(ai, {
+        contents,
+        config,
+      });
+      return res.text || '';
+    } catch (e: any) {
+      console.warn('[AI Multi-Provider] Gemini failed:', e?.message || e);
+      errors.push(`Gemini: ${e?.message || e}`);
+    }
+  }
+
+  throw new Error(`Không thể kết nối với các mô hình AI. ${parseErrorMessage(errors.join(' | '))}`);
 }
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Chưa cấu hình GEMINI_API_KEY trong file .env hoặc biến môi trường.',
-        },
-        { status: 500 }
-      );
-    }
-
     const body = await req.json();
     const { action, prompt, message, history, title, description, role, context } = body;
-
-    const ai = new GoogleGenAI({ apiKey });
 
     // Target role & team scope resolution
     const targetRole = context?.currentRole || role || '';
@@ -108,81 +256,65 @@ export async function POST(req: Request) {
         );
       }
 
-      const systemInstruction = `Bạn là một AI Tech Lead, Cố vấn Nghiệp vụ & Scrum Master chuyên nghiệp trong phát triển phần mềm. Bạn vừa có khả năng tư vấn, giải đáp mọi câu hỏi nghiệp vụ/kỹ thuật, vừa có khả năng bóc tách, gợi ý và điều chỉnh task chuyên sâu:
+      const systemInstruction = `Bạn là một AI Tech Lead, Cố vấn Nghiệp vụ & Scrum Master chuyên nghiệp trong phát triển phần mềm. Bạn vừa có khả năng tư vấn, giải đáp mọi câu hỏi nghiệp vụ/kỹ thuật, vừa có khả năng bóc tách, gợi ý và điều chỉnh task chuyên sâu.
+Trả về định dạng JSON duy nhất gồm 2 trường:
+- message: Phản hồi súc tích bằng tiếng Việt.
+- tasks: Danh sách các task con dạng mảng objects { taskName, role, estimatedEffort, description }.
 
-1. 💡 HỎI ĐÁP & TƯ VẤN NGHIỆP VỤ / KỸ THUẬT:
-   - Khi người dùng hỏi đáp (ví dụ: giải thích luồng nghiệp vụ, tư vấn giải pháp kỹ thuật, chia sẻ best practices, hỏi về phân quyền, kiến trúc, chào hỏi...):
-     + Viết câu trả lời chi tiết, mạch lạc, dễ hiểu, logic và thực tế vào trường "message".
-     + Nếu người dùng KHÔNG yêu cầu bóc tách hay tạo task: Mảng "tasks" trả về rỗng [] để tránh làm phiền người dùng với các task thừa.
-     + Nếu câu hỏi có liên quan đến việc triển khai và bạn muốn gợi ý các đầu việc khả thi: Có thể đề xuất một vài task con mẫu trong mảng "tasks".
-
-2. 📋 BÓC TÁCH, GỢI Ý & ĐIỀU CHỈNH TASK THÔNG MINH:
-   - Khi người dùng yêu cầu bóc tách task, lập kế hoạch công việc, chia nhỏ tính năng, chỉnh sửa giờ làm (estimate), thêm/bớt role hoặc bổ sung checklist:
-     + "message": Phản hồi ngắn gọn, súc tích bằng tiếng Việt giải thích những gì bạn đã bóc tách hoặc vừa chỉnh sửa theo yêu cầu.
-     + "tasks": Danh sách các task con mới nhất đầy đủ sau các lượt chỉnh sửa.
 ${roleInstruction}
 
 Quy định cấu trúc task trong mảng "tasks" (khi có task):
-- taskName: Tên đầu việc ngắn gọn, rõ nghĩa, hành động cụ thể.
+- taskName: Tên đầu việc ngắn gọn, rõ nghĩa.
 - role: Vai trò phụ trách (${VALID_ROLES.map((r) => `"${r}"`).join(' | ')}). ${isSingleRoleScope ? `(Bắt buộc phải là "${targetRole}")` : ''}
 - estimatedEffort: Số giờ làm việc hợp lý (number từ 0.5 đến 40).
-- description: Mô tả chi tiết nội dung cần làm, checklist gạch đầu dòng hoặc tiêu chí hoàn thành (Acceptance Criteria).
+- description: Mô tả chi tiết nội dung cần làm.
 
 ${context?.milestoneTitle ? `\nMốc cột mốc hiện tại: ${context.milestoneTitle}` : ''}
 ${context?.currentTaskTitle ? `\nTask đang thao tác: ${context.currentTaskTitle}` : ''}`;
 
-      // Build formatted multi-turn history for Gemini
-      const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
-
+      const messages: Array<{ role: 'user' | 'model'; content: string }> = [];
       if (Array.isArray(history)) {
         for (const turn of history) {
           if (turn && turn.content && (turn.role === 'user' || turn.role === 'model')) {
-            contents.push({
+            messages.push({
               role: turn.role,
-              parts: [{ text: String(turn.content) }],
+              content: String(turn.content),
             });
           }
         }
       }
-
-      // Append current user message
-      contents.push({
+      messages.push({
         role: 'user',
-        parts: [{ text: userMessage.trim() }],
+        content: userMessage.trim(),
       });
 
-      const response = await generateContentWithFastFallback(ai, {
-        contents,
-        config: {
-          systemInstruction,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              message: { type: Type.STRING },
-              tasks: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    taskName: { type: Type.STRING },
-                    role: {
-                      type: Type.STRING,
-                      enum: VALID_ROLES,
-                    },
-                    estimatedEffort: { type: Type.NUMBER },
-                    description: { type: Type.STRING },
-                  },
-                  required: ['taskName', 'role', 'estimatedEffort', 'description'],
+      const responseText = await callUniversalMultiProviderAI({
+        systemInstruction,
+        messages,
+        jsonMode: true,
+        geminiSchema: {
+          type: Type.OBJECT,
+          properties: {
+            message: { type: Type.STRING },
+            tasks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  taskName: { type: Type.STRING },
+                  role: { type: Type.STRING, enum: VALID_ROLES },
+                  estimatedEffort: { type: Type.NUMBER },
+                  description: { type: Type.STRING },
                 },
+                required: ['taskName', 'role', 'estimatedEffort', 'description'],
               },
             },
-            required: ['message', 'tasks'],
           },
+          required: ['message', 'tasks'],
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = JSON.parse(responseText || '{}');
       const tasks: SubTaskSuggestion[] = Array.isArray(parsed.tasks) ? parsed.tasks : [];
       const botMessage: string = parsed.message || 'Đã phân tích và cập nhật danh sách task.';
 
@@ -202,7 +334,7 @@ ${context?.currentTaskTitle ? `\nTask đang thao tác: ${context.currentTaskTitl
         );
       }
 
-      const promptContent = `Bạn là một Tech Lead/Project Manager chuyên nghiệp. Hãy phân tích và bóc tách tính năng/yêu cầu sau thành danh sách các task con cụ thể, thực tế và rõ ràng:
+      const promptContent = `Bạn là một Tech Lead/Project Manager chuyên nghiệp. Hãy phân tích và bóc tách tính năng sau thành danh sách các task con cụ thể dạng JSON { message, tasks }:
 ${roleInstruction}
 
 Nội dung yêu cầu / Tính năng cần bóc tách:
@@ -210,43 +342,14 @@ Nội dung yêu cầu / Tính năng cần bóc tách:
 ${prompt.trim()}
 """
 ${context?.milestoneTitle ? `Mốc cột mốc (Milestone): ${context.milestoneTitle}` : ''}
-${targetRole ? `Role đang phụ trách: ${targetRole}` : ''}
+${targetRole ? `Role đang phụ trách: ${targetRole}` : ''}`;
 
-Quy định yêu cầu kết quả:
-- Mỗi task phải có tên rõ ràng (taskName), vai trò (role: ${VALID_ROLES.map((r) => `"${r}"`).join(' | ')}), số giờ ước tính hợp lý (estimatedEffort: number từ 0.5 đến 40 giờ tùy độ lớn), và mô tả chi tiết/checklist việc con (description).
-- Ngôn ngữ đầu ra: Tiếng Việt.`;
-
-      const response = await generateContentWithFastFallback(ai, {
-        contents: promptContent,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              message: { type: Type.STRING },
-              tasks: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    taskName: { type: Type.STRING },
-                    role: {
-                      type: Type.STRING,
-                      enum: VALID_ROLES,
-                    },
-                    estimatedEffort: { type: Type.NUMBER },
-                    description: { type: Type.STRING },
-                  },
-                  required: ['taskName', 'role', 'estimatedEffort', 'description'],
-                },
-              },
-            },
-            required: ['tasks'],
-          },
-        },
+      const responseText = await callUniversalMultiProviderAI({
+        messages: [{ role: 'user', content: promptContent }],
+        jsonMode: true,
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = JSON.parse(responseText || '{}');
       const tasks: SubTaskSuggestion[] = Array.isArray(parsed.tasks) ? parsed.tasks : [];
 
       return NextResponse.json({
@@ -266,36 +369,176 @@ Quy định yêu cầu kết quả:
         );
       }
 
-      const promptContent = `Bạn là một Tech Lead/Scrum Master giàu kinh nghiệm. Hãy ước tính số giờ làm việc (Effort tính bằng giờ) hợp lý cho đầu việc sau:
+      const promptContent = `Bạn là một Tech Lead/Scrum Master giàu kinh nghiệm. Hãy ước tính số giờ làm việc (Effort tính bằng giờ) hợp lý dạng JSON { estimatedEffort: number, reasoning: string } cho đầu việc sau:
 
 Tiêu đề task: ${taskTitle.trim()}
 ${description ? `Mô tả chi tiết: ${description.trim()}` : ''}
-${role ? `Chuyên môn (Role): ${role}` : ''}
+${role ? `Chuyên môn (Role): ${role}` : ''}`;
 
-Hướng dẫn:
-- Đưa ra con số ước tính giờ thực tế (estimatedEffort: number, ví dụ: 1, 2, 3, 4, 6, 8, 12, 16...).
-- Đưa ra giải thích ngắn gọn, súc tích bằng tiếng Việt về lý do ước tính số giờ này (reasoning).`;
-
-      const response = await generateContentWithFastFallback(ai, {
-        contents: promptContent,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              estimatedEffort: { type: Type.NUMBER },
-              reasoning: { type: Type.STRING },
-            },
-            required: ['estimatedEffort', 'reasoning'],
-          },
-        },
+      const responseText = await callUniversalMultiProviderAI({
+        messages: [{ role: 'user', content: promptContent }],
+        jsonMode: true,
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const parsed = JSON.parse(responseText || '{}');
       return NextResponse.json({
         success: true,
         estimatedEffort: typeof parsed.estimatedEffort === 'number' ? parsed.estimatedEffort : 2,
         reasoning: parsed.reasoning || 'Dựa theo độ phức tạp công việc.',
+      });
+    }
+
+    // 4. AI Executive Weekly Summary Generator
+    if (action === 'summarize-week') {
+      const { weekNumber, year, tasksSummary, ticketsSummary, roleStats } = body;
+      if (!Array.isArray(tasksSummary)) {
+        return NextResponse.json(
+          { success: false, error: 'Dữ liệu task tuần không hợp lệ.' },
+          { status: 400 }
+        );
+      }
+
+      const todayStr = new Date().toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+
+      const promptContent = `Bạn là Trợ lý Giám đốc Dự án / Senior Project Manager (Scrum Master) cho hệ thống Saho Task. Hãy phân tích toàn bộ dữ liệu tuần ${weekNumber} / ${year} dưới đây và viết một bản BÁO CÁO TỔNG HỢP TIẾN ĐỘ TUẦN cực kỳ chuyên nghiệp, sắc bén, ngắn gọn, trực quan và súc tích bằng tiếng Việt.
+
+DỮ LIỆU ĐẦU VÀO TUẦN ${weekNumber} / ${year} (Ngày lập báo cáo: ${todayStr}):
+1. Thống kê theo Role:
+${JSON.stringify(roleStats || [], null, 2)}
+
+2. Danh sách Task trong tuần (${tasksSummary.length} task - Đã bao gồm dữ liệu luân chuyển tuần và deadline):
+${JSON.stringify(tasksSummary, null, 2)}
+
+3. Danh sách Ticket yêu cầu / Vướng mắc liên quan:
+${JSON.stringify(ticketsSummary || [], null, 2)}
+
+QUY TẮC CẤU TRÚC BẢN BÁO CÁO (BẮT BUỘC):
+- BẮT ĐẦU NGAY LẬP TỨC với "### 📌 1. TỔNG QUAN HIỆU SUẤT TUẦN". Tuyệt đối KHÔNG viết lời chào mở đầu (như "Tuyệt vời!", "Chào bạn...", "Với vai trò..."), không viết lại tiêu đề H1 hay ngày tháng dạng placeholder.
+- Trình bày cô đọng, dễ đọc, không lan man, tập trung vào số liệu thực tế.
+
+CẤU TRÚC 5 PHẦN CHUẨN:
+### 📌 1. TỔNG QUAN HIỆU SUẤT TUẦN
+- 2-3 câu nhận xét đánh giá tổng quan về nhịp độ làm việc, khối lượng hoàn thành và năng suất chung của toàn đội ngũ trong tuần ${weekNumber} (${todayStr}). BẮT BUỘC **in đậm các từ khóa trọng tâm** (ví dụ: **nhóm BA**, **tiến độ thực tế còn chậm**, **37h/334h**, **tập trung tài liệu SRS**...).
+- Kèm theo 1 ghi chú nổi bật theo định dạng:
+  * 💡 **Lưu ý nổi bật:** [Ghi chú 1-2 câu súc tích về điểm then chốt nhất mà Ban quản trị & Leader cần nắm bắt ngay tuần này].
+
+### 🏆 2. KẾT QUẢ NỔI BẬT & ĐẦU VIỆC HOÀN THÀNH
+- Nhóm theo từng Role (**Backend**, **Frontend**, **Designer**, **Tester**, **BA**...).
+- Dùng cú pháp '* [x]' cho các task tiêu biểu đã hoàn thành 100% (Done):
+  * [x] **[Role]** Tên task (@Account - X giờ thực tế)
+- Chỉ chọn lọc 5-8 đầu việc quan trọng nhất đã hoàn thành, không liệt kê tràn lan các task nhỏ.
+
+### ⏳ 3. CÁC ĐẦU VIỆC ĐANG TRIỂN KHAI TRỌNG TÂM & CHUYỂN TIẾP (ROLLOVER)
+- CHỈ chọn lọc các task quan trọng đang triển khai dở (In Progress > 0% hoặc task lớn/phức tạp kéo dài cần chuyển tiếp sang tuần tới).
+- Phải làm rõ cực kỳ cụ thể & trực quan: Task đã luân chuyển qua bao nhiêu tuần (dựa trên trường 'rolloverHistory'), tình trạng deadline thế nào (dựa trên 'deadlineStatus'), tại sao lại chậm/kéo dài, và hướng xử lý tiếp theo là gì.
+- Định dạng mỗi task theo cấu trúc 2 dòng:
+  * [ ] **[Role]** Tên task (@Account - X% tiến độ | Thực tế: Ah / Est: Bh | Deadline: DD/MM [Trạng thái hạn] | [Lịch sử luân chuyển tuần])
+    ➔ *Nguyên nhân & Hướng xử lý:* [Giải thích súc tích, dễ hiểu: Task quy mô lớn đang triển khai giai đoạn 1, hoặc đã đạt 90% chỉ còn review/QA nghiệm thu, hoặc đã kéo dài qua X tuần cần dứt điểm trước deadline...]
+- 🚫 QUY TẮC BẮT BUỘC:
+  + TUYỆT ĐỐI KHÔNG tự bịa hoặc tự thêm các câu mơ hồ như "Lưu ý: Task này đã có entry Done", "cần làm rõ". Chỉ dựa trên dữ liệu thật.
+  + KHÔNG liệt kê các task 0% To do bình thường thành danh sách dài gây rối mắt.
+
+### ⚠️ 4. PHÂN TÍCH ĐIỂM NGHẼN & RỦI RO (BLOCKERS & RISKS)
+- 2-3 gạch đầu dòng ngắn gọn chỉ rõ các rủi ro cụ thể (ví dụ: Role nào còn nhiều task To do chưa chạy, hoặc task nào có Est lớn mà chưa xong, hoặc task kéo dài qua nhiều tuần).
+
+### 🎯 5. ĐỀ XUẤT HÀNH ĐỘNG CHO TUẦN TỚI
+- Đánh số thứ tự 1., 2., 3., 4. các hành động cụ thể, thiết thực dành cho Admin/Leader.`;
+
+      const summaryText = await callUniversalMultiProviderAI({
+        systemInstruction: 'Bạn là chuyên gia PM/Scrum Master tổng hợp báo cáo tiến độ tuần dự án phần mềm chuyên nghiệp, súc tích và chính xác.',
+        messages: [{ role: 'user', content: promptContent }],
+        jsonMode: false,
+      });
+
+      return NextResponse.json({
+        success: true,
+        summary: summaryText || 'Không thể tạo bản tổng hợp tuần.',
+      });
+    }
+
+    // 5. Context-Aware Project Knowledge Assistant (Ask System)
+    if (action === 'ask-system') {
+      const userMessage = message || prompt;
+      if (!userMessage || typeof userMessage !== 'string' || !userMessage.trim()) {
+        return NextResponse.json(
+          { success: false, error: 'Vui lòng cung cấp câu hỏi.' },
+          { status: 400 }
+        );
+      }
+
+      const { systemContext } = body;
+      const targetUser = systemContext?.currentUser;
+      const userAccount = targetUser?.account || '';
+      const userName = targetUser?.name || '';
+      const userRole = targetUser?.role || '';
+      const userSpecs = (targetUser?.specializations || []).join(', ');
+
+      const systemInstruction = `Bạn là Trợ lý AI Quản trị Hệ thống Saho Task (Saho Project Intelligence Assistant).
+Bạn được kết nối trực tiếp với dữ liệu thời gian thực của hệ thống Saho Task Management.
+
+THÔNG TIN NGƯỜI DÙNG ĐANG TRAO ĐỔI TRỰC TIẾP VỚI BẠN:
+- Họ và tên: ${userName || 'N/A'}
+- Tài khoản (Account / Username): @${userAccount || 'N/A'}
+- Vai trò & Chuyên môn: ${userRole || 'Member'} ${userSpecs ? `(${userSpecs})` : ''}
+
+DỮ LIỆU THỰC TẾ DỰ ÁN ĐƯỢC CẤP HIỆN TẠI:
+- Tuần hiện tại: Tuần ${systemContext?.currentWeek || 'N/A'} / ${systemContext?.currentYear || '2026'}
+- Danh sách thành viên & Role:
+${JSON.stringify(systemContext?.users || [], null, 2)}
+- Danh sách Milestone:
+${JSON.stringify(systemContext?.milestones || [], null, 2)}
+- Danh sách Task hiện tại:
+${JSON.stringify(systemContext?.tasks || [], null, 2)}
+- Dữ liệu Lịch sử các tuần trước (Archives Snapshot):
+${JSON.stringify(systemContext?.recentArchives || [], null, 2)}
+- Danh sách Tickets (Yêu cầu chéo):
+${JSON.stringify(systemContext?.tickets || [], null, 2)}
+
+QUY TẮC TRẢ LỜI QUAN TRỌNG (BẮT BUỘC):
+1. QUY TẮC XƯNG HÔ CHÍNH XÁC:
+   - Hãy xưng hô và chào hỏi đúng tên/account của người dùng đang chat (${userAccount ? `@${userAccount}` : userName || 'bạn'}).
+   - Ví dụ: "Chào @${userAccount || 'bạn'}", "Chào ${userName || (userAccount ? `@${userAccount}` : 'bạn')}".
+   - TUYỆT ĐỐI KHÔNG tự tiện gọi người dùng là "Chào Admin" nếu tài khoản của họ không phải là Admin (ví dụ: tài khoản @LichDT, @TruongNN, @DungDV... là Leader/Member thì phải gọi đúng tên @LichDT, @TruongNN...).
+2. TRUNG THỰC & CHÍNH XÁC 100%: Chỉ trả lời dựa trên dữ liệu thật ở trên. Nếu dữ liệu không có thông tin, hãy nói rõ là hệ thống chưa ghi nhận.
+3. ĐỊNH DẠNG DANH SÁCH TASK TRỰC QUAN (TUYỆT ĐỐI KHÔNG DÙNG BẢNG MARKDOWN ĐỂ LIỆT KÊ TASK):
+   - Trong hệ thống Saho, tên các đầu việc thường chứa ký tự gạch đứng "|" (ví dụ: "Design | HR view | Employee list..."). Việc dùng bảng Markdown sẽ làm vỡ cột và sai lệch dữ liệu.
+   - Do đó, KHI LIỆT KÊ DANH SÁCH TASK, BẮT BUỘC sử dụng định dạng Danh sách (Bullet Points / Card) trực quan:
+     * 📌 **[Role]** Tên task đầy đủ (@Account)
+       - Trạng thái: **Done / In Progress / To do** | Tiến độ: **X%** | Ước tính: **Y giờ** (Thực tế: **Ah**) | Tuần: **Z**
+   - Chỉ sử dụng bảng (table) khi người dùng yêu cầu thống kê ma trận tổng hợp (ví dụ: Bảng tổng hợp theo Role gồm: Role | Số Task | Giờ thực tế | Giờ ước tính).
+4. TUYỆT ĐỐI KHÔNG in ra các mã ID kỹ thuật nội bộ thô ("tsk-17904...", "archive-...").
+5. IN ĐẬM TỪ KHÓA: In đậm các con số, tên nhân sự (@Account), vai trò (**Backend**, **Frontend**, **Designer**, **Tester**, **BA**...), trạng thái (**Done**, **In Progress**, **To do**).
+6. TƯ VẤN QUẢN TRỊ: Đưa ra nhận định logic, súc tích và có tính hành động cao.`;
+
+      const messages: Array<{ role: 'user' | 'model'; content: string }> = [];
+      if (Array.isArray(history)) {
+        for (const turn of history) {
+          if (turn && turn.content && (turn.role === 'user' || turn.role === 'model')) {
+            messages.push({
+              role: turn.role,
+              content: String(turn.content),
+            });
+          }
+        }
+      }
+      messages.push({
+        role: 'user',
+        content: userMessage.trim(),
+      });
+
+      const replyText = await callUniversalMultiProviderAI({
+        systemInstruction,
+        messages,
+        jsonMode: false,
+      });
+
+      return NextResponse.json({
+        success: true,
+        reply: replyText || 'Không nhận được phản hồi từ AI.',
       });
     }
 
@@ -304,13 +547,14 @@ Hướng dẫn:
       { status: 400 }
     );
   } catch (error: any) {
-    console.error('[Gemini API Route Error]:', error);
+    console.error('[AI API Route Error]:', error);
     return NextResponse.json(
       {
         success: false,
-        error: error?.message || 'Lỗi xử lý kết nối Google Gemini API.',
+        error: error?.message || 'Lỗi xử lý kết nối AI API.',
       },
       { status: 500 }
     );
   }
 }
+

@@ -14,6 +14,7 @@ import { DescriptionEditor } from './common/DescriptionEditor';
 import { TaskTitleInput } from './common/TaskTitleInput';
 import { AITaskChatBox } from './AITaskChatBox';
 import { SubTaskSuggestion, requestAIEffortSuggestion, isAIFeatureEnabled } from '../lib/geminiService';
+import { ensureTaskTitlePrefix, getRoleTaskPrefix } from '../lib/taskPrefixHelper';
 
 interface TaskModalProps {
   task?: Task | null;
@@ -34,10 +35,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   defaultWeek,
   defaultAssignee,
 }) => {
-  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime } = useApp();
+  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI } = useApp();
 
-  // AI features are exclusively enabled for account LichDT for initial testing
-  const canUseAI = isAIFeatureEnabled(currentUser);
+  // AI features enabled based on permission config (Default: Admin, LichDT, QuynhNV, NhiHT)
+  const canUseAI = isUserAllowedAI(currentUser, 'assistant');
 
   const allRoleCodes = roles.map((r) => r.code);
 
@@ -602,6 +603,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const cleanSupporters = supporterAccounts.filter(
       (a) => !assigneeAccount || a.toLowerCase() !== assigneeAccount.toLowerCase()
     );
+    const finalTitle = ensureTaskTitlePrefix(title, role);
 
     if (task) {
       const isAssigned = Boolean(assigneeAccount && assigneeAccount.trim() !== '');
@@ -610,7 +612,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         Boolean(reqBy && isAssigned && reqBy.toLowerCase() === assigneeAccount.toLowerCase());
 
       updateTask(task.id, {
-        title,
+        title: finalTitle,
         description,
         role,
         estimatedEffort: parsedEffort,
@@ -640,7 +642,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       });
     } else {
       addTask({
-        title,
+        title: finalTitle,
         description,
         role,
         estimatedEffort: parsedEffort,
@@ -922,7 +924,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     Tên Đầu Việc (Task Name): <span className="text-red-500">*</span>
                   </label>
                   <TaskTitleInput
-                    placeholder="VD: BA | Viết tài liệu phần 'Working schedule'..."
+                    role={role}
                     value={title}
                     onChange={setTitle}
                     required
@@ -974,7 +976,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       <Dropdown
                         value={role}
                         onChange={(newRole) => {
-                          setRole(newRole as Specialization);
+                          const nextRole = newRole as Specialization;
+                          const oldPrefix = getRoleTaskPrefix(role);
+                          const nextPrefix = getRoleTaskPrefix(nextRole);
+                          if (!task && title.startsWith(oldPrefix)) {
+                            setTitle(`${nextPrefix}${title.slice(oldPrefix.length)}`);
+                          }
+                          setRole(nextRole);
                           setAssigneeAccount('');
                         }}
                         options={allowedRoles.map((r) => {

@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, update, remove } from 'firebase/database';
+import { getDatabase, ref, onValue, set, update, remove, get, child } from 'firebase/database';
 
 const firebaseConfig = {
   projectId: "docugen-676bf",
@@ -10,7 +10,7 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const database = getDatabase(app);
 
-export { app, database, ref, onValue, set, update, remove };
+export { app, database, ref, onValue, set, update, remove, get, child };
 
 // Root node name for project:
 // Mặc định kết nối đồng bộ vào node 'gmm-task' (hoặc ghi đè qua NEXT_PUBLIC_FIREBASE_DB_NODE).

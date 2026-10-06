@@ -17,6 +17,7 @@ import { TaskDetailModal } from '../components/TaskDetailModal';
 import { LoginModal } from '../components/LoginModal';
 import { QuickResourceFloatingButton } from '../components/QuickResourceFloatingButton';
 import { AutoUpdateBanner } from '../components/AutoUpdateBanner';
+import { AIAssistantDrawer } from '../components/AIAssistantDrawer';
 import { Task } from '../types/task';
 
 function MainApp() {
@@ -286,6 +287,9 @@ function MainApp() {
 
       {/* Floating Auto Update Banner */}
       <AutoUpdateBanner />
+
+      {/* Floating AI Project Intelligence Assistant (Admin/Leader) */}
+      <AIAssistantDrawer />
     </div>
   );
 }
