@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { APP_VERSION, BUILD_ID, BUILD_TIMESTAMP, SystemVersionInfo } from '../lib/version';
+import { APP_VERSION, BUILD_ID, isNewerVersion, SystemVersionInfo } from '../lib/version';
 import { database, ref, onValue, DB_ROOT_NODE } from '../lib/firebase';
 
-const IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes of inactivity
-const POLL_INTERVAL_MS = 2 * 60 * 1000; // Poll version every 2 minutes
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes of inactivity
+const POLL_INTERVAL_MS = 3 * 60 * 1000; // Poll version every 3 minutes
 const CHUNK_RELOAD_COOLDOWN_MS = 30 * 1000; // 30s cooldown between chunk auto-reloads
 
 /**
@@ -55,7 +55,7 @@ export function useAutoUpdate() {
 
   const [hasUpdate, setHasUpdate] = useState<boolean>(false);
   const [newVersionInfo, setNewVersionInfo] = useState<Partial<SystemVersionInfo> | null>(null);
-  const [isDismissed, setIsDismissed] = useState<boolean>(isDev);
+  const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const [isIdle, setIsIdle] = useState<boolean>(false);
 
   const lastActivityRef = useRef<number>(Date.now());
@@ -72,7 +72,6 @@ export function useAutoUpdate() {
     if (typeof window === 'undefined' || isReloadingRef.current) return;
     isReloadingRef.current = true;
     try {
-      // Clear any session storage markers if needed
       window.location.reload();
     } catch {
       window.location.href = window.location.href;
@@ -94,13 +93,10 @@ export function useAutoUpdate() {
       if (!res.ok) return;
       const remoteData: SystemVersionInfo = await res.json();
 
-      // Check if remote version or build ID differs
-      const isDifferentBuild =
-        (remoteData.buildId && remoteData.buildId !== BUILD_ID) ||
-        (remoteData.version && remoteData.version !== APP_VERSION) ||
-        (remoteData.buildTimestamp && remoteData.buildTimestamp > BUILD_TIMESTAMP);
+      // Only consider it an update if remoteData.version is strictly newer than current APP_VERSION
+      const isNewer = isNewerVersion(remoteData.version, APP_VERSION);
 
-      if (isDifferentBuild) {
+      if (isNewer) {
         setHasUpdate(true);
         setNewVersionInfo(remoteData);
 
@@ -108,9 +104,11 @@ export function useAutoUpdate() {
         if (document.hidden && isSafeToReload()) {
           reloadNow();
         }
+      } else {
+        // If client is already up-to-date, ensure hasUpdate is false
+        setHasUpdate(false);
       }
     } catch (err) {
-      // Fail silently on network drop
       console.debug('[AutoUpdate] Version check fetch skipped/failed:', err);
     }
   }, [isDev, reloadNow]);
@@ -126,24 +124,21 @@ export function useAutoUpdate() {
           if (snapshot.exists()) {
             const data = snapshot.val();
             if (data) {
-              const remoteDeployTime = Number(data.lastDeployTime || data.deployTimestamp || 0);
-              const remoteVersion = String(data.version || data.appVersion || '');
-
-              const isNewer =
-                (remoteDeployTime > BUILD_TIMESTAMP) ||
-                (remoteVersion && remoteVersion !== APP_VERSION);
+              const remoteVersion = String(data.version || data.appVersion || '').trim();
+              const isNewer = isNewerVersion(remoteVersion, APP_VERSION);
 
               if (isNewer) {
                 setHasUpdate(true);
                 setNewVersionInfo({
-                  version: remoteVersion || APP_VERSION,
+                  version: remoteVersion,
                   releaseNote: data.message || data.releaseNote,
-                  buildTimestamp: remoteDeployTime || Date.now(),
                 });
 
                 if (document.hidden && isSafeToReload()) {
                   reloadNow();
                 }
+              } else {
+                setHasUpdate(false);
               }
             }
           }
@@ -301,11 +296,19 @@ export function useAutoUpdate() {
     };
   }, []);
 
+  const isDismissed = Boolean(
+    isDev || (newVersionInfo?.version && dismissedVersion === newVersionInfo.version)
+  );
+
   return {
     hasUpdate,
     newVersionInfo,
     isDismissed,
-    dismiss: () => setIsDismissed(true),
+    dismiss: () => {
+      if (newVersionInfo?.version) {
+        setDismissedVersion(newVersionInfo.version);
+      }
+    },
     reloadNow,
     isIdle,
     currentVersion: APP_VERSION,

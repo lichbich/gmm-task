@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { APP_VERSION, BUILD_ID, BUILD_TIMESTAMP, APP_RELEASE_NOTE, SystemVersionInfo } from '../../../lib/version';
+import { APP_VERSION, BUILD_ID, APP_RELEASE_NOTE, SystemVersionInfo } from '../../../lib/version';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -8,7 +8,6 @@ export async function GET() {
   const versionData: SystemVersionInfo = {
     version: APP_VERSION,
     buildId: BUILD_ID,
-    buildTimestamp: BUILD_TIMESTAMP,
     serverTime: Date.now(),
     releaseNote: APP_RELEASE_NOTE,
   };

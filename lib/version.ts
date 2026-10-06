@@ -1,17 +1,37 @@
 // Application Version & Build Identification
-// Incremented during updates to signal client-side refresh triggers
 
-export const APP_VERSION = '2.8.3';
-export const APP_RELEASE_NOTE = '- Update tính năng phân quyền dành cho Admin\n - Thêm AI hỗ trợ quản lý báo cáo trong hệ thống dành cho Admin, PM\n - Sửa lỗi hệ thống\n - Cải thiện hiệu năng\n - Add prefix';
+export const APP_VERSION = '2.8.4';
+export const APP_RELEASE_NOTE =
+  '- Tự động thêm Prefix cho task theo Role (Ví dụ: Design | ...)\n- Update tính năng phân quyền dành cho Admin\n- Thêm AI hỗ trợ quản lý báo cáo trong hệ thống dành cho Admin, PM\n- Sửa lỗi hệ thống & cải thiện hiệu năng';
 
-// Build timestamp generated at module evaluation / deployment
-export const BUILD_TIMESTAMP = Date.now();
-export const BUILD_ID = `gmm-${APP_VERSION}-${BUILD_TIMESTAMP}`;
+export const BUILD_ID = `saho-v${APP_VERSION}`;
 
 export interface SystemVersionInfo {
   version: string;
   buildId: string;
-  buildTimestamp: number;
   serverTime: number;
   releaseNote?: string;
+}
+
+/**
+ * Compare two semver strings (e.g., '2.8.4' vs '2.8.3').
+ * Returns true if remoteVersion is strictly newer than currentVersion.
+ */
+export function isNewerVersion(remoteVersion?: string | null, currentVersion: string = APP_VERSION): boolean {
+  if (!remoteVersion) return false;
+  const cleanRemote = remoteVersion.trim().replace(/^v/i, '');
+  const cleanCurrent = currentVersion.trim().replace(/^v/i, '');
+  if (cleanRemote === cleanCurrent) return false;
+
+  const remoteParts = cleanRemote.split('.').map((p) => parseInt(p, 10) || 0);
+  const currentParts = cleanCurrent.split('.').map((p) => parseInt(p, 10) || 0);
+
+  const maxLen = Math.max(remoteParts.length, currentParts.length);
+  for (let i = 0; i < maxLen; i++) {
+    const r = remoteParts[i] || 0;
+    const c = currentParts[i] || 0;
+    if (r > c) return true;
+    if (r < c) return false;
+  }
+  return false;
 }
