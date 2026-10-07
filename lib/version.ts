@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.8.4';
+export const APP_VERSION = '2.8.5';
 export const APP_RELEASE_NOTE =
-  '- Tự động thêm Prefix cho task theo Role (Ví dụ: Design | ...)\n- Update tính năng phân quyền dành cho Admin\n- Thêm AI hỗ trợ quản lý báo cáo trong hệ thống dành cho Admin, PM\n- Sửa lỗi hệ thống & cải thiện hiệu năng';
+  'Chỉnh sửa giao diện 1 chút';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 

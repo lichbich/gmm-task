@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { User } from '../../types/task';
+import { useApp } from '../../context/AppContext';
 import { UserAvatar } from './UserAvatar';
 import { Users, Crown } from 'lucide-react';
 
@@ -32,6 +33,9 @@ export const TaskSupportersBadge: React.FC<TaskSupportersBadgeProps> = ({
   currentViewingAccount,
   className = '',
 }) => {
+  const { authSession, currentUser } = useApp();
+  const loggedInAccount = authSession?.account || currentUser?.account;
+
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [coords, setCoords] = useState<PopoverCoords | null>(null);
@@ -224,15 +228,28 @@ export const TaskSupportersBadge: React.FC<TaskSupportersBadgeProps> = ({
             <span className="text-[9.5px] text-slate-400 block mb-1 flex items-center gap-1">
               <Crown className="w-3 h-3 text-amber-400" /> Phụ trách chính:
             </span>
-            <div className="flex items-center gap-2 text-[11px] text-amber-200 bg-slate-800/80 p-1.5 rounded-lg border border-amber-500/30">
-              <UserAvatar user={primaryUser} account={primaryAssignee} size="xs" shape="circle" />
-              <div className="flex flex-col min-w-0 leading-tight">
-                <span className="font-bold text-white truncate max-w-[145px]">
-                  {primaryUser?.name || primaryAssignee}
-                </span>
-                <span className="text-[9px] text-amber-300 font-mono">@{primaryAssignee}</span>
-              </div>
-            </div>
+            {(() => {
+              const isPrimaryMe = Boolean(
+                loggedInAccount &&
+                primaryAssignee &&
+                primaryAssignee.trim().toLowerCase() === loggedInAccount.trim().toLowerCase()
+              );
+              return (
+                <div className={`flex items-center gap-2 text-[11px] p-1.5 rounded-lg border ${
+                  isPrimaryMe
+                    ? 'text-amber-200 bg-amber-950/40 border-amber-500/50'
+                    : 'text-amber-200 bg-slate-800/80 border-amber-500/30'
+                }`}>
+                  <UserAvatar user={primaryUser} account={primaryAssignee} size="xs" shape="circle" />
+                  <div className="flex flex-col min-w-0 leading-tight">
+                    <span className="font-bold text-white truncate max-w-[145px]">
+                      {primaryUser?.name || primaryAssignee} {isPrimaryMe && '(Bạn)'}
+                    </span>
+                    <span className="text-[9px] text-amber-300 font-mono">@{primaryAssignee}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -245,21 +262,22 @@ export const TaskSupportersBadge: React.FC<TaskSupportersBadgeProps> = ({
             const supUser = users.find(
               (u) => u.account?.toLowerCase() === supAcc.toLowerCase()
             );
-            const isCurrent =
-              currentViewingAccount &&
-              supAcc.toLowerCase() === currentViewingAccount.toLowerCase();
+            const isMe = Boolean(
+              loggedInAccount &&
+              supAcc.trim().toLowerCase() === loggedInAccount.trim().toLowerCase()
+            );
 
             return (
               <div
                 key={supAcc}
                 className={`flex items-center gap-2 text-[11px] p-1 rounded-lg transition ${
-                  isCurrent ? 'bg-indigo-950/80 border border-indigo-500/50 text-indigo-200' : 'text-slate-200'
+                  isMe ? 'bg-indigo-950/80 border border-indigo-500/50 text-indigo-200' : 'text-slate-200'
                 }`}
               >
                 <UserAvatar user={supUser} account={supAcc} size="xs" shape="circle" />
                 <div className="flex flex-col min-w-0 leading-tight">
                   <span className="font-semibold text-white truncate max-w-[140px]">
-                    {supUser?.name || supAcc} {isCurrent && '(Bạn)'}
+                    {supUser?.name || supAcc} {isMe && '(Bạn)'}
                   </span>
                   <span className="text-[9.5px] text-indigo-300 font-mono">@{supAcc}</span>
                 </div>
