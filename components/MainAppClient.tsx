@@ -16,6 +16,7 @@ import { TaskModal } from './TaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { LoginModal } from './LoginModal';
 import { QuickResourceFloatingButton } from './QuickResourceFloatingButton';
+import { ScrollToTopButton } from './ScrollToTopButton';
 import { AutoUpdateBanner } from './AutoUpdateBanner';
 import { AIAssistantDrawer } from './AIAssistantDrawer';
 import { Task } from '../types/task';
@@ -259,6 +260,9 @@ function MainApp() {
           <QuickResourceFloatingButton
             onNavigateToResourceManager={() => handleSetActiveMainSection('resources')}
           />
+
+          {/* Scroll To Top Floating Button */}
+          <ScrollToTopButton />
 
           {/* Task Creation / Edit Modal */}
           <TaskModal

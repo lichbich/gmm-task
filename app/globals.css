@@ -697,5 +697,119 @@ html.modal-scroll-locked {
   position: relative;
 }
 
+/* ==========================================================================
+   PEEK AVATAR EMOTION ANIMATIONS
+   ========================================================================== */
+
+/* 1. Sad: Buồn vì trễ deadline - rũ nhẹ, đung đưa buồn bã */
+@keyframes peek-sad {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(1px) rotate(-1.5deg); }
+  50% { transform: translateY(1.5px) rotate(0deg); }
+  75% { transform: translateY(1px) rotate(1.5deg); }
+}
+
+.animate-peek-sad {
+  animation: peek-sad 3.2s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* 2. Angry: Tức giận - rung giật bồn chồn */
+@keyframes peek-angry {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  15% { transform: translate(-1.5px, 0.5px) rotate(-1.5deg); }
+  30% { transform: translate(1.5px, -1px) rotate(1.5deg); }
+  45% { transform: translate(-1.2px, -0.8px) rotate(-1deg); }
+  60% { transform: translate(1.2px, 0.8px) rotate(1deg); }
+  75% { transform: translate(-0.8px, 0.5px) rotate(-0.5deg); }
+  90% { transform: translate(0.8px, -0.5px) rotate(0.5deg); }
+}
+
+.animate-peek-angry {
+  animation: peek-angry 0.8s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* 2. Excited: Hào hứng vì done nhiều task nhất - nhún nhảy tưng bừng ăn mừng */
+@keyframes peek-excited {
+  0%, 100% { transform: translateY(0) scale(1); }
+  25% { transform: translateY(-4px) scale(1.05); }
+  50% { transform: translateY(0) scale(0.97); }
+  75% { transform: translateY(-2px) scale(1.02); }
+}
+
+.animate-peek-excited {
+  animation: peek-excited 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+  transform-origin: center bottom;
+  will-change: transform;
+}
+
+/* 3. Sleepy: Buồn ngủ vì ôm nhiều task nhất - gật gù chầm chậm, lắc lư nhẹ */
+@keyframes peek-sleepy {
+  0%, 100% { transform: rotate(0deg); }
+  35% { transform: rotate(3deg); }
+  65% { transform: rotate(4deg); }
+  85% { transform: rotate(-1deg); }
+}
+
+.animate-peek-sleepy {
+  animation: peek-sleepy 3.6s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* 4. Attentive: Tập trung vì nhiều In Progress nhất - co giãn nhịp nhàng, tập trung cao độ */
+@keyframes peek-attentive {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+.animate-peek-attentive {
+  animation: peek-attentive 1.8s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* 5. Bored: Chán nản vì chưa có task - lắc lư uể oải nhẹ */
+@keyframes peek-bored {
+  0%, 100% { transform: rotate(0deg); }
+  35% { transform: rotate(-2deg); }
+  70% { transform: rotate(2deg); }
+}
+
+.animate-peek-bored {
+  animation: peek-bored 4s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* 6. Happy: Vui vẻ - đung đưa vui tươi, tích cực */
+@keyframes peek-happy {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1.5px) rotate(-2.5deg); }
+  75% { transform: translateY(-1.5px) rotate(2.5deg); }
+}
+
+.animate-peek-happy {
+  animation: peek-happy 2.4s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+/* 7. Normal: Bình thường - nhịp thở êm ái */
+@keyframes peek-normal {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-1px) scale(1.02); }
+}
+
+.animate-peek-normal {
+  animation: peek-normal 3.2s ease-in-out infinite;
+  transform-origin: center center;
+  will-change: transform;
+}
+
+
 
 

@@ -50,6 +50,7 @@ import {
   Ticket as TicketIcon,
   Sparkles,
   ShieldCheck,
+  ArrowUp,
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
@@ -1558,6 +1559,20 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 );
               })}
             </div>
+
+            {/* Subtle Vertical Divider */}
+            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 shrink-0 mx-0.5" />
+
+            {/* Quick Scroll to Top button on floating bar */}
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex items-center gap-1 px-2 py-1 rounded-xl text-[11px] font-bold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 bg-slate-100/90 hover:bg-indigo-50/80 dark:bg-slate-800/90 dark:hover:bg-indigo-950/40 border border-slate-200/60 dark:border-slate-700/60 transition-all duration-200 active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              title="Cuộn lên đầu trang"
+            >
+              <ArrowUp className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Lên đầu</span>
+            </button>
           </div>
         </div>
       )}

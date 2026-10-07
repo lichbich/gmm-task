@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.8.9';
+export const APP_VERSION = '2.9.0';
 export const APP_RELEASE_NOTE =
-  'Sửa lỗi và update trải nghiệm người dùng';
+  'Add avatar, scroll to top, responsive';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 
