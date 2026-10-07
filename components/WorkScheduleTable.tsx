@@ -1586,10 +1586,10 @@ const getRoleOrderRank = (roleCode?: string): number => {
               <button
                 type="button"
                 onClick={() => setIsAIWeeklySummaryOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 dark:bg-purple-950/40 hover:from-purple-100 hover:to-indigo-100 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700/70 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer shadow-2xs"
+                className="group relative inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:via-indigo-500 hover:to-blue-500 text-white text-xs font-bold rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-md shadow-purple-500/20 hover:shadow-lg hover:shadow-purple-500/30 border border-purple-400/30 dark:border-purple-300/30 tracking-tight"
                 title={`Sử dụng AI Gemini để phân tích toàn bộ tiến độ, hiệu suất và rủi ro Tuần ${selectedWeek}`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 animate-pulse" />
+                <Sparkles className="w-3.5 h-3.5 text-purple-200 group-hover:text-white transition-colors animate-pulse" />
                 <span>AI Báo Cáo Tuần {selectedWeek}</span>
               </button>
             )}

@@ -195,6 +195,15 @@ export async function requestAIEffortSuggestion(
 export interface WeeklySummaryRequestData {
   weekNumber: number;
   year: number;
+  overallStats?: {
+    totalTasks: number;
+    doneTasks: number;
+    inProgressTasks: number;
+    todoTasks: number;
+    completionRate: number;
+    totalActualEffort: number;
+    totalEstEffort: number;
+  };
   tasksSummary: Array<{
     id: string;
     title: string;
@@ -230,6 +239,22 @@ export interface WeeklySummaryRequestData {
     inProgressTasks: number;
     actualEffort: number;
     estimatedEffort: number;
+  }>;
+  memberStats?: Array<{
+    account: string;
+    role: string;
+    totalTasks: number;
+    doneTasks: number;
+    inProgressTasks: number;
+    actualEffort: number;
+    estimatedEffort: number;
+  }>;
+  overdueTasks?: Array<{
+    title: string;
+    role: string;
+    assigneeAccount?: string;
+    deadline?: string;
+    completionPercentage: number;
   }>;
 }
 

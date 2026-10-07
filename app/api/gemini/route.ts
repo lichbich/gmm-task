@@ -390,13 +390,22 @@ ${role ? `Chuyên môn (Role): ${role}` : ''}`;
 
     // 4. AI Executive Weekly Summary Generator
     if (action === 'summarize-week') {
-      const { weekNumber, year, tasksSummary, ticketsSummary, roleStats } = body;
+      const { weekNumber, year, overallStats, tasksSummary, ticketsSummary, roleStats, memberStats, overdueTasks } = body;
       if (!Array.isArray(tasksSummary)) {
         return NextResponse.json(
           { success: false, error: 'Dữ liệu task tuần không hợp lệ.' },
           { status: 400 }
         );
       }
+
+      const totalTasks = overallStats?.totalTasks ?? tasksSummary.length;
+      const doneTasks = overallStats?.doneTasks ?? tasksSummary.filter((t: any) => t.status === 'Done' || t.completionPercentage === 100).length;
+      const inProgressTasks = overallStats?.inProgressTasks ?? tasksSummary.filter((t: any) => t.status === 'In Progress' || (t.completionPercentage > 0 && t.completionPercentage < 100)).length;
+      const todoTasks = overallStats?.todoTasks ?? (totalTasks - doneTasks - inProgressTasks);
+      const totalActualEffort = overallStats?.totalActualEffort ?? Math.round(tasksSummary.reduce((acc: number, t: any) => acc + (t.actualEffort || 0), 0) * 10) / 10;
+      const totalEstEffort = overallStats?.totalEstEffort ?? Math.round(tasksSummary.reduce((acc: number, t: any) => acc + (t.estimatedEffort || 0), 0) * 10) / 10;
+      const completionRate = overallStats?.completionRate ?? (totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0);
+      const effortPercent = totalEstEffort > 0 ? Math.round((totalActualEffort / totalEstEffort) * 100) : 0;
 
       const todayStr = new Date().toLocaleDateString('vi-VN', {
         day: '2-digit',
@@ -406,14 +415,29 @@ ${role ? `Chuyên môn (Role): ${role}` : ''}`;
 
       const promptContent = `Bạn là Trợ lý Giám đốc Dự án / Senior Project Manager (Scrum Master) cho hệ thống Saho Task. Hãy phân tích toàn bộ dữ liệu tuần ${weekNumber} / ${year} dưới đây và viết một bản BÁO CÁO TỔNG HỢP TIẾN ĐỘ TUẦN cực kỳ chuyên nghiệp, sắc bén, ngắn gọn, trực quan và súc tích bằng tiếng Việt.
 
-DỮ LIỆU ĐẦU VÀO TUẦN ${weekNumber} / ${year} (Ngày lập báo cáo: ${todayStr}):
+BỘ SỐ LIỆU TỔNG QUAN REAL-TIME ĐÃ ĐƯỢC HỆ THỐNG TÍNH TOÁN CHUẨN XÁC (GROUND TRUTH - BẮT BUỘC SỬ DỤNG 100% CÁC SỐ NÀY, TUYỆT ĐỐI KHÔNG TỰ TÍNH LẠI HOẶC BỊA SỐ KHÁC):
+- Tổng số đầu việc tuần ${weekNumber}: ${totalTasks} task
+- Số task hoàn thành (Done 100%): ${doneTasks} task (${completionRate}% tổng task)
+- Số task đang làm (In Progress): ${inProgressTasks} task
+- Số task chờ thực hiện (To do): ${todoTasks} task
+- Tổng thời gian thực tế ghi nhận (Actual Effort): ${totalActualEffort}h
+- Tổng thời gian ước tính (Estimated Effort): ${totalEstEffort}h
+- Tỷ lệ hoàn thành khối lượng giờ: ${totalActualEffort}h / ${totalEstEffort}h (${effortPercent}%)
+
+DỮ LIỆU CHI TIẾT ĐẦU VÀO TUẦN ${weekNumber} / ${year} (Ngày lập báo cáo: ${todayStr}):
 1. Thống kê theo Role:
 ${JSON.stringify(roleStats || [], null, 2)}
 
-2. Danh sách Task trong tuần (${tasksSummary.length} task - Đã bao gồm dữ liệu luân chuyển tuần và deadline):
+2. Thống kê theo Thành viên (Top nỗ lực):
+${JSON.stringify(memberStats || [], null, 2)}
+
+3. Danh sách Task Quá hạn / Cần chú ý:
+${JSON.stringify(overdueTasks || [], null, 2)}
+
+4. Danh sách toàn bộ Task trong tuần (${tasksSummary.length} task - Đã bao gồm dữ liệu luân chuyển tuần và deadline):
 ${JSON.stringify(tasksSummary, null, 2)}
 
-3. Danh sách Ticket yêu cầu / Vướng mắc liên quan:
+5. Danh sách Ticket yêu cầu / Vướng mắc liên quan:
 ${JSON.stringify(ticketsSummary || [], null, 2)}
 
 QUY TẮC CẤU TRÚC BẢN BÁO CÁO (BẮT BUỘC):
@@ -422,7 +446,11 @@ QUY TẮC CẤU TRÚC BẢN BÁO CÁO (BẮT BUỘC):
 
 CẤU TRÚC 5 PHẦN CHUẨN:
 ### 📌 1. TỔNG QUAN HIỆU SUẤT TUẦN
-- 2-3 câu nhận xét đánh giá tổng quan về nhịp độ làm việc, khối lượng hoàn thành và năng suất chung của toàn đội ngũ trong tuần ${weekNumber} (${todayStr}). BẮT BUỘC **in đậm các từ khóa trọng tâm** (ví dụ: **nhóm BA**, **tiến độ thực tế còn chậm**, **37h/334h**, **tập trung tài liệu SRS**...).
+- 2-3 câu nhận xét đánh giá tổng quan về nhịp độ làm việc, khối lượng hoàn thành và năng suất chung của toàn đội ngũ trong tuần ${weekNumber} (${todayStr}).
+- QUY TẮC BẮT BUỘC VỀ SỐ LIỆU TỔNG:
+  * Phải trích dẫn CHÍNH XÁC: **${totalActualEffort}/${totalEstEffort} giờ dự kiến** (đạt khoảng **${effortPercent}%**) và **${doneTasks}/${totalTasks} task** (${completionRate}% hoàn thành).
+  * BẮT BUỘC **in đậm các từ khóa trọng tâm** (ví dụ: **${totalActualEffort}h/${totalEstEffort}h**, **nhóm Backend**, **nhóm Frontend**, **tiến độ thực tế**...).
+  * TUYỆT ĐỐI KHÔNG trích dẫn con số nào khác ngoài bộ số liệu chuẩn ở trên.
 - Kèm theo 1 ghi chú nổi bật theo định dạng:
   * 💡 **Lưu ý nổi bật:** [Ghi chú 1-2 câu súc tích về điểm then chốt nhất mà Ban quản trị & Leader cần nắm bắt ngay tuần này].
 
@@ -443,7 +471,7 @@ CẤU TRÚC 5 PHẦN CHUẨN:
   + KHÔNG liệt kê các task 0% To do bình thường thành danh sách dài gây rối mắt.
 
 ### ⚠️ 4. PHÂN TÍCH ĐIỂM NGHẼN & RỦI RO (BLOCKERS & RISKS)
-- 2-3 gạch đầu dòng ngắn gọn chỉ rõ các rủi ro cụ thể (ví dụ: Role nào còn nhiều task To do chưa chạy, hoặc task nào có Est lớn mà chưa xong, hoặc task kéo dài qua nhiều tuần).
+- 2-3 gạch đầu dòng ngắn gọn chỉ rõ các rủi ro cụ thể dựa trên danh sách task quá hạn, các task kéo dài nhiều tuần và các Role có tỉ lệ To do cao.
 
 ### 🎯 5. ĐỀ XUẤT HÀNH ĐỘNG CHO TUẦN TỚI
 - Đánh số thứ tự 1., 2., 3., 4. các hành động cụ thể, thiết thực dành cho Admin/Leader.`;
@@ -487,6 +515,8 @@ THÔNG TIN NGƯỜI DÙNG ĐANG TRAO ĐỔI TRỰC TIẾP VỚI BẠN:
 
 DỮ LIỆU THỰC TẾ DỰ ÁN ĐƯỢC CẤP HIỆN TẠI:
 - Tuần hiện tại: Tuần ${systemContext?.currentWeek || 'N/A'} / ${systemContext?.currentYear || '2026'}
+- Chỉ số KPI Tuần hiện tại (Đã tính chuẩn xác):
+${JSON.stringify(systemContext?.currentWeekMetrics || {}, null, 2)}
 - Danh sách thành viên & Role:
 ${JSON.stringify(systemContext?.users || [], null, 2)}
 - Danh sách Milestone:

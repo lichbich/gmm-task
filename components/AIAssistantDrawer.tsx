@@ -530,6 +530,54 @@ export const AIAssistantDrawer: React.FC = () => {
     setIsLoading(true);
 
     try {
+      const weekTasks = (tasks || []).filter((t) => {
+        const w = t.weekNumber <= 53 && (!t.year || t.year === 2026) ? t.weekNumber + 55 : t.weekNumber;
+        const targetW = selectedWeek <= 53 && selectedYear === 2026 ? selectedWeek + 55 : selectedWeek;
+        return w === targetW;
+      });
+
+      let weekDone = 0;
+      let weekInProgress = 0;
+      let weekTodo = 0;
+      let weekActual = 0;
+      let weekEst = 0;
+      const roleAgg: Record<string, { tasks: number; done: number; actual: number; est: number }> = {};
+
+      weekTasks.forEach((t) => {
+        if (t.status === 'Done' || t.completionPercentage === 100) weekDone++;
+        else if (t.status === 'In Progress' || (t.completionPercentage && t.completionPercentage > 0)) weekInProgress++;
+        else weekTodo++;
+
+        const act = t.actualEffort || 0;
+        const est = t.estimatedEffort || 0;
+        weekActual += act;
+        weekEst += est;
+
+        const r = t.role || 'Other';
+        if (!roleAgg[r]) roleAgg[r] = { tasks: 0, done: 0, actual: 0, est: 0 };
+        roleAgg[r].tasks++;
+        if (t.status === 'Done' || t.completionPercentage === 100) roleAgg[r].done++;
+        roleAgg[r].actual += act;
+        roleAgg[r].est += est;
+      });
+
+      const currentWeekMetrics = {
+        totalTasks: weekTasks.length,
+        doneTasks: weekDone,
+        inProgressTasks: weekInProgress,
+        todoTasks: weekTodo,
+        completionRate: weekTasks.length > 0 ? Math.round((weekDone / weekTasks.length) * 100) : 0,
+        totalActualEffort: Math.round(weekActual * 10) / 10,
+        totalEstEffort: Math.round(weekEst * 10) / 10,
+        roleStats: Object.keys(roleAgg).map((r) => ({
+          role: r,
+          total: roleAgg[r].tasks,
+          done: roleAgg[r].done,
+          actualEffort: Math.round(roleAgg[r].actual * 10) / 10,
+          estimatedEffort: Math.round(roleAgg[r].est * 10) / 10,
+        })),
+      };
+
       const systemContext = {
         currentUser: currentUser
           ? {
@@ -541,6 +589,7 @@ export const AIAssistantDrawer: React.FC = () => {
           : undefined,
         currentWeek: selectedWeek,
         currentYear: selectedYear,
+        currentWeekMetrics,
         users: (users || [])
           .filter((u) => !u.disabled && u.status !== 'disabled')
           .map((u) => ({

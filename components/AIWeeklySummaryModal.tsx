@@ -87,7 +87,7 @@ function renderInlineFormatted(text: string) {
           parts.push(remaining.substring(0, itIndex));
         }
         parts.push(
-          <em key={key++} className="italic text-slate-600 dark:text-slate-300 font-medium">
+          <em key={key++} className="italic text-slate-700 dark:text-slate-100 font-medium">
             {italicMatch[1]}
           </em>
         );
@@ -107,19 +107,19 @@ function renderInlineFormatted(text: string) {
       const lower = boldContent.toLowerCase().trim();
       let roleBadgeClass = '';
       if (lower === 'be' || lower.includes('backend')) {
-        roleBadgeClass = 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+        roleBadgeClass = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-200 border-indigo-200 dark:border-indigo-700/80';
       } else if (lower === 'fe' || lower.includes('frontend')) {
-        roleBadgeClass = 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+        roleBadgeClass = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-200 border-emerald-200 dark:border-emerald-700/80';
       } else if (lower.includes('design')) {
-        roleBadgeClass = 'bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-800';
+        roleBadgeClass = 'bg-pink-50 text-pink-700 dark:bg-pink-950/80 dark:text-pink-200 border-pink-200 dark:border-pink-700/80';
       } else if (lower.includes('test') || lower === 'qc' || lower === 'qa') {
-        roleBadgeClass = 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+        roleBadgeClass = 'bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-200 border-amber-200 dark:border-amber-700/80';
       } else if (lower === 'ba' || lower.includes('analyst') || lower.includes('product')) {
-        roleBadgeClass = 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800';
+        roleBadgeClass = 'bg-cyan-50 text-cyan-800 dark:bg-cyan-950/80 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700/80';
       } else if (lower.includes('devops') || lower.includes('infra')) {
-        roleBadgeClass = 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800';
+        roleBadgeClass = 'bg-purple-50 text-purple-700 dark:bg-purple-950/80 dark:text-purple-200 border-purple-200 dark:border-purple-700/80';
       } else if (lower.includes('pm') || lower.includes('po') || lower.includes('sa')) {
-        roleBadgeClass = 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800';
+        roleBadgeClass = 'bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-200 border-blue-200 dark:border-blue-700/80';
       }
 
       if (roleBadgeClass) {
@@ -133,7 +133,7 @@ function renderInlineFormatted(text: string) {
         );
       } else {
         parts.push(
-          <strong key={key++} className="font-bold text-slate-900 dark:text-slate-100">
+          <strong key={key++} className="font-bold text-slate-900 dark:text-white">
             {boldContent}
           </strong>
         );
@@ -143,7 +143,7 @@ function renderInlineFormatted(text: string) {
       parts.push(
         <code
           key={key++}
-          className="px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 font-mono text-[11px] border border-purple-200 dark:border-purple-800"
+          className="px-1.5 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-200 font-mono text-[11px] border border-purple-200 dark:border-purple-700"
         >
           {codeMatch[1]}
         </code>
@@ -154,12 +154,12 @@ function renderInlineFormatted(text: string) {
       const lower = inner.toLowerCase();
 
       if (['fe', 'be', 'ba', 'qa', 'qc', 'designer', 'design', 'devops', 'pm', 'po', 'sa'].includes(lower)) {
-        let roleBadgeClass = 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800';
-        if (lower === 'be') roleBadgeClass = 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
-        else if (lower === 'fe') roleBadgeClass = 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
-        else if (lower.includes('design')) roleBadgeClass = 'bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-800';
-        else if (lower === 'ba') roleBadgeClass = 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800';
-        else if (lower === 'qa' || lower === 'qc') roleBadgeClass = 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+        let roleBadgeClass = 'bg-slate-500/10 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700';
+        if (lower === 'be') roleBadgeClass = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-200 border-indigo-200 dark:border-indigo-700/80';
+        else if (lower === 'fe') roleBadgeClass = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-200 border-emerald-200 dark:border-emerald-700/80';
+        else if (lower.includes('design')) roleBadgeClass = 'bg-pink-50 text-pink-700 dark:bg-pink-950/80 dark:text-pink-200 border-pink-200 dark:border-pink-700/80';
+        else if (lower === 'ba') roleBadgeClass = 'bg-cyan-50 text-cyan-800 dark:bg-cyan-950/80 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700/80';
+        else if (lower === 'qa' || lower === 'qc') roleBadgeClass = 'bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-200 border-amber-200 dark:border-amber-700/80';
         
         parts.push(
           <span
@@ -173,7 +173,7 @@ function renderInlineFormatted(text: string) {
         parts.push(
           <span
             key={key++}
-            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 mr-1"
+            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/80 dark:text-rose-200 border border-rose-200 dark:border-rose-700/80 mr-1"
           >
             {inner}
           </span>
@@ -182,7 +182,7 @@ function renderInlineFormatted(text: string) {
         parts.push(
           <span
             key={key++}
-            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 mr-1"
+            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-700/80 mr-1"
           >
             {inner}
           </span>
@@ -191,14 +191,14 @@ function renderInlineFormatted(text: string) {
         parts.push(
           <span
             key={key++}
-            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 mr-1"
+            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-200 border border-amber-200 dark:border-amber-700/80 mr-1"
           >
             {inner}
           </span>
         );
       } else {
         parts.push(
-          <span key={key++} className="font-semibold text-slate-700 dark:text-slate-300">
+          <span key={key++} className="font-semibold text-slate-700 dark:text-slate-100">
             [{inner}]
           </span>
         );
@@ -271,8 +271,8 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
             title: rawTitle,
             type: 'overview',
             icon: BarChart3,
-            headerBg: 'bg-blue-500/10 text-blue-700 dark:text-blue-300',
-            borderColor: 'border-blue-200 dark:border-blue-800/60',
+            headerBg: 'bg-blue-50/90 text-blue-900 dark:bg-blue-950/80 dark:text-blue-200',
+            borderColor: 'border-blue-200 dark:border-blue-800/80',
             items: [],
           };
         } else if (lower.includes('2.') || lower.includes('kết quả') || lower.includes('nổi bật') || lower.includes('hoàn thành')) {
@@ -280,8 +280,8 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
             title: rawTitle,
             type: 'highlights',
             icon: Award,
-            headerBg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-            borderColor: 'border-emerald-200 dark:border-emerald-800/60',
+            headerBg: 'bg-emerald-50/90 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200',
+            borderColor: 'border-emerald-200 dark:border-emerald-800/80',
             items: [],
           };
         } else if (lower.includes('3.') || lower.includes('đang làm') || lower.includes('triển khai') || lower.includes('chuyển tiếp') || lower.includes('rollover')) {
@@ -289,8 +289,8 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
             title: rawTitle,
             type: 'inprogress',
             icon: Clock,
-            headerBg: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-            borderColor: 'border-amber-200 dark:border-amber-800/60',
+            headerBg: 'bg-amber-50/90 text-amber-900 dark:bg-amber-950/80 dark:text-amber-200',
+            borderColor: 'border-amber-200 dark:border-amber-800/80',
             items: [],
           };
         } else if (lower.includes('4.') || lower.includes('điểm nghẽn') || lower.includes('rủi ro') || lower.includes('blocker')) {
@@ -298,8 +298,8 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
             title: rawTitle,
             type: 'risks',
             icon: ShieldAlert,
-            headerBg: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
-            borderColor: 'border-rose-200 dark:border-rose-800/60',
+            headerBg: 'bg-rose-50/90 text-rose-900 dark:bg-rose-950/80 dark:text-rose-200',
+            borderColor: 'border-rose-200 dark:border-rose-800/80',
             items: [],
           };
         } else if (lower.includes('5.') || lower.includes('đề xuất') || lower.includes('hành động') || lower.includes('kế hoạch')) {
@@ -307,8 +307,8 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
             title: rawTitle,
             type: 'actions',
             icon: Target,
-            headerBg: 'bg-purple-500/10 text-purple-700 dark:text-purple-300',
-            borderColor: 'border-purple-200 dark:border-purple-800/60',
+            headerBg: 'bg-purple-50/90 text-purple-900 dark:bg-purple-950/80 dark:text-purple-200',
+            borderColor: 'border-purple-200 dark:border-purple-800/80',
             items: [],
           };
         } else {
@@ -316,8 +316,8 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
             title: rawTitle,
             type: 'general',
             icon: Info,
-            headerBg: 'bg-slate-500/10 text-slate-700 dark:text-slate-300',
-            borderColor: 'border-slate-200 dark:border-slate-800/60',
+            headerBg: 'bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-200',
+            borderColor: 'border-slate-200 dark:border-slate-800',
             items: [],
           };
         }
@@ -351,12 +351,12 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
         return (
           <div
             key={idx}
-            className={`rounded-2xl border ${sec.borderColor} bg-white dark:bg-slate-800/80 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md`}
+            className={`rounded-2xl border ${sec.borderColor} bg-white dark:bg-slate-900/95 shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md`}
           >
             {/* Section Header */}
             <div className={`px-4 py-3 flex items-center justify-between border-b ${sec.borderColor} ${sec.headerBg}`}>
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-white/80 dark:bg-slate-800/80 shadow-xs flex items-center justify-center">
+                <div className="w-7 h-7 rounded-lg bg-white/90 dark:bg-slate-900/90 shadow-xs flex items-center justify-center">
                   <IconComponent className="w-4 h-4" />
                 </div>
                 <h4 className="text-xs sm:text-sm font-bold tracking-tight">
@@ -366,7 +366,7 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
             </div>
 
             {/* Section Content */}
-            <div className="p-4 sm:p-5 space-y-3 text-xs sm:text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+            <div className="p-4 sm:p-5 space-y-3 text-xs sm:text-sm leading-relaxed text-slate-800 dark:text-slate-100">
               {sec.items.map((item, itemIdx) => {
                 const trimmed = item.trim();
                 if (trimmed === '---' || trimmed === '***' || trimmed === '___') return null;
@@ -395,7 +395,7 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
                   return (
                     <div
                       key={itemIdx}
-                      className="mt-2 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-purple-50/90 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-purple-950/40 border border-blue-200/90 dark:border-blue-800/80 text-blue-950 dark:text-blue-200 flex items-start gap-3 shadow-xs"
+                      className="mt-2 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-purple-50/90 dark:from-blue-950/70 dark:via-indigo-950/60 dark:to-purple-950/70 border border-blue-200/90 dark:border-blue-700/80 text-blue-950 dark:text-blue-100 flex items-start gap-3 shadow-xs"
                     >
                       <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
                         <Sparkles className="w-4 h-4 animate-pulse" />
@@ -412,10 +412,10 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
                   return (
                     <div
                       key={itemIdx}
-                      className="ml-6 -mt-1.5 mb-1 p-2.5 sm:p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 text-xs sm:text-[13px] text-amber-950 dark:text-amber-200 flex items-start gap-2 shadow-2xs"
+                      className="ml-6 -mt-1.5 mb-1 p-2.5 sm:p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/60 border border-amber-200/90 dark:border-amber-700/80 text-xs sm:text-[13px] text-amber-950 dark:text-amber-100 flex items-start gap-2 shadow-2xs"
                     >
-                      <ArrowRight className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                      <div className="flex-1 leading-relaxed">
+                      <ArrowRight className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
+                      <div className="flex-1 leading-relaxed text-slate-800 dark:text-amber-100 font-medium">
                         {renderInlineFormatted(cleanText)}
                       </div>
                     </div>
@@ -427,10 +427,10 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
                   return (
                     <div
                       key={itemIdx}
-                      className="flex items-start gap-2.5 p-2.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40"
+                      className="flex items-start gap-2.5 p-2.5 rounded-xl bg-emerald-50/50 dark:bg-slate-950/60 border border-emerald-100 dark:border-emerald-800/60 text-slate-800 dark:text-slate-100"
                     >
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <div className="flex-1 text-slate-800 dark:text-slate-200">
+                      <div className="flex-1 text-slate-800 dark:text-slate-100">
                         {renderInlineFormatted(cleanText)}
                       </div>
                     </div>
@@ -447,16 +447,16 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
 
                     return (
                       <div key={itemIdx} className="space-y-1.5">
-                        <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40">
+                        <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-amber-50/50 dark:bg-slate-950/60 border border-amber-100 dark:border-amber-800/60 text-slate-800 dark:text-slate-100 font-medium">
                           <CircleDashed className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                          <div className="flex-1 text-slate-800 dark:text-slate-200 font-medium">
+                          <div className="flex-1 text-slate-800 dark:text-slate-100 font-medium">
                             {renderInlineFormatted(taskHeader)}
                           </div>
                         </div>
                         {taskReason && (
-                          <div className="ml-6 p-2.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-800/50 text-xs sm:text-[13px] text-amber-950 dark:text-amber-200 flex items-start gap-2 shadow-2xs">
-                            <ArrowRight className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                            <div className="flex-1 leading-relaxed">
+                          <div className="ml-6 p-2.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/60 border border-amber-200/90 dark:border-amber-700/80 text-xs sm:text-[13px] text-amber-950 dark:text-amber-100 flex items-start gap-2 shadow-2xs">
+                            <ArrowRight className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300 shrink-0 mt-0.5" />
+                            <div className="flex-1 leading-relaxed text-slate-800 dark:text-amber-100 font-medium">
                               {renderInlineFormatted(taskReason)}
                             </div>
                           </div>
@@ -468,10 +468,10 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
                   return (
                     <div
                       key={itemIdx}
-                      className="flex items-start gap-2.5 p-2.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40"
+                      className="flex items-start gap-2.5 p-2.5 rounded-xl bg-amber-50/50 dark:bg-slate-950/60 border border-amber-100 dark:border-amber-800/60 text-slate-800 dark:text-slate-100 font-medium"
                     >
                       <CircleDashed className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                      <div className="flex-1 text-slate-800 dark:text-slate-200">
+                      <div className="flex-1 text-slate-800 dark:text-slate-100">
                         {renderInlineFormatted(cleanText)}
                       </div>
                     </div>
@@ -483,13 +483,13 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
                   return (
                     <div key={itemIdx} className="flex items-start gap-2.5 pl-1">
                       {sec.type === 'risks' ? (
-                        <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                        <AlertTriangle className="w-4 h-4 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
                       ) : sec.type === 'actions' ? (
-                        <ArrowRight className="w-4 h-4 text-purple-500 shrink-0 mt-0.5" />
+                        <ArrowRight className="w-4 h-4 text-purple-500 dark:text-purple-400 shrink-0 mt-0.5" />
                       ) : (
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0 mt-2" />
                       )}
-                      <div className="flex-1 text-slate-800 dark:text-slate-200">
+                      <div className="flex-1 text-slate-800 dark:text-slate-100">
                         {renderInlineFormatted(cleanText)}
                       </div>
                     </div>
@@ -502,10 +502,10 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
                   const numStr = numMatch ? numMatch[1] : `${itemIdx + 1}`;
                   return (
                     <div key={itemIdx} className="flex items-start gap-2.5 pl-1">
-                      <span className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-200 font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">
                         {numStr}
                       </span>
-                      <div className="flex-1 text-slate-800 dark:text-slate-200">
+                      <div className="flex-1 text-slate-800 dark:text-slate-100">
                         {renderInlineFormatted(cleanText)}
                       </div>
                     </div>
@@ -514,7 +514,7 @@ const FormattedMarkdownReport: React.FC<{ markdownText: string }> = ({ markdownT
 
                 // 7. Paragraph / Subheading
                 return (
-                  <p key={itemIdx} className="leading-relaxed">
+                  <p key={itemIdx} className="leading-relaxed text-slate-800 dark:text-slate-100">
                     {renderInlineFormatted(trimmed)}
                   </p>
                 );
@@ -543,7 +543,7 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'visual' | 'markdown'>('visual');
-  const [savedMeta, setSavedMeta] = useState<{ updatedAt?: number; author?: string } | null>(null);
+  const [savedMeta, setSavedMeta] = useState<{ updatedAt?: number; author?: string; tasksCount?: number } | null>(null);
 
   // Compute actual week tasks & KPI metrics directly from real data
   const {
@@ -679,11 +679,44 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
           totalTasks: roleMap[r].total,
           doneTasks: roleMap[r].done,
           inProgressTasks: roleMap[r].inProgress,
-          actualEffort: Math.round(roleMap[r].actual * 100) / 100,
-          estimatedEffort: Math.round(roleMap[r].est * 100) / 100,
+          actualEffort: Math.round(roleMap[r].actual * 10) / 10,
+          estimatedEffort: Math.round(roleMap[r].est * 10) / 10,
         }));
 
-        // 3. Prepare tickets summary
+        // 3. Compute Member-level stats
+        const memberMap: Record<string, { role: string; total: number; done: number; inProgress: number; actual: number; est: number }> = {};
+        targetTasks.forEach((t) => {
+          const acc = t.assigneeAccount || 'Unassigned';
+          if (!memberMap[acc]) memberMap[acc] = { role: t.role || 'Other', total: 0, done: 0, inProgress: 0, actual: 0, est: 0 };
+          memberMap[acc].total += 1;
+          if (t.status === 'Done' || t.completionPercentage === 100) memberMap[acc].done += 1;
+          else if (t.status === 'In Progress' || (t.completionPercentage && t.completionPercentage > 0)) memberMap[acc].inProgress += 1;
+          memberMap[acc].actual += t.actualEffort || 0;
+          memberMap[acc].est += t.estimatedEffort || 0;
+        });
+
+        const memberStats = Object.keys(memberMap).map((acc) => ({
+          account: acc,
+          role: memberMap[acc].role,
+          totalTasks: memberMap[acc].total,
+          doneTasks: memberMap[acc].done,
+          inProgressTasks: memberMap[acc].inProgress,
+          actualEffort: Math.round(memberMap[acc].actual * 10) / 10,
+          estimatedEffort: Math.round(memberMap[acc].est * 10) / 10,
+        })).sort((a, b) => b.actualEffort - a.actualEffort);
+
+        // 4. Overdue tasks
+        const overdueTasks = currentWeekTasks
+          .filter((t) => t.deadlineStatus?.startsWith('Đã quá hạn'))
+          .map((t) => ({
+            title: t.title,
+            role: t.role,
+            assigneeAccount: t.assigneeAccount,
+            deadline: t.deadline,
+            completionPercentage: t.completionPercentage,
+          }));
+
+        // 5. Prepare tickets summary
         const ticketsSummary = (tickets || []).slice(0, 15).map((tk) => ({
           id: tk.id,
           code: tk.code,
@@ -695,12 +728,26 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
           assignedTo: tk.assignedTo,
         }));
 
+        const overallStats = {
+          totalTasks: totalTasksCount,
+          doneTasks: doneCount,
+          inProgressTasks: inProgressCount,
+          todoCount: todoCount,
+          todoTasks: todoCount,
+          completionRate,
+          totalActualEffort,
+          totalEstEffort,
+        };
+
         const requestPayload: WeeklySummaryRequestData = {
           weekNumber,
           year,
+          overallStats,
           tasksSummary: currentWeekTasks,
           ticketsSummary,
           roleStats,
+          memberStats,
+          overdueTasks,
         };
 
         const result = await requestAIWeeklySummary(requestPayload);
@@ -710,7 +757,7 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
           setSummaryText(result.summary);
           const author = currentUser?.account || 'admin';
           const now = Date.now();
-          setSavedMeta({ updatedAt: now, author });
+          setSavedMeta({ updatedAt: now, author, tasksCount: targetTasks.length });
           // Save to Firebase Realtime Database
           await saveWeeklySummaryToDb(weekNumber, year, result.summary, author, targetTasks.length);
         }
@@ -720,7 +767,21 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
         setIsLoading(false);
       }
     },
-    [targetTasks, tasks, tickets, weekNumber, year, currentUser]
+    [
+      targetTasks,
+      tasks,
+      tickets,
+      weekNumber,
+      year,
+      currentUser,
+      totalTasksCount,
+      doneCount,
+      inProgressCount,
+      todoCount,
+      completionRate,
+      totalActualEffort,
+      totalEstEffort,
+    ]
   );
 
   // When modal opens: Check Firebase DB first. If found, load in 0ms!
@@ -742,6 +803,7 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
           setSavedMeta({
             updatedAt: cached.updatedAt || cached.createdAt,
             author: cached.generatedBy || 'admin',
+            tasksCount: cached.tasksCount,
           });
           setIsLoading(false);
           return;
@@ -845,9 +907,15 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
                   AI Multi-Engine
                 </span>
                 {formattedSavedTime && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    <Database className="w-3 h-3 text-emerald-600" />
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <Database className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                     <span>Đã lưu ({formattedSavedTime})</span>
+                  </span>
+                )}
+                {savedMeta?.tasksCount !== undefined && savedMeta.tasksCount !== totalTasksCount && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                    <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                    <span>Dữ liệu có cập nhật mới ({totalTasksCount} task so với {savedMeta.tasksCount} lúc lưu)</span>
                   </span>
                 )}
               </div>
@@ -907,10 +975,10 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
           {/* Quick Metrics KPI Banner */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
             {/* Card 1: Total Tasks */}
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-300">
                 <span className="text-[11px] font-bold uppercase tracking-wider">Tổng Task</span>
-                <div className="w-6 h-6 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 flex items-center justify-center">
                   <Layers className="w-3.5 h-3.5" />
                 </div>
               </div>
@@ -918,15 +986,15 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
                 <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
                   {totalTasksCount}
                 </span>
-                <span className="text-[11px] text-slate-500 font-medium">task</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">task</span>
               </div>
             </div>
 
             {/* Card 2: Done Tasks */}
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-300">
                 <span className="text-[11px] font-bold uppercase tracking-wider">Hoàn thành</span>
-                <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 flex items-center justify-center">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                 </div>
               </div>
@@ -935,13 +1003,13 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
                   <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400">
                     {doneCount}
                   </span>
-                  <span className="text-[11px] font-bold text-emerald-600/80">
+                  <span className="text-[11px] font-bold text-emerald-600/90 dark:text-emerald-300">
                     ({completionRate}%)
                   </span>
                 </div>
-                <div className="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
                   <div
-                    className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                    className="bg-emerald-500 dark:bg-emerald-400 h-full rounded-full transition-all duration-500"
                     style={{ width: `${Math.min(100, completionRate)}%` }}
                   />
                 </div>
@@ -949,10 +1017,10 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
             </div>
 
             {/* Card 3: In Progress & Todo */}
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-300">
                 <span className="text-[11px] font-bold uppercase tracking-wider">Đang làm / Chờ</span>
-                <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-300 flex items-center justify-center">
                   <Clock className="w-3.5 h-3.5" />
                 </div>
               </div>
@@ -961,23 +1029,23 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
                   <span className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">
                     {inProgressCount}
                   </span>
-                  <span className="text-[10px] text-amber-600 font-semibold ml-0.5">đang làm</span>
+                  <span className="text-[10px] text-amber-600 dark:text-amber-300 font-semibold ml-0.5">đang làm</span>
                 </div>
-                <span className="text-xs text-slate-400">•</span>
+                <span className="text-xs text-slate-300 dark:text-slate-600">•</span>
                 <div>
-                  <span className="text-base font-bold text-slate-500">
+                  <span className="text-base font-bold text-slate-600 dark:text-slate-200">
                     {todoCount}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-medium ml-0.5">to do</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium ml-0.5">to do</span>
                 </div>
               </div>
             </div>
 
             {/* Card 4: Effort */}
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-300">
                 <span className="text-[11px] font-bold uppercase tracking-wider">Giờ Thực Tế</span>
-                <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-lg bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300 flex items-center justify-center">
                   <TrendingUp className="w-3.5 h-3.5" />
                 </div>
               </div>
@@ -985,7 +1053,7 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
                 <span className="text-xl sm:text-2xl font-black text-purple-600 dark:text-purple-400">
                   {totalActualEffort}h
                 </span>
-                <span className="text-[11px] text-slate-400 font-medium">
+                <span className="text-[11px] text-slate-400 dark:text-slate-400 font-medium">
                   / {totalEstEffort}h ước tính
                 </span>
               </div>
