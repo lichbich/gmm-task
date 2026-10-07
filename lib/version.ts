@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.8.7';
+export const APP_VERSION = '2.8.8';
 export const APP_RELEASE_NOTE =
-  'Tối ưu độ tương phản và màu sắc cho Modal Báo cáo AI trên Dark Mode';
+  'Thêm tính năng reply trao đổi và nhảy tới comment được trả lời trong phần ghi chú công việc';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 

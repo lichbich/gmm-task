@@ -652,5 +652,38 @@ html.dark .bg-slate-100 {
   will-change: opacity, transform, filter;
 }
 
+/* ==========================================================================
+   REPLY JUMP HIGHLIGHT & BOUNCE ANIMATION
+   ========================================================================== */
+@keyframes noteJumpBounce {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+  }
+  20% {
+    transform: scale(1.035) translateY(-4px);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.45), 0 10px 25px -5px rgba(99, 102, 241, 0.35);
+  }
+  45% {
+    transform: scale(0.985) translateY(1px);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35), 0 8px 20px -4px rgba(99, 102, 241, 0.25);
+  }
+  70% {
+    transform: scale(1.015) translateY(-2px);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+  }
+}
+
+.animate-note-jump {
+  animation: noteJumpBounce 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  will-change: transform, box-shadow;
+  z-index: 10;
+  position: relative;
+}
+
 
 

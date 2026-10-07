@@ -1,12 +1,18 @@
 import React from 'react';
 import { User, Task, getUserRoleColorClass } from '../types/task';
 
+export interface NoteReplyContext {
+  replyAuthor: string;
+  replyText: string;
+}
+
 export interface ParsedNote {
   raw: string;
   isTagged: boolean;
   authorInfo: string;
   baseAuthor: string;
   editedTime?: string;
+  replyTo?: NoteReplyContext;
   messageBody: string;
   isMyMessage: boolean;
 }
@@ -39,8 +45,20 @@ export function parseNoteLine(
     };
   }
 
-  const authorInfo = match[1].trim();
+  let authorInfo = match[1].trim();
   const messageBody = match[2];
+
+  let replyTo: NoteReplyContext | undefined = undefined;
+
+  // Match reply format in header: "[Author - Time | reply: TargetAuthor | quote: Snippet]"
+  const replyMatch = authorInfo.match(/^(.*?)\s*\|\s*reply:\s*([^|]+)\s*\|\s*quote:\s*(.+)$/i);
+  if (replyMatch) {
+    authorInfo = replyMatch[1].trim();
+    replyTo = {
+      replyAuthor: replyMatch[2].trim(),
+      replyText: replyMatch[3].trim(),
+    };
+  }
 
   let baseAuthor = authorInfo;
   let editedTime: string | undefined = undefined;
@@ -65,6 +83,7 @@ export function parseNoteLine(
     authorInfo,
     baseAuthor,
     editedTime,
+    replyTo,
     messageBody,
     isMyMessage,
   };
@@ -72,7 +91,8 @@ export function parseNoteLine(
 
 export function formatNewNoteLine(
   content: string,
-  currentUser: { name?: string; specializations?: string[]; role?: string } | null | undefined
+  currentUser: { name?: string; specializations?: string[]; role?: string } | null | undefined,
+  replyTo?: { author: string; text: string } | null
 ): string {
   const now = new Date();
   const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(
@@ -82,6 +102,17 @@ export function formatNewNoteLine(
   ).padStart(2, '0')}`;
   const userRole = currentUser?.specializations?.[0] || currentUser?.role || 'Member';
   const senderTag = currentUser ? `${currentUser.name} (${userRole})` : 'Thành viên';
+
+  if (replyTo && replyTo.author && replyTo.text) {
+    const sanitizedQuote = replyTo.text
+      .replace(/\r?\n+/g, ' ')
+      .replace(/\|/g, '/')
+      .trim()
+      .slice(0, 80);
+    const sanitizedAuthor = replyTo.author.replace(/\|/g, '/').trim();
+    return `[${senderTag} - ${timeStr} | reply: ${sanitizedAuthor} | quote: ${sanitizedQuote}]: ${content.trim()}`;
+  }
+
   return `[${senderTag} - ${timeStr}]: ${content.trim()}`;
 }
 
@@ -102,7 +133,12 @@ export function formatEditedNoteLine(
   const fallbackSenderTag = currentUser ? `${currentUser.name} (${userRole})` : 'Thành viên';
   const baseHeader = parsed.baseAuthor || `${fallbackSenderTag} - ${editTimeStr}`;
 
-  return `[${baseHeader} • đã sửa ${editTimeStr}]: ${newContent.trim()}`;
+  let replySegment = '';
+  if (parsed.replyTo) {
+    replySegment = ` | reply: ${parsed.replyTo.replyAuthor} | quote: ${parsed.replyTo.replyText}`;
+  }
+
+  return `[${baseHeader}${replySegment} • đã sửa ${editTimeStr}]: ${newContent.trim()}`;
 }
 
 /**
@@ -183,6 +219,17 @@ export function extractDiscussionParticipants(
           participants.add(matchedUser.account);
         }
       }
+      if (parsed.replyTo && parsed.replyTo.replyAuthor) {
+        const replyAuthorStr = parsed.replyTo.replyAuthor.toLowerCase();
+        const matchedUser = users.find(
+          (u) =>
+            (u.name && replyAuthorStr.includes(u.name.toLowerCase())) ||
+            (u.account && replyAuthorStr.includes(u.account.toLowerCase()))
+        );
+        if (matchedUser) {
+          participants.add(matchedUser.account);
+        }
+      }
     }
 
     // 4. All @mentions in notes history
@@ -197,6 +244,49 @@ export function extractDiscussionParticipants(
       (u) => u.account.toLowerCase() === lower && !u.disabled && u.status !== 'disabled'
     );
   });
+}
+
+/**
+ * Render sleek quoted message preview (Telegram / Messenger style)
+ */
+export function NoteReplyQuoteBlock({
+  replyTo,
+  onClick,
+}: {
+  replyTo: NoteReplyContext;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      onClick={(e) => {
+        if (onClick) {
+          e.stopPropagation();
+          onClick();
+        }
+      }}
+      className={`mb-1.5 px-2.5 py-1.5 rounded-lg border-l-3 border-indigo-500 bg-slate-100/90 dark:bg-slate-900/60 text-[11px] space-y-0.5 select-none transition-all group ${
+        onClick
+          ? 'cursor-pointer hover:bg-indigo-50/70 dark:hover:bg-indigo-950/60 hover:border-indigo-600 active:scale-[0.98]'
+          : ''
+      }`}
+      title={onClick ? 'Bấm để trượt đến tin nhắn được trả lời' : undefined}
+    >
+      <div className="flex items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400 text-[10.5px] truncate">
+          <span className="text-xs group-hover:-translate-x-0.5 transition-transform">↩</span>
+          <span className="truncate">{replyTo.replyAuthor}</span>
+        </div>
+        {onClick && (
+          <span className="text-[9.5px] text-indigo-400 dark:text-indigo-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity shrink-0 hidden sm:inline">
+            Xem tin nhắn gốc ↗
+          </span>
+        )}
+      </div>
+      <p className="text-slate-600 dark:text-slate-300 italic truncate text-[11px] leading-tight">
+        "{replyTo.replyText}"
+      </p>
+    </div>
+  );
 }
 
 /**

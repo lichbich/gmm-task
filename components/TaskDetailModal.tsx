@@ -39,9 +39,16 @@ import {
   ExternalLink,
   Copy,
   Download,
+  Reply,
 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
-import { parseNoteLine, formatNewNoteLine, formatEditedNoteLine, renderFormattedMessage } from '../lib/notesHelper';
+import {
+  parseNoteLine,
+  formatNewNoteLine,
+  formatEditedNoteLine,
+  renderFormattedMessage,
+  NoteReplyQuoteBlock,
+} from '../lib/notesHelper';
 import { MentionInput } from './common/MentionInput';
 import {
   parseDescription,
@@ -126,6 +133,12 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const [quickComment, setQuickComment] = useState('');
   const [isSaved, setIsSaved] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<{
+    author: string;
+    text: string;
+    lineIndex: number;
+  } | null>(null);
+  const [highlightedNoteIndex, setHighlightedNoteIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -150,8 +163,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     const isCommentDirty = quickComment.trim() !== '';
     const isEditingNoteDirty =
       editingNoteIndex !== null && editingNoteText.trim() !== '';
+    const isReplyingDirty = replyingTo !== null;
 
-    const isDirty = isDescDirty || isCommentDirty || isEditingNoteDirty;
+    const isDirty = isDescDirty || isCommentDirty || isEditingNoteDirty || isReplyingDirty;
 
     if (isDirty) {
       confirmDialog({
@@ -169,6 +183,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           setQuickComment('');
           setEditingNoteIndex(null);
           setEditingNoteText('');
+          setReplyingTo(null);
           forceCloseRef.current();
         },
       });
@@ -182,6 +197,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     quickComment,
     editingNoteIndex,
     editingNoteText,
+    replyingTo,
     confirmDialog,
   ]);
 
@@ -204,8 +220,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     const isCommentDirty = quickComment.trim() !== '';
     const isEditingNoteDirty =
       editingNoteIndex !== null && editingNoteText.trim() !== '';
+    const isReplyingDirty = replyingTo !== null;
 
-    if (isDescDirty || isCommentDirty || isEditingNoteDirty) {
+    if (isDescDirty || isCommentDirty || isEditingNoteDirty || isReplyingDirty) {
       confirmDialog({
         title: 'Nội dung chưa được lưu',
         message:
@@ -221,6 +238,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           setQuickComment('');
           setEditingNoteIndex(null);
           setEditingNoteText('');
+          setReplyingTo(null);
           forceClose();
           setTimeout(callback, 150);
         },
@@ -303,6 +321,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setIsSaved(false);
       setEditingNoteIndex(null);
       setEditingNoteText('');
+      setReplyingTo(null);
+      setHighlightedNoteIndex(null);
       if (task.notes) {
         markNoteAsRead(task.id, task.notes);
       }
@@ -427,17 +447,77 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     setDescText((prev) => insertCheckboxToText(prev));
   };
 
+  const handleStartReply = (author: string, text: string, lineIndex: number) => {
+    setReplyingTo({
+      author: author.trim(),
+      text: text.trim(),
+      lineIndex,
+    });
+  };
+
+  const handleCancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  const findTargetNoteIndex = (replyTo: { replyAuthor: string; replyText: string }, currentIdx: number): number => {
+    const quoteSnippet = (replyTo.replyText || '').trim().toLowerCase();
+    const targetAuthor = (replyTo.replyAuthor || '').trim().toLowerCase();
+
+    // 1. Search backwards from currentIdx
+    for (let i = currentIdx - 1; i >= 0; i--) {
+      const line = noteLines[i];
+      const parsed = parseNoteLine(line, null);
+      const bodyLower = (parsed.messageBody || '').trim().toLowerCase();
+      const authorLower = (parsed.isTagged ? parsed.baseAuthor : (creatorDisplay || 'Ghi chú ban đầu')).toLowerCase();
+
+      const authorMatch = !targetAuthor || authorLower.includes(targetAuthor) || targetAuthor.includes(authorLower);
+      const snippetMatch = !quoteSnippet || bodyLower.includes(quoteSnippet) || quoteSnippet.includes(bodyLower.slice(0, 40));
+
+      if (snippetMatch && (authorMatch || quoteSnippet.length > 5)) {
+        return i;
+      }
+    }
+
+    // 2. Search anywhere in noteLines
+    for (let i = 0; i < noteLines.length; i++) {
+      if (i === currentIdx) continue;
+      const line = noteLines[i];
+      const parsed = parseNoteLine(line, null);
+      const bodyLower = (parsed.messageBody || '').trim().toLowerCase();
+      if (quoteSnippet && (bodyLower.includes(quoteSnippet) || quoteSnippet.includes(bodyLower.slice(0, 40)))) {
+        return i;
+      }
+    }
+
+    return -1;
+  };
+
+  const handleJumpToRepliedNote = (replyTo: { replyAuthor: string; replyText: string }, currentIdx: number) => {
+    const targetIdx = findTargetNoteIndex(replyTo, currentIdx);
+    if (targetIdx < 0) return;
+
+    const el = document.getElementById(`task-detail-note-${targetIdx}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedNoteIndex(targetIdx);
+      setTimeout(() => {
+        setHighlightedNoteIndex(null);
+      }, 1600);
+    }
+  };
+
   // Handle appending quick discussion / exchange note
   const handleSendComment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickComment.trim()) return;
 
-    const newEntry = formatNewNoteLine(quickComment, currentUser);
+    const newEntry = formatNewNoteLine(quickComment, currentUser, replyingTo);
     const updated = notesText ? `${notesText}\n${newEntry}` : newEntry;
 
     setNotesText(updated);
     updateTaskNotes(task.id, updated, { newCommentContent: quickComment.trim() });
     setQuickComment('');
+    setReplyingTo(null);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 2500);
   };
@@ -482,6 +562,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         if (editingNoteIndex === index) {
           setEditingNoteIndex(null);
           setEditingNoteText('');
+        }
+        if (replyingTo?.lineIndex === index) {
+          setReplyingTo(null);
         }
       },
     });
@@ -1093,13 +1176,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   noteLines.map((line, idx) => {
                     const parsed = parseNoteLine(line, currentUser);
                     const isEditingThis = editingNoteIndex === idx;
+                    const isHighlighted = highlightedNoteIndex === idx;
 
                     if (parsed.isTagged) {
                       return (
                         <div
                           key={idx}
-                          className={`rounded-xl p-2.5 shadow-2xs text-xs space-y-1.5 transition ${
-                            parsed.isMyMessage
+                          id={`task-detail-note-${idx}`}
+                          className={`rounded-xl p-2.5 shadow-2xs text-xs space-y-1.5 transition-all duration-300 ${
+                            isHighlighted
+                              ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
+                              : parsed.isMyMessage
                               ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/90 dark:border-indigo-800/80 ml-2'
                               : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 mr-2'
                           }`}
@@ -1124,30 +1211,52 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                               )}
                             </div>
 
-                            {/* Author Actions (Only for message owner) */}
-                            {parsed.isMyMessage && !isEditingThis && (
-                              <div className="flex items-center gap-1">
+                            {/* Actions: Reply, Edit, Recall */}
+                            <div className="flex items-center gap-1">
+                              {!isEditingThis && (
                                 <button
                                   type="button"
-                                  onClick={() => handleStartEditNote(idx, parsed.messageBody)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition"
-                                  title="Chỉnh sửa nội dung ghi chú của bạn"
+                                  onClick={() => handleStartReply(parsed.baseAuthor || 'Thành viên', parsed.messageBody, idx)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition cursor-pointer"
+                                  title="Trả lời tin nhắn này"
                                 >
-                                  <Edit3 className="w-3 h-3" />
-                                  <span>Sửa</span>
+                                  <Reply className="w-3 h-3" />
+                                  <span>Trả lời</span>
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRecallNote(idx)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition"
-                                  title="Thu hồi ghi chú này"
-                                >
-                                  <RotateCcw className="w-3 h-3" />
-                                  <span>Thu hồi</span>
-                                </button>
-                              </div>
-                            )}
+                              )}
+
+                              {parsed.isMyMessage && !isEditingThis && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditNote(idx, parsed.messageBody)}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition cursor-pointer"
+                                    title="Chỉnh sửa nội dung ghi chú của bạn"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                    <span>Sửa</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRecallNote(idx)}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition cursor-pointer"
+                                    title="Thu hồi ghi chú này"
+                                  >
+                                    <RotateCcw className="w-3 h-3" />
+                                    <span>Thu hồi</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
+
+                          {/* Quoted Reply Block if message is a reply */}
+                          {parsed.replyTo && (
+                            <NoteReplyQuoteBlock
+                              replyTo={parsed.replyTo}
+                              onClick={() => handleJumpToRepliedNote(parsed.replyTo!, idx)}
+                            />
+                          )}
 
                           {/* Message Body or Inline Editor */}
                           {isEditingThis ? (
@@ -1167,7 +1276,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                 <button
                                   type="button"
                                   onClick={handleCancelEditNote}
-                                  className="px-2.5 py-1 bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium rounded-lg transition"
+                                  className="px-2.5 py-1 bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium rounded-lg transition cursor-pointer"
                                 >
                                   Hủy
                                 </button>
@@ -1175,7 +1284,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                   type="button"
                                   disabled={!editingNoteText.trim()}
                                   onClick={() => handleSaveEditNote(idx)}
-                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-lg shadow-xs transition flex items-center gap-1"
+                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-lg shadow-xs transition flex items-center gap-1 cursor-pointer"
                                 >
                                   <Save className="w-3 h-3" />
                                   Lưu thay đổi
@@ -1194,14 +1303,58 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     return (
                       <div
                         key={idx}
-                        className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap"
+                        id={`task-detail-note-${idx}`}
+                        className={`rounded-xl p-2.5 text-xs leading-relaxed whitespace-pre-wrap space-y-1.5 transition-all duration-300 ${
+                          isHighlighted
+                            ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
+                            : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200'
+                        }`}
                       >
-                        {line}
+                        <div>{line}</div>
+                        <div className="flex items-center justify-end pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                          <button
+                            type="button"
+                            onClick={() => handleStartReply(creatorDisplay || 'Ghi chú ban đầu', line, idx)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition cursor-pointer"
+                            title="Trả lời ghi chú này"
+                          >
+                            <Reply className="w-3 h-3" />
+                            <span>Trả lời</span>
+                          </button>
+                        </div>
                       </div>
                     );
                   })
                 )}
               </div>
+
+              {/* Replying Banner Preview (Telegram/Messenger style) */}
+              {replyingTo && (
+                <div className="flex items-center justify-between gap-2 p-2 px-3 bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 border-l-4 border-l-indigo-500 rounded-xl text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Reply className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-bold text-indigo-700 dark:text-indigo-300 text-[11px] truncate flex items-center gap-1">
+                        <span>Đang trả lời:</span>
+                        <span className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[200px]">
+                          {replyingTo.author}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 italic truncate max-w-[320px] sm:max-w-[420px]">
+                        "{replyingTo.text}"
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCancelReply}
+                    className="w-5 h-5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center shrink-0 transition cursor-pointer"
+                    title="Hủy trả lời"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
               {/* Collaborative Input Field for ANY team member */}
               <form onSubmit={handleSendComment} className="flex flex-col sm:flex-row gap-2">
@@ -1211,7 +1364,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   onChange={setQuickComment}
                   users={users}
                   mentionPlacement="top"
-                  placeholder={`Gửi ghi chú/trao đổi luồng (${currentUser?.name || 'thành viên'} - Gõ @ để tag)...`}
+                  placeholder={
+                    replyingTo
+                      ? `Trả lời @${replyingTo.author} (Gõ @ để tag)...`
+                      : `Gửi ghi chú/trao đổi luồng (${currentUser?.name || 'thành viên'} - Gõ @ để tag)...`
+                  }
                   className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
                 />
                 <button
