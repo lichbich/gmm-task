@@ -376,7 +376,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     return (
       <div
         ref={popupRef}
-        className={`fixed z-[999999] bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-2xl p-3 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none ${popupClassName}`}
+        className={`fixed z-[999999] bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-2xl p-3 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none overscroll-contain ${popupClassName}`}
         style={{
           top: coords.top !== undefined ? `${coords.top}px` : undefined,
           bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,

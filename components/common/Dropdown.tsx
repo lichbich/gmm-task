@@ -286,7 +286,7 @@ export function Dropdown<T extends string | number>({
 
         {/* Options List */}
         <div
-          className="overflow-y-auto py-1 space-y-0.5 no-scrollbar"
+          className="overflow-y-auto py-1 space-y-0.5 no-scrollbar overscroll-contain"
           style={{
             maxHeight: `${coords.maxHeight - (shouldEnableSearch ? 46 : 10)}px`,
           }}

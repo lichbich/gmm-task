@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import { useModalAnimation } from '../hooks/useModalAnimation';
+import { useHoverScrollLock } from '../hooks/useHoverScrollLock';
 import { AppNotification } from '../types/notification';
 import {
   Bell,
@@ -53,7 +54,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
     handleClose,
     handleBackdropMouseDown,
     handleBackdropClick,
-  } = useModalAnimation(isOpen, () => setIsOpen(false));
+  } = useModalAnimation(isOpen, () => setIsOpen(false), { lockScroll: false });
+
+  const { hoverScrollProps } = useHoverScrollLock(isRendered && isVisible);
 
   useEffect(() => {
     setMounted(true);
@@ -256,9 +259,10 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ onSelectTask
                   } as React.CSSProperties)
                 : undefined
             }
+            {...hoverScrollProps}
             className={`
               notification-popover-desktop
-              pointer-events-auto relative z-10 w-full flex flex-col bg-white dark:bg-slate-900 rounded-t-3xl border-t border-slate-200 dark:border-slate-800 shadow-2xl max-h-[85vh] bottomsheet-transition
+              pointer-events-auto relative z-10 w-full flex flex-col bg-white dark:bg-slate-900 rounded-t-3xl border-t border-slate-200 dark:border-slate-800 shadow-2xl max-h-[85vh] bottomsheet-transition overscroll-contain
               sm:w-[400px] sm:max-h-[540px] sm:rounded-2xl sm:border sm:border-slate-200 sm:dark:border-slate-800 sm:shadow-2xl sm:origin-top
               ${isVisible ? 'bottomsheet-open' : 'bottomsheet-closed'}
             `}

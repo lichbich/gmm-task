@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { DecryptedImage } from './DecryptedImage';
 import { loadDecryptedImageUrl } from '../../lib/imageCryptoHelper';
+import { lockBodyScroll, unlockBodyScroll } from '../../hooks/useModalAnimation';
 
 interface ImageLightboxProps {
   isOpen: boolean;
@@ -39,6 +40,16 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Lock body scroll while lightbox is open
+  useEffect(() => {
+    if (isOpen) {
+      lockBodyScroll();
+      return () => {
+        unlockBodyScroll();
+      };
+    }
+  }, [isOpen]);
 
   // Reset zoom & pan and load decrypted URL when image changes or opens
   useEffect(() => {

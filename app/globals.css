@@ -444,15 +444,27 @@ html.dark .bg-slate-100 {
   animation: tabContentIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* ==========================================================================
+   BACKGROUND SCROLL LOCK WHEN MODAL IS OPEN
+   ========================================================================== */
+body.modal-scroll-locked,
+html.modal-scroll-locked {
+  overflow: hidden !important;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
 /* Smooth modal open & close transitions */
 .modal-backdrop-transition {
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: opacity, backdrop-filter;
+  overscroll-behavior: contain;
 }
 
 .modal-dialog-transition {
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: opacity, transform;
+  overscroll-behavior: contain;
 }
 
 .modal-backdrop-open {

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useApp, formatToLocalISOString } from '../context/AppContext';
 import { Clock, AlertTriangle, CheckCircle, RotateCcw, X } from 'lucide-react';
+import { useModalAnimation } from '../hooks/useModalAnimation';
 
 interface TimeSimulatorProps {
   isOpen: boolean;
@@ -12,12 +13,19 @@ interface TimeSimulatorProps {
 export const TimeSimulator: React.FC<TimeSimulatorProps> = ({ isOpen, onClose }) => {
   const { simulatedTime, setSimulatedTime, resetSimulatedTime } = useApp();
   const [tempTime, setTempTime] = useState(simulatedTime);
+  const {
+    isRendered,
+    isVisible,
+    handleClose,
+    handleBackdropMouseDown,
+    handleBackdropClick,
+  } = useModalAnimation(isOpen, onClose);
 
-  if (!isOpen) return null;
+  if (!isRendered) return null;
 
   const handleApply = () => {
     setSimulatedTime(tempTime);
-    onClose();
+    handleClose();
   };
 
   const handleQuickPreset = (type: 'ON_TIME' | 'LATE' | 'RESET') => {
@@ -62,16 +70,28 @@ export const TimeSimulator: React.FC<TimeSimulatorProps> = ({ isOpen, onClose })
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[92vh] flex flex-col overflow-hidden shadow-2xl text-slate-800">
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 shrink-0 bg-white">
-          <div className="flex items-center gap-2 text-indigo-600 font-bold text-base sm:text-lg">
-            <Clock className="w-5 h-5 text-indigo-600 shrink-0" />
+    <div
+      onMouseDown={handleBackdropMouseDown}
+      onClick={handleBackdropClick}
+      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
+        isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
+      }`}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-md max-h-[92vh] flex flex-col overflow-hidden shadow-2xl text-slate-800 dark:text-slate-100 modal-dialog-transition ${
+          isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
+        }`}
+      >
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
+          <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-base sm:text-lg">
+            <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0" />
             Giả Lập Thời Gian System
           </div>
           <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 cursor-pointer"
+            type="button"
+            onClick={handleClose}
+            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-center transition active:scale-95 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -144,7 +164,8 @@ export const TimeSimulator: React.FC<TimeSimulatorProps> = ({ isOpen, onClose })
           </button>
           <div className="flex gap-2">
             <button
-              onClick={onClose}
+              type="button"
+              onClick={handleClose}
               className="px-3.5 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-medium rounded-xl transition cursor-pointer"
             >
               Hủy

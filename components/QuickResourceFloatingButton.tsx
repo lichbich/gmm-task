@@ -33,6 +33,7 @@ import {
   Globe,
   PlusCircle,
 } from 'lucide-react';
+import { useHoverScrollLock } from '../hooks/useHoverScrollLock';
 
 const FigmaIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   <svg className={className} viewBox="0 0 38 57" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -145,6 +146,9 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
   const [activeTab, setActiveTab] = useState<'PINNED' | 'ALL'>('PINNED');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<string>('ALL');
+
+  // Hover scroll lock hook
+  const { hoverScrollProps } = useHoverScrollLock(isOpen);
 
   // Pinned state & custom links state from localStorage
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -387,7 +391,10 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
 
       {/* 3. QUICK RESOURCE FLYOUT CARD - Clean, High-Contrast & Native Links */}
       {isOpen && (
-        <div className="fixed bottom-24 right-3 left-3 sm:left-auto sm:right-6 sm:bottom-20 z-50 sm:w-[460px] max-h-[82vh] sm:max-h-[640px] flex flex-col bg-slate-50/98 dark:bg-slate-900/98 backdrop-blur-2xl border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] overflow-hidden animate-in zoom-in-95 fade-in duration-200">
+        <div
+          {...hoverScrollProps}
+          className="fixed bottom-24 right-3 left-3 sm:left-auto sm:right-6 sm:bottom-20 z-50 sm:w-[460px] max-h-[82vh] sm:max-h-[640px] flex flex-col bg-slate-50/98 dark:bg-slate-900/98 backdrop-blur-2xl border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] overflow-hidden overscroll-contain animate-in zoom-in-95 fade-in duration-200"
+        >
           {/* Header */}
           <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-800/90 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2.5 min-w-0">
@@ -620,7 +627,7 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
           </div>
 
           {/* Content List Area - Soft tinted background to eliminate white glare */}
-          <div className="overflow-y-auto custom-scrollbar p-3 space-y-2.5 flex-1 min-h-[240px] bg-slate-100/60 dark:bg-slate-950/40">
+          <div className="overflow-y-auto custom-scrollbar p-3 space-y-2.5 flex-1 min-h-[240px] bg-slate-100/60 dark:bg-slate-950/40 overscroll-contain">
             {/* TAB 1: PINNED & CUSTOM LINKS */}
             {activeTab === 'PINNED' && (
               <div className="space-y-2.5">

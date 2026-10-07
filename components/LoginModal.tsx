@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Lock, User as UserIcon, CheckCircle, Key, LogIn, Sparkles, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { GMMLogo } from './common/GMMLogo';
+import { lockBodyScroll, unlockBodyScroll } from '../hooks/useModalAnimation';
 
 export const LoginModal: React.FC = () => {
   const { authSession, login, setupFirstTimePassword } = useApp();
@@ -20,6 +21,15 @@ export const LoginModal: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  useEffect(() => {
+    if (!authSession) {
+      lockBodyScroll();
+      return () => {
+        unlockBodyScroll();
+      };
+    }
+  }, [authSession]);
 
   if (authSession) return null; // Already logged in
 

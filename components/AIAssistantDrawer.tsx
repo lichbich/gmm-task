@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { useHoverScrollLock } from '../hooks/useHoverScrollLock';
 
 const SUGGESTION_PROMPTS = [
   '📊 Tổng hợp nhanh tiến độ và số giờ tuần này?',
@@ -440,6 +441,7 @@ export const AIAssistantDrawer: React.FC = () => {
 
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const { hoverScrollProps } = useHoverScrollLock(isOpen);
   const [messages, setMessages] = useState<ChatHistoryMessage[]>([getInitialGreeting(currentUser)]);
   const [inputValue, setInputValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -691,7 +693,8 @@ export const AIAssistantDrawer: React.FC = () => {
       {/* Floating Chat Drawer / Popover */}
       {isOpen && (
         <div
-          className={`fixed bottom-36 sm:bottom-20 left-3 sm:left-6 z-50 w-[calc(100vw-1.5rem)] max-h-[82vh] bg-white dark:bg-slate-900 border border-purple-500/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 fade-in duration-200 transition-all ${
+          {...hoverScrollProps}
+          className={`fixed bottom-36 sm:bottom-20 left-3 sm:left-6 z-50 w-[calc(100vw-1.5rem)] max-h-[82vh] bg-white dark:bg-slate-900 border border-purple-500/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden overscroll-contain animate-in slide-in-from-bottom-5 fade-in duration-200 transition-all ${
             isExpanded ? 'sm:w-[720px] h-[680px]' : 'sm:w-[480px] h-[580px]'
           }`}
         >
@@ -740,7 +743,7 @@ export const AIAssistantDrawer: React.FC = () => {
           </div>
 
           {/* Messages Thread */}
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3.5 bg-slate-50/60 dark:bg-slate-950/60 text-xs">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3.5 bg-slate-50/60 dark:bg-slate-950/60 text-xs overscroll-contain">
             {messages.map((msg, idx) => (
               <div
                 key={idx}
