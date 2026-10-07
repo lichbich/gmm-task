@@ -7,8 +7,7 @@ export function getTaskShareUrl(taskId: string): string {
   if (typeof window === 'undefined') return '';
   const cleanId = taskId.replace(/^tsk-/, '');
   const origin = window.location.origin;
-  const pathname = window.location.pathname;
-  return `${origin}${pathname}?taskId=${encodeURIComponent(cleanId)}`;
+  return `${origin}/?taskId=${encodeURIComponent(cleanId)}`;
 }
 
 /**

@@ -1,313 +1,42 @@
-'use client';
+import React from 'react';
+import type { Metadata } from 'next';
+import { MainAppClient } from '../components/MainAppClient';
+import { fetchTaskForMetadata, buildTaskMetadata } from '../lib/serverTaskHelper';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { AppProvider, useApp } from '../context/AppContext';
-import { Header, MainSectionType } from '../components/Header';
-import { WorkScheduleTable } from '../components/WorkScheduleTable';
-import { MilestonesView } from '../components/MilestonesView';
-import { TicketsView } from '../components/TicketsView';
-import { KanbanBoard } from '../components/KanbanBoard';
-import { AwardLeaderboard } from '../components/AwardLeaderboard';
-import { WorkHistoryView } from '../components/WorkHistoryView';
-import { NextWeekDefineView } from '../components/NextWeekDefineView';
-import { UserManagementView } from '../components/UserManagementView';
-import { ResourceManagerView } from '../components/ResourceManagerView';
-import { TaskModal } from '../components/TaskModal';
-import { TaskDetailModal } from '../components/TaskDetailModal';
-import { LoginModal } from '../components/LoginModal';
-import { QuickResourceFloatingButton } from '../components/QuickResourceFloatingButton';
-import { AutoUpdateBanner } from '../components/AutoUpdateBanner';
-import { AIAssistantDrawer } from '../components/AIAssistantDrawer';
-import { Task } from '../types/task';
+type PageProps = {
+  params?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
+};
 
-function MainApp() {
-  const { authSession, tasks, weeklyArchives } = useApp();
-  const [activeMainSection, setActiveMainSection] = useState<MainSectionType>('tasks');
-  const [activeTaskTab, setActiveTaskTab] = useState<string>('schedule');
+/**
+ * Server-Side Dynamic Metadata for Next.js App Router
+ * When a task link (e.g. ?taskId=1791124942374) is shared into Telegram, Zalo, Slack, Facebook,
+ * this fetches task details from Firebase on the server and delivers rich Open Graph meta tags!
+ */
+export async function generateMetadata(props: PageProps): Promise<Metadata> {
+  const searchParams = props.searchParams ? await props.searchParams : {};
+  const rawTaskId = (searchParams.taskId || searchParams.task || searchParams.openTaskId) as string | undefined;
 
-  const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
-  const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
-  const [selectedTicketIdForView, setSelectedTicketIdForView] = useState<string | null>(null);
-  const [isTaskModalOpen, setIsTaskModalOpen] = useState<boolean>(false);
-  const [taskModalDefaultWeek, setTaskModalDefaultWeek] = useState<number | undefined>(undefined);
-  const [taskModalDefaultAssignee, setTaskModalDefaultAssignee] = useState<string | undefined>(undefined);
-  const [taskModalDefaultRole, setTaskModalDefaultRole] = useState<string | undefined>(undefined);
+  if (rawTaskId && typeof rawTaskId === 'string') {
+    const task = await fetchTaskForMetadata(rawTaskId);
+    if (task) {
+      return buildTaskMetadata(task, rawTaskId);
+    }
+  }
 
-  const handleOpenTaskModal = (task?: Task, defaultWeek?: number, defaultAssignee?: string, defaultRole?: string) => {
-    setSelectedTaskForEdit(task || null);
-    setTaskModalDefaultWeek(defaultWeek);
-    setTaskModalDefaultAssignee(defaultAssignee);
-    setTaskModalDefaultRole(defaultRole);
-    setIsTaskModalOpen(true);
-  };
-
-  const handleSelectTaskFromNotification = useCallback(
-    (targetId: string, notif?: any) => {
-      const cleanId = targetId ? String(targetId).trim() : '';
-
-      // Check if this is a Ticket notification
-      const isTicket =
-        Boolean(notif?.ticketId) ||
-        cleanId.startsWith('ticket-') ||
-        cleanId.startsWith('REQ-') ||
-        notif?.type?.startsWith('TICKET_');
-
-      if (isTicket) {
-        setActiveMainSection('tasks');
-        setActiveTaskTab('tickets');
-        setSelectedTicketIdForView(notif?.ticketId || cleanId);
-        return;
-      }
-
-      const rawId = cleanId.toLowerCase();
-      const strippedId = rawId.replace(/^tsk-/, '');
-
-      // 1. Search in current tasks
-      let target = cleanId
-        ? tasks.find((t) => {
-            const tId = String(t.id).trim().toLowerCase();
-            return tId === rawId || tId.replace(/^tsk-/, '') === strippedId;
-          })
-        : undefined;
-
-      // 2. Search in weeklyArchives if not found in current tasks
-      if (!target && cleanId && weeklyArchives) {
-        for (const archive of weeklyArchives) {
-          if (Array.isArray(archive.tasksSnapshot)) {
-            const found = archive.tasksSnapshot.find((t: Task) => {
-              const tId = String(t.id).trim().toLowerCase();
-              return tId === rawId || tId.replace(/^tsk-/, '') === strippedId;
-            });
-            if (found) {
-              target = found;
-              break;
-            }
-          }
-        }
-      }
-
-      // 3. Fallback search by title
-      if (!target && notif) {
-        const searchTitle = (notif.title || notif.body || '').toLowerCase();
-        target = tasks.find((t) => t.title && searchTitle.includes(t.title.toLowerCase()));
-      }
-
-      if (target) {
-        const isLeaderOrAdmin =
-          authSession?.role === 'Leader' ||
-          authSession?.role === 'Admin' ||
-          authSession?.role === 'Advisor';
-
-        const notifText = `${notif?.title || ''} ${notif?.body || ''}`.toLowerCase();
-        const isRequestNotif =
-          notifText.includes('yêu cầu nhận task') ||
-          notifText.includes('gửi yêu cầu') ||
-          notifText.includes('xin nhận task');
-
-        const hasPendingRequest =
-          Boolean(target.assignmentRequestedBy) && target.assignmentRequestStatus !== 'REJECTED';
-
-        // When a Leader / Admin clicks a member's task request notification, open TaskModal directly
-        // with the requester auto-selected so they can review and assign in 1 click!
-        if (isLeaderOrAdmin && (isRequestNotif || hasPendingRequest)) {
-          setSelectedTaskForDetail(null);
-          handleOpenTaskModal(
-            target,
-            target.requestedWeekNumber || target.weekNumber,
-            target.assignmentRequestedBy || target.assigneeAccount
-          );
-        } else {
-          setSelectedTaskForDetail(target);
-        }
-      }
+  return {
+    title: 'Saho Task System - Hệ thống quản lý task & báo cáo',
+    description: 'Hệ thống quản lý task, milestones và báo cáo tiến độ thời gian thực',
+    openGraph: {
+      title: 'Saho Task System - Hệ thống quản lý task & báo cáo',
+      description: 'Hệ thống quản lý task, milestones và báo cáo tiến độ thời gian thực',
+      url: 'https://gmm-task.vercel.app',
+      siteName: 'Saho Task System',
+      type: 'website',
     },
-    [tasks, weeklyArchives, authSession]
-  );
-
-  // Auto-handle notification click target from URL or ServiceWorker message
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    // 1. Check URL parameters (e.g. from system notification tap on Android/Desktop or shared link)
-    const params = new URLSearchParams(window.location.search);
-    const openTaskId = params.get('openTaskId') || params.get('taskId') || params.get('task');
-    const openTicketId = params.get('openTicketId') || params.get('ticketId') || params.get('ticket');
-    const tab = params.get('tab');
-
-    if (openTicketId) {
-      setActiveMainSection('tasks');
-      setActiveTaskTab('tickets');
-      setSelectedTicketIdForView(openTicketId);
-      const url = new URL(window.location.href);
-      url.searchParams.delete('openTicketId');
-      url.searchParams.delete('ticketId');
-      url.searchParams.delete('ticket');
-      window.history.replaceState({}, '', url.pathname + (url.search || ''));
-    } else if (tab === 'tickets') {
-      setActiveMainSection('tasks');
-      setActiveTaskTab('tickets');
-    } else if (openTaskId && (tasks.length > 0 || (weeklyArchives && weeklyArchives.length > 0))) {
-      handleSelectTaskFromNotification(openTaskId);
-      const url = new URL(window.location.href);
-      url.searchParams.delete('openTaskId');
-      url.searchParams.delete('taskId');
-      url.searchParams.delete('task');
-      window.history.replaceState({}, '', url.pathname + (url.search || ''));
-    }
-
-    // 2. Listen to message from Service Worker (when a notification is clicked while tab is already open)
-    const handleSwMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'OPEN_TASK_NOTIFICATION') {
-        if (event.data.ticketId) {
-          setActiveMainSection('tasks');
-          setActiveTaskTab('tickets');
-          setSelectedTicketIdForView(event.data.ticketId);
-        } else if (event.data.taskId) {
-          handleSelectTaskFromNotification(event.data.taskId);
-        }
-      }
-    };
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('message', handleSwMessage);
-      return () => {
-        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
-      };
-    }
-  }, [tasks, weeklyArchives, handleSelectTaskFromNotification]);
-
-  const handleSetActiveTaskTab = (tab: string) => {
-    if (tab !== 'tickets') {
-      setSelectedTicketIdForView(null);
-    }
-    setActiveTaskTab(tab);
   };
-
-  const handleSetActiveMainSection = (section: MainSectionType) => {
-    if (section !== 'tasks') {
-      setSelectedTicketIdForView(null);
-    }
-    setActiveMainSection(section);
-  };
-
-  return (
-    <div suppressHydrationWarning className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col antialiased selection:bg-indigo-200 selection:text-indigo-900 relative">
-      {/* Login Modal Overlay if not logged in */}
-      {!authSession && <LoginModal />}
-
-      {authSession && (
-        <>
-          <Header
-            activeMainSection={activeMainSection}
-            setActiveMainSection={handleSetActiveMainSection}
-            activeTaskTab={activeTaskTab}
-            setActiveTaskTab={handleSetActiveTaskTab}
-            onSelectTask={handleSelectTaskFromNotification}
-          />
-
-          <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-20 sm:pb-24 md:pb-8">
-            {/* MAIN SECTION 1: TASK MANAGEMENT */}
-            {activeMainSection === 'tasks' && (
-              <div key={activeTaskTab} className="animate-in fade-in duration-200">
-                {activeTaskTab === 'schedule' && (
-                  <WorkScheduleTable onOpenTaskModal={handleOpenTaskModal} />
-                )}
-                {activeTaskTab === 'milestones' && <MilestonesView />}
-                {activeTaskTab === 'tickets' && (
-                  <TicketsView
-                    initialSelectedTicketId={selectedTicketIdForView}
-                    onClearInitialTicketId={() => setSelectedTicketIdForView(null)}
-                  />
-                )}
-                {activeTaskTab === 'nextweek' && (
-                  <NextWeekDefineView onOpenTaskModal={handleOpenTaskModal} />
-                )}
-                {activeTaskTab === 'kanban' && (
-                  <KanbanBoard onOpenTaskModal={handleOpenTaskModal} />
-                )}
-                {activeTaskTab === 'awards' && <AwardLeaderboard />}
-                {activeTaskTab === 'history' && (
-                  <WorkHistoryView onOpenTaskModal={handleOpenTaskModal} />
-                )}
-              </div>
-            )}
-
-            {/* MAIN SECTION 2: RESOURCE MANAGEMENT */}
-            {activeMainSection === 'resources' && (
-              <div className="animate-in fade-in duration-200">
-                <ResourceManagerView />
-              </div>
-            )}
-
-            {/* MAIN SECTION 3: USER MANAGEMENT (ADMIN ONLY) */}
-            {activeMainSection === 'users' && (
-              <div className="animate-in fade-in duration-200">
-                <UserManagementView />
-              </div>
-            )}
-          </main>
-
-          {/* Quick Resource Floating Action Button */}
-          <QuickResourceFloatingButton
-            onNavigateToResourceManager={() => handleSetActiveMainSection('resources')}
-          />
-
-          {/* Task Creation / Edit Modal */}
-          <TaskModal
-            task={selectedTaskForEdit}
-            isOpen={isTaskModalOpen}
-            defaultWeek={taskModalDefaultWeek}
-            defaultAssignee={taskModalDefaultAssignee}
-            initialRole={taskModalDefaultRole}
-            onClose={() => {
-              setIsTaskModalOpen(false);
-              setSelectedTaskForEdit(null);
-              setTaskModalDefaultWeek(undefined);
-              setTaskModalDefaultAssignee(undefined);
-              setTaskModalDefaultRole(undefined);
-            }}
-          />
-
-          {/* Task Detail Modal (from notifications / details) */}
-          <TaskDetailModal
-            task={selectedTaskForDetail}
-            isOpen={!!selectedTaskForDetail}
-            onClose={() => setSelectedTaskForDetail(null)}
-            onEditTask={(taskToEdit) => {
-              setSelectedTaskForDetail(null);
-              handleOpenTaskModal(
-                taskToEdit,
-                taskToEdit.requestedWeekNumber || taskToEdit.weekNumber,
-                taskToEdit.assignmentRequestedBy || taskToEdit.assigneeAccount
-              );
-            }}
-          />
-        </>
-      )}
-
-      {/* Floating Auto Update Banner */}
-      <AutoUpdateBanner />
-
-      {/* Floating AI Project Intelligence Assistant (Admin/Leader) */}
-      <AIAssistantDrawer />
-    </div>
-  );
 }
 
 export default function Home() {
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
-
-  return (
-    <AppProvider>
-      <MainApp />
-    </AppProvider>
-  );
+  return <MainAppClient />;
 }

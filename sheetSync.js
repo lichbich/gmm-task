@@ -1,10 +1,7 @@
 /** =========================================================================
- * SAHO TASK SYSTEM - GOOGLE APPS SCRIPT SYNC TOOL (DYNAMIC ACCOUNTS & COLOR CHIPS)
- * - Tự động lấy danh sách Staff Code (Account) TRỰC TIẾP từ Firebase DB (/users.json)
- * - Tự động màu sắc ô Status (Cột G):
- *   + "Done": Xanh lá (#137333), Chữ trắng
- *   + "In Progress": Xanh biển (#0B57D0), Chữ trắng
- *   + "To do": Xám (#E5E7EB), Chữ đậm (#374151)
+ * SAHO TASK SYSTEM - GOOGLE APPS SCRIPT SYNC TOOL
+ * - Đồng bộ danh sách công việc từ Firebase DB (/tasks.json) vào Google Sheet
+ * - Không ghi đè hay can thiệp vào Data Validation của Google Sheet để bảo tồn 100% kiểu "Khối" (Chip)
  * - Nghiệp vụ đồng bộ chuẩn xác:
  *   + Tuần 95 trở xuống (Tuần đã làm / báo cáo):
  *     - Thành viên đã nộp báo cáo / có tiến độ: Status = "Done", Effort = actualEffort thực tế.
@@ -34,7 +31,7 @@ function getRoleOrderIndex(roleName) {
 function onOpen() {
     const ui = SpreadsheetApp.getUi();
     ui.createMenu('⚡ Saho Sync')
-        .addItem('🔄 Đồng bộ Tất Cả Các Tuần (Color Status Chips + Dynamic DB)', 'syncTasksFormattedToSheet')
+        .addItem('🔄 Đồng bộ Tất Cả Các Tuần (Preserve Chips + Dynamic DB)', 'syncTasksFormattedToSheet')
         .addItem('⏰ Bật tự động đồng bộ ngầm mỗi 5 phút', 'setupAutoSyncTrigger')
         .addToUi();
 }
@@ -83,7 +80,7 @@ function getWeekDateRangeStr(sahoWeekNum, yearNum) {
 }
 
 /**
- * 2. Hàm đồng bộ tất cả các tuần từ Firebase vào Google Sheet (Color Chips Status)
+ * 2. Hàm đồng bộ tất cả các tuần từ Firebase vào Google Sheet
  */
 function syncTasksFormattedToSheet() {
     const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
@@ -96,24 +93,15 @@ function syncTasksFormattedToSheet() {
 
     // A. Lấy danh sách Staff Code (Account) TRỰC TIẾP DỘNG từ Firebase DB /users.json
     let usersList = [];
-    let userAccounts = [];
     try {
         const userRes = UrlFetchApp.fetch(`${FIREBASE_URL}/users.json`);
         const userContent = userRes.getContentText();
         if (userContent && userContent !== 'null') {
             const usersData = JSON.parse(userContent);
             usersList = Object.values(usersData).filter(u => u && !u.disabled && u.status !== 'disabled');
-            userAccounts = usersList
-                .map(u => (u && u.account) ? String(u.account).trim() : '')
-                .filter(Boolean);
         }
     } catch (err) {
         Logger.log("Chưa lấy được danh sách user: " + err.toString());
-    }
-
-    userAccounts = Array.from(new Set(userAccounts)).sort();
-    if (userAccounts.length === 0) {
-        userAccounts = ['Chưa phân công'];
     }
 
     // B. Lấy dữ liệu Task từ Firebase RTDB /tasks.json
@@ -135,23 +123,7 @@ function syncTasksFormattedToSheet() {
         return;
     }
 
-    // Quy tắc Dropdown Linh Hoạt
-    const roleValidation = SpreadsheetApp.newDataValidation()
-        .requireValueInList(ROLE_ORDER, true)
-        .setAllowInvalid(true)
-        .build();
-
-    const statusValidation = SpreadsheetApp.newDataValidation()
-        .requireValueInList(['To do', 'In Progress', 'Done'], true)
-        .setAllowInvalid(true)
-        .build();
-
-    const accountValidation = SpreadsheetApp.newDataValidation()
-        .requireValueInList(userAccounts, true)
-        .setAllowInvalid(true)
-        .build();
-
-    // C. Nhóm toàn bộ Task theo từng Tuần khác nhau (Tuần 93, Tuần 94, Tuần 95, Tuần 96...)
+    // C. Nhóm toàn bộ Task theo từng Tuần khác nhau (Tuần 95, Tuần 96...)
     const tasksByWeekAndRole = {};
 
     taskList.forEach(t => {
@@ -288,7 +260,7 @@ function syncTasksFormattedToSheet() {
                 tasksByAssignee[acc].push(t);
             });
 
-            // Sắp xếp thứ tự các thành viên theo cấp bậc (Leader/Advisor trước) rồi đến bảng chữ cái
+            // Sắp xếp thứ tự các thành viên theo cấp bậc (Admin/Leader/Advisor trước) rồi đến bảng chữ cái
             const assignees = Object.keys(tasksByAssignee).sort((a, b) => {
                 const userA = usersList.find(u => u.account && u.account.trim().toLowerCase() === a.toLowerCase());
                 const userB = usersList.find(u => u.account && u.account.trim().toLowerCase() === b.toLowerCase());
@@ -365,7 +337,7 @@ function syncTasksFormattedToSheet() {
                         // ==========================================
                         // TUẦN 96+: Tuần mới / tuần kế hoạch chưa làm
                         // ==========================================
-                        // 1. Task 0% tiến độ (chuyển từ tuần 95 sang hoặc tạo mới) -> Status "To do"
+                        // 1. Task 0% tiến độ -> Status "To do"
                         // 2. Task làm dở (>0% và <100%) -> Status "In Progress"
                         // 3. Task hoàn thành (100%) -> Status "Done"
                         // Effort: Lấy theo giờ ước tính (estimatedEffort) được define cho tuần mới
@@ -401,13 +373,13 @@ function syncTasksFormattedToSheet() {
                         t.role || bannerName,    // Col C (3): Role
                         "",                      // Col D (4): Trống
                         pctStr,                  // Col E (5): Phần trăm công việc (%)
-                        effortVal,               // Col F (6): Effort (Số giờ làm thực tế)
-                        finalStatus,             // Col G (7): Status ("Done", "In Progress", "To do")
+                        effortVal,               // Col F (6): Effort (Số giờ làm)
+                        finalStatus,             // Col G (7): Status
                         accName,                 // Col H (8): Account
                         "",                      // Col I (9): Trống
                         ""                       // Col J (10): Trống
                     ]);
-                    rowFormats.push({ type: 'TASK', task: t, finalStatus: finalStatus });
+                    rowFormats.push({ type: 'TASK', task: t, finalStatus: finalStatus, accName: accName, role: t.role || bannerName });
                 });
 
                 // Hàng trống phân cách 2 người khác nhau
@@ -425,63 +397,98 @@ function syncTasksFormattedToSheet() {
         }
     });
 
-    // F. Làm sạch toàn bộ phạm vi cũ từ startRow đến cuối Sheet để xóa triệt để khoảng trắng thừa
+    // F. Làm sạch nội dung cũ từ startRow đến cuối Sheet
+    // TUYỆT ĐỐI KHÔNG GỌI clearDataValidations() để bảo tồn nguyên vẹn quy tắc Khối (Chip) trên Google Sheet!
     lastRow = sheet.getLastRow();
     if (lastRow >= startRow) {
         const rowsToClear = lastRow - startRow + 1;
         const clearRange = sheet.getRange(startRow, 1, rowsToClear, 10);
         clearRange.clearContent();
         clearRange.clearFormat();
-        clearRange.clearDataValidations();
     }
 
-    // G. Ghi toàn bộ dữ liệu liền mạch từ startRow
-    if (allRowsToInsert.length > 0) {
-        const dataRange = sheet.getRange(startRow, 1, allRowsToInsert.length, 10);
+    // G. Ghi toàn bộ dữ liệu liền mạch từ startRow & Áp dụng định dạng hàng loạt
+    const numRows = allRowsToInsert.length;
+    if (numRows > 0) {
+        const dataRange = sheet.getRange(startRow, 1, numRows, 10);
         dataRange.setValues(allRowsToInsert);
 
-        // H. Định dạng dòng & Tô màu sắc
-        for (let i = 0; i < rowFormats.length; i++) {
-            const currRow = startRow + i;
+        // Chuẩn bị ma trận định dạng (2D Arrays) để cập nhật hàng loạt trong 1 lần gọi (Cực nhanh)
+        const backgrounds = [];
+        const fontColors = [];
+        const fontWeights = [];
+        const fontSizes = [];
+        const fontFamilies = [];
+        const horizontalAlignments = [];
+
+        for (let i = 0; i < numRows; i++) {
             const fmt = rowFormats[i];
 
             if (fmt.type === 'WEEK_HEADER') {
-                const weekCell = sheet.getRange(currRow, 1);
-                weekCell.setFontWeight("bold").setFontColor("#CC0000").setFontSize(14).setFontFamily("Arial");
+                backgrounds.push(["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"]);
+                fontColors.push(["#CC0000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]);
+                fontWeights.push(["bold", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal"]);
+                fontSizes.push([14, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
+                fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
+                horizontalAlignments.push(["left", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);
             } else if (fmt.type === 'BANNER') {
-                const bannerRange = sheet.getRange(currRow, 1, 1, 10);
-                bannerRange.setBackground("#FFE599");
-                sheet.getRange(currRow, 1).setFontWeight("bold").setFontColor("#000000").setFontSize(10).setFontFamily("Arial");
+                backgrounds.push(["#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599"]);
+                fontColors.push(["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]);
+                fontWeights.push(["bold", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal"]);
+                fontSizes.push([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
+                fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
+                horizontalAlignments.push(["left", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);
             } else if (fmt.type === 'TASK') {
-                const taskRange = sheet.getRange(currRow, 1, 1, 10);
-                sheet.getRange(currRow, 3).setDataValidation(roleValidation);
-                sheet.getRange(currRow, 7).setDataValidation(statusValidation);
-                sheet.getRange(currRow, 8).setDataValidation(accountValidation);
+                // Task row: Nền sạch (#FFFFFF) để Chip hiển thị dạng pill nổi bật
+                backgrounds.push(["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"]);
+                fontColors.push(["#000000", "#1E293B", "#334155", "#000000", "#0F172A", "#0F172A", "#000000", "#1E293B", "#000000", "#000000"]);
+                fontWeights.push(["normal", "normal", "normal", "normal", "bold", "normal", "normal", "normal", "normal", "normal"]);
+                fontSizes.push([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
+                fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
+                horizontalAlignments.push(["center", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);
+            } else {
+                // EMPTY row
+                backgrounds.push(["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"]);
+                fontColors.push(["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]);
+                fontWeights.push(["normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal"]);
+                fontSizes.push([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
+                fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
+                horizontalAlignments.push(["center", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);
+            }
+        }
 
-                // Căn lề
-                sheet.getRange(currRow, 2).setHorizontalAlignment("left").setWrap(true).setFontFamily("Arial");
-                sheet.getRange(currRow, 3).setHorizontalAlignment("center");
-                sheet.getRange(currRow, 5, 1, 4).setHorizontalAlignment("center");
+        // Thực thi gán định dạng hàng loạt (Không can thiệp vào Data Validation)
+        dataRange.setBackgrounds(backgrounds);
+        dataRange.setFontColors(fontColors);
+        dataRange.setFontWeights(fontWeights);
+        dataRange.setFontSizes(fontSizes);
+        dataRange.setFontFamilies(fontFamilies);
+        dataRange.setHorizontalAlignments(horizontalAlignments);
+        dataRange.setWrap(true);
 
-                // Tô màu Status Chip (Cột G)
-                const statusCell = sheet.getRange(currRow, 7);
-                const stVal = fmt.finalStatus || (fmt.task ? fmt.task.status : "To do");
-                if (stVal === 'Done') {
-                    statusCell.setBackground("#137333").setFontColor("#FFFFFF").setFontWeight("bold");
-                } else if (stVal === 'In Progress') {
-                    statusCell.setBackground("#0B57D0").setFontColor("#FFFFFF").setFontWeight("bold");
-                } else {
-                    statusCell.setBackground("#E5E7EB").setFontColor("#374151").setFontWeight("bold");
-                }
+        // Kẻ viền cho toàn bộ dữ liệu
+        dataRange.setBorder(true, true, true, true, true, true, "#E2E8F0", SpreadsheetApp.BorderStyle.SOLID);
 
-                taskRange.setBorder(true, true, true, true, true, true, "#E2E8F0", SpreadsheetApp.BorderStyle.SOLID);
-            } else if (fmt.type === 'EMPTY') {
-                sheet.getRange(currRow, 1, 1, 10).setBackground(null);
+        // H. Tự động dọn sạch triệt để các Dropdown/Khối thừa trên hàng Tiêu đề Tuần, Banner Role và Hàng trống
+        const nonTaskA1Ranges = [];
+        for (let i = 0; i < numRows; i++) {
+            const currRow = startRow + i;
+            const fmt = rowFormats[i];
+            if (fmt.type === 'WEEK_HEADER' || fmt.type === 'BANNER' || fmt.type === 'EMPTY') {
+                nonTaskA1Ranges.push(`A${currRow}:J${currRow}`);
+            }
+        }
+
+        if (nonTaskA1Ranges.length > 0) {
+            // Xử lý theo từng nhóm 50 dải ô để xóa sạch Dropdown thừa ngay lập tức
+            for (let k = 0; k < nonTaskA1Ranges.length; k += 50) {
+                const chunk = nonTaskA1Ranges.slice(k, k + 50);
+                sheet.getRangeList(chunk).clearDataValidations();
             }
         }
     }
 
-    SpreadsheetApp.getUi().alert(`✅ Đã đồng bộ hoàn tất! Tổng số tuần: ${sortedWeekKeys.length} tuần, tổng số dòng: ${allRowsToInsert.length}`);
+    SpreadsheetApp.getUi().alert(`✅ Đã đồng bộ hoàn tất! Tổng số tuần: ${sortedWeekKeys.length} tuần, tổng số dòng: ${numRows}.\nĐã tự động xóa sạch các khối thừa trên hàng Banner và hàng trống!`);
 }
 
 /**
