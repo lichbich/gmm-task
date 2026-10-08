@@ -21,6 +21,13 @@ export function applyInlineFormatting(
   const end = input.selectionEnd ?? value.length;
   const selectedText = value.substring(start, end);
 
+  // If applying code format (`) on multi-line text or text containing newline, redirect to Code Block (```)
+  if (prefix === '`' && suffix === '`' && (selectedText.includes('\n') || (selectedText.length === 0 && input instanceof HTMLTextAreaElement))) {
+    if (selectedText.includes('\n')) {
+      return applyCodeBlock(input as HTMLTextAreaElement);
+    }
+  }
+
   // Check if selected text is already wrapped with prefix and suffix
   const isWrapped =
     selectedText.startsWith(prefix) &&
@@ -268,4 +275,69 @@ export function stripMarkdownForSearch(text?: string): string {
     .replace(/==(.*?)==/g, '$1')
     .replace(/<\/?(b|strong|i|em|u|ins|del|s|mark)[^>]*>/gi, '')
     .trim();
+}
+
+/**
+ * Chèn hoặc bọc khối mã nhiều dòng (Code Block: ``` ... ```)
+ */
+export function applyCodeBlock(
+  input: HTMLTextAreaElement,
+  language: string = '',
+  defaultPlaceholder: string = '// Dán hoặc nhập mã code nhiều dòng tại đây'
+): { newValue: string; newSelection: SelectionRange } {
+  const value = input.value;
+  const start = input.selectionStart ?? value.length;
+  const end = input.selectionEnd ?? value.length;
+  const selectedText = value.substring(start, end);
+
+  // 1. Nếu đang chọn văn bản
+  if (selectedText.length > 0) {
+    const trimmed = selectedText.trim();
+    // Kiểm tra xem đã bọc trong ``` chưa để unwrap
+    if (trimmed.startsWith('```') && trimmed.endsWith('```') && trimmed.length >= 6) {
+      const inner = trimmed.replace(/^```[a-zA-Z0-9_-]*\n?/, '').replace(/\n?```$/, '');
+      const newValue = value.substring(0, start) + inner + value.substring(end);
+      return {
+        newValue,
+        newSelection: { start, end: start + inner.length },
+      };
+    }
+
+    // Bọc trong ```
+    const needLeadingNewline = start > 0 && value[start - 1] !== '\n';
+    const needTrailingNewline = end < value.length && value[end] !== '\n';
+    const langStr = language ? language.trim() : '';
+    const blockContent = `${needLeadingNewline ? '\n' : ''}\`\`\`${langStr}\n${selectedText}\n\`\`\`${needTrailingNewline ? '\n' : ''}`;
+    const newValue = value.substring(0, start) + blockContent + value.substring(end);
+    return {
+      newValue,
+      newSelection: { start, end: start + blockContent.length },
+    };
+  }
+
+  // 2. Không chọn văn bản: Chèn mẫu khối mã code block
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+  let lineEnd = value.indexOf('\n', start);
+  if (lineEnd === -1) lineEnd = value.length;
+  const currentLine = value.substring(lineStart, lineEnd);
+
+  const isCurrentLineEmpty = currentLine.trim() === '';
+  const needLeadingNewline = !isCurrentLineEmpty && lineStart > 0;
+  const langStr = language ? language.trim() : '';
+  const block = `${needLeadingNewline ? '\n' : ''}\`\`\`${langStr}\n${defaultPlaceholder}\n\`\`\`\n`;
+
+  const insertPos = isCurrentLineEmpty ? lineStart : end;
+  const newValue = value.substring(0, insertPos) + block + value.substring(insertPos);
+
+  // Bôi đen placeholder để user có thể dán (paste) đè code lên ngay lập tức!
+  const placeholderStart = insertPos + (needLeadingNewline ? 1 : 0) + 3 + langStr.length + 1;
+  const placeholderEnd = placeholderStart + defaultPlaceholder.length;
+
+  return {
+    newValue,
+    newSelection: {
+      start: placeholderStart,
+      end: placeholderEnd,
+    },
+  };
 }

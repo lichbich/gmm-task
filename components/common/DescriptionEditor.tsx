@@ -12,7 +12,7 @@ import {
   ListOrdered,
   CheckSquare,
   Quote,
-  Code,
+  Code2,
   ImageIcon,
   Trash2,
   Maximize2,
@@ -30,6 +30,7 @@ import {
 import {
   applyInlineFormatting,
   applyLinePrefix,
+  applyCodeBlock,
   handleSmartEnter,
 } from '../../lib/textFormattingHelper';
 import { RichDescriptionViewer } from './RichDescriptionViewer';
@@ -393,6 +394,39 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
     }, 0);
   };
 
+  // Code block formatting helper (``` ... ```)
+  const applyBlockCode = (language: string = '') => {
+    const textarea = getActiveTextarea();
+    if (!textarea || disabled) return;
+
+    const idx = focusedBlockIndexRef.current;
+    const currStart = textarea.selectionStart ?? 0;
+    const currEnd = textarea.selectionEnd ?? 0;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    pushSnapshot(lastSerializedRef.current, idx, { start: currStart, end: currEnd });
+
+    const { newValue, newSelection } = applyCodeBlock(textarea, language);
+
+    const newBlocks = [...blocks];
+    if (newBlocks[idx] && newBlocks[idx].type === 'text') {
+      newBlocks[idx] = {
+        ...(newBlocks[idx] as TextBlock),
+        content: newValue,
+      };
+      updateBlocksAndNotify(newBlocks);
+      pushSnapshot(serializeBlocksToMarkdown(newBlocks), idx, newSelection);
+    }
+
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(newSelection.start, newSelection.end);
+    }, 0);
+  };
+
   // Keyboard Shortcuts Handler
   const handleKeyDown = (idx: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = textareaRefs.current[idx];
@@ -451,10 +485,10 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
         return;
       }
 
-      // Inline code: Ctrl + E
-      if (key === 'e') {
+      // Code block: Ctrl + E or Ctrl + Shift + C
+      if (key === 'e' || (e.shiftKey && key === 'c')) {
         e.preventDefault();
-        applyInline('`', '`', 'mã');
+        applyBlockCode();
         return;
       }
     }
@@ -737,15 +771,15 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
             <Quote className="w-3.5 h-3.5" />
           </button>
 
-          {/* Code */}
+          {/* Code Block (Multi-line) */}
           <button
             type="button"
             disabled={disabled || editorMode === 'preview'}
-            onClick={() => applyInline('`', '`', 'mã')}
+            onClick={() => applyBlockCode()}
             className="p-1.5 rounded-lg text-slate-700 dark:text-slate-200 hover:text-indigo-600 hover:bg-white dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-40"
-            title="Code / Thông số kỹ thuật (Ctrl + E)"
+            title="Khối mã code / Code Block (``` ... ```) (Ctrl + E)"
           >
-            <Code className="w-3.5 h-3.5" />
+            <Code2 className="w-3.5 h-3.5 stroke-[2.2]" />
           </button>
 
           <div className="w-px h-4 bg-slate-300 dark:bg-slate-700 mx-0.5" />
@@ -912,7 +946,7 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
       {/* Helper Shortcut Legend */}
       <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 px-1 pt-0.5">
         <span>
-          Phím tắt: <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+Z</code> (Hoàn tác), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+Y</code> (Làm lại), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+B</code> (Đậm), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+I</code> (Nghiêng), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+U</code> (Gạch chân)
+          Phím tắt: <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+Z</code> (Hoàn tác), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+Y</code> (Làm lại), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+B</code> (Đậm), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+I</code> (Nghiêng), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+U</code> (Gạch chân), <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.2 rounded text-indigo-600 dark:text-indigo-400">Ctrl+E</code> (Khối code)
         </span>
       </div>
     </div>

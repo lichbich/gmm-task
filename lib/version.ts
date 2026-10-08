@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.9.2';
+export const APP_VERSION = '2.9.3';
 export const APP_RELEASE_NOTE =
-  'Sửa lỗi và cải thiện trong lúc đau bụng';
+  'update code block';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 

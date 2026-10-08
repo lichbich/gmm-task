@@ -810,6 +810,19 @@ html.modal-scroll-locked {
   will-change: transform;
 }
 
-
-
-
+/* ==========================================================================
+   CODE BLOCK TEXT SELECTION FIX (Hiển thị chữ trắng tinh khi bôi đen code)
+   ========================================================================== */
+.code-block-container *::selection,
+.code-block-container::selection,
+.code-block-content *::selection,
+.code-block-content::selection,
+pre.code-block-content *::selection,
+pre.code-block-content::selection,
+pre.code-block-content code *::selection,
+pre.code-block-content code::selection {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-shadow: none !important;
+}
