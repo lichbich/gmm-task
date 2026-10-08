@@ -114,8 +114,11 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
     (u) => u.account.toLowerCase() === (activeTask.assigneeAccount || '').toLowerCase()
   );
 
-  const displayWeekNumber =
-    activeTask.weekNumber <= 53 ? activeTask.weekNumber + 55 : activeTask.weekNumber;
+  const displayWeekNumber = !activeTask.weekNumber
+    ? null
+    : activeTask.weekNumber <= 53
+    ? activeTask.weekNumber + 55
+    : activeTask.weekNumber;
 
   const noteLines = notesText
     ? notesText.split('\n').filter((l) => l.trim().length > 0)
@@ -272,7 +275,7 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
               </span>
 
               <span className="text-[11px] font-mono text-slate-400">
-                Tuần {displayWeekNumber} / {activeTask.year}
+                {displayWeekNumber ? `Tuần ${displayWeekNumber} / ${activeTask.year || 2026}` : 'Kho Backlog (Chưa gán tuần)'}
               </span>
             </div>
 

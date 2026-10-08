@@ -161,6 +161,15 @@ export const AssignTaskToMemberModal: React.FC<AssignTaskToMemberModalProps> = (
                           <Clock className="w-3 h-3" />
                           {t.estimatedEffort || 0}h
                         </span>
+                        {!t.weekNumber ? (
+                          <span className="px-1.5 py-0.2 rounded font-medium text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            Kho Backlog
+                          </span>
+                        ) : t.weekNumber < selectedWeek ? (
+                          <span className="px-1.5 py-0.2 rounded font-medium text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            Tuần {t.weekNumber <= 53 ? t.weekNumber + 55 : t.weekNumber}
+                          </span>
+                        ) : null}
                         <span className="text-slate-300 dark:text-slate-600">•</span>
                         <span className="font-mono text-[10px] text-slate-400">
                           #{t.id.replace('tsk-', '')}
@@ -175,10 +184,10 @@ export const AssignTaskToMemberModal: React.FC<AssignTaskToMemberModalProps> = (
                         handleClose();
                       }}
                       className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer flex items-center gap-1 shrink-0"
-                      title={`Gán task này cho @${targetUser.account}`}
+                      title={`Gán task này cho @${targetUser.account} vào Tuần ${displayWeekNumber}`}
                     >
                       <Check className="w-3.5 h-3.5" />
-                      <span>Gán task</span>
+                      <span>Gán vào T{displayWeekNumber}</span>
                     </button>
                   </div>
                 ))}
@@ -187,7 +196,7 @@ export const AssignTaskToMemberModal: React.FC<AssignTaskToMemberModalProps> = (
               <div className="p-4 bg-white dark:bg-slate-800/80 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-center space-y-1">
                 <Sparkles className="w-5 h-5 text-slate-400 mx-auto" />
                 <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                  Team {roleLabel || roleCode} hiện không có task trống nào trong Tuần {displayWeekNumber}.
+                  Team {roleLabel || roleCode} hiện không có task trống nào trong Kho Backlog hoặc Tuần {displayWeekNumber}.
                 </p>
                 <p className="text-[11px] text-slate-400 dark:text-slate-500">
                   Tất cả các task hiện tại đã có người nhận. Bạn có thể tạo thêm đầu việc mới bên dưới.

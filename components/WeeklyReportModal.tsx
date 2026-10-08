@@ -151,8 +151,9 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     (u) => u.account.toLowerCase() === (task.assigneeAccount || '').toLowerCase()
   );
 
-  const sundayNoon = getWeekSundayNoon(task.weekNumber, task.year);
-  const deadline = getWeekDeadline(task.weekNumber, task.year);
+  const effectiveWeek = task.weekNumber || 96;
+  const sundayNoon = getWeekSundayNoon(effectiveWeek, task.year);
+  const deadline = getWeekDeadline(effectiveWeek, task.year);
   const simDate = new Date(simulatedTime);
   const isBeforeSundayNoon = simDate.getTime() < sundayNoon.getTime();
   const isSundayReportOpen = simDate.getTime() >= sundayNoon.getTime() && simDate.getTime() <= deadline.getTime();
@@ -408,7 +409,9 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[11px] mb-0.5">Mốc tuần (Week):</span>
-                  <span className="font-semibold text-slate-800">Tuần {task.weekNumber <= 53 ? task.weekNumber + 55 : task.weekNumber} / {task.year}</span>
+                  <span className="font-semibold text-slate-800">
+                    {task.weekNumber ? `Tuần ${task.weekNumber <= 53 ? task.weekNumber + 55 : task.weekNumber} / ${task.year}` : 'Kho Backlog (Chưa gán tuần)'}
+                  </span>
                 </div>
               </div>
 

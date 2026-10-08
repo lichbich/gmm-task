@@ -557,6 +557,7 @@ export const AIWeeklySummaryModal: React.FC<AIWeeklySummaryModalProps> = ({
     totalEstEffort,
   } = useMemo(() => {
     const list = tasks.filter((t) => {
+      if (!t.weekNumber) return false;
       const w = t.weekNumber <= 53 && (!t.year || t.year === 2026) ? t.weekNumber + 55 : t.weekNumber;
       const targetW = weekNumber <= 53 && year === 2026 ? weekNumber + 55 : weekNumber;
       return w === targetW;

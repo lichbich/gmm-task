@@ -317,7 +317,7 @@ export interface Task {
   completionPercentage: number; // 0 - 100
   lastSubmittedAt?: string;
   isSubmittedLate?: boolean;
-  weekNumber: number;
+  weekNumber?: number;
   year: number;
   startDate?: string; // Ngày bắt đầu (YYYY-MM-DD)
   endDate?: string; // Ngày hoàn thành (YYYY-MM-DD)

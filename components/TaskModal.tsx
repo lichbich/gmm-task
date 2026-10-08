@@ -101,6 +101,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [priority, setPriority] = useState<'High' | 'Medium' | 'Low'>('Medium');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [weekNumber, setWeekNumber] = useState<number | undefined>(undefined);
   const [notes, setNotes] = useState<string>('');
   const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -506,6 +507,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setPriority(task.priority || 'Medium');
       setStartDate(initialStartDate);
       setEndDate(initialEndDate);
+      setWeekNumber(task.weekNumber);
       setNotes(task.notes || '');
     } else {
       setTitle('');
@@ -516,13 +518,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setCompletionPercentage(0);
       setStartDate('');
       setEndDate('');
-      setAssigneeAccount(
+      const initialAssigneeVal =
         defaultAssignee !== undefined
           ? defaultAssignee
           : currentUser?.role === 'Member' && currentUser?.account
           ? currentUser.account
-          : ''
-      );
+          : '';
+      setAssigneeAccount(initialAssigneeVal);
+      setWeekNumber(initialAssigneeVal ? (defaultWeek || selectedWeek) : undefined);
       setSupporterAccounts([]);
       // If initialMilestoneId is explicitly passed, use it unconditionally; otherwise Members default to '' (ad-hoc)
       setMilestoneId(initialMilestoneId !== undefined ? initialMilestoneId : '');
@@ -570,6 +573,20 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     return true;
   });
 
+  const generateWeekOptions = (currentWeek: number) => {
+    const opts = [];
+    const minW = Math.max(93, currentWeek - 2);
+    const maxW = currentWeek + 3;
+    for (let w = minW; w <= maxW; w++) {
+      const displayW = w <= 53 ? w + 55 : w;
+      opts.push({
+        value: String(w),
+        label: `🗓️ Tuần ${displayW}${w === currentWeek ? ' (Tuần hiện tại)' : ''}`,
+      });
+    }
+    return opts;
+  };
+
   const handleToggleSupporter = (account: string) => {
     setSupporterAccounts((prev) => {
       const exists = prev.some((a) => a.toLowerCase() === account.toLowerCase());
@@ -585,6 +602,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (newAssignee) {
       // Automatically remove from supporters if selected as main assignee
       setSupporterAccounts((prev) => prev.filter((a) => a.toLowerCase() !== newAssignee.toLowerCase()));
+      // Auto-assign active week if currently in backlog
+      if (weekNumber === undefined) {
+        setWeekNumber(defaultWeek || selectedWeek);
+      }
     }
   };
 
@@ -638,7 +659,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           : {}),
         ...(task.requestedWeekNumber
           ? { weekNumber: task.requestedWeekNumber }
-          : {}),
+          : { weekNumber: weekNumber }),
       });
     } else {
       addTask({
@@ -653,7 +674,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         supporterAccounts: cleanSupporters.length > 0 ? cleanSupporters : undefined,
         milestoneId,
         completionPercentage: finalCompletionPercentage,
-        weekNumber: defaultWeek || selectedWeek,
+        weekNumber: weekNumber,
         year: selectedYear,
         startDate: startDate.trim() || undefined,
         endDate: endDate.trim() || undefined,
@@ -1095,6 +1116,34 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Chưa có thành viên nào có chuyên môn {role}. Hãy tạo hoặc cấp chuyên môn trong Quản lý User.
                     </p>
                   )}
+                </div>
+
+                {/* Week Planning / Backlog Assignment */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Kế Hoạch Thực Hiện (Tuần):
+                    </label>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                      {weekNumber ? `Tuần ${weekNumber <= 53 ? weekNumber + 55 : weekNumber}` : 'Kho Backlog (Chưa gán tuần)'}
+                    </span>
+                  </div>
+                  <Dropdown
+                    value={weekNumber !== undefined ? String(weekNumber) : 'backlog'}
+                    onChange={(val) => {
+                      if (val === 'backlog') {
+                        setWeekNumber(undefined);
+                      } else {
+                        setWeekNumber(Number(val));
+                      }
+                    }}
+                    options={[
+                      { value: 'backlog', label: '📦 Kho Backlog (Chưa gán tuần cụ thể)' },
+                      ...generateWeekOptions(selectedWeek),
+                    ]}
+                    className="w-full"
+                    buttonClassName="py-2.5 px-3 text-xs bg-slate-50 border-slate-300/90 font-medium"
+                  />
                 </div>
 
                 {/* Supporter/Collab Accounts Section (Multi-select collaborators with tag) */}

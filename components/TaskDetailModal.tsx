@@ -406,7 +406,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const createdDateDisplay = formatDateTime(task.createdAt || '2026-09-14T08:30:00Z');
   const updatedDateDisplay = task.updatedAt ? formatDateTime(task.updatedAt) : null;
   const priority = task.priority || 'Medium';
-  const displayWeekNumber = task.weekNumber <= 53 ? task.weekNumber + 55 : task.weekNumber;
+  const displayWeekNumber = !task.weekNumber
+    ? null
+    : task.weekNumber <= 53
+    ? task.weekNumber + 55
+    : task.weekNumber;
   const isTaskFullyDone =
     (task.completionPercentage !== undefined && task.completionPercentage >= 100) ||
     (task.completionPercentage === undefined && task.status === 'Done');
@@ -819,9 +823,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
 
               <div className="shrink-0 flex items-center gap-2">
-                <span className="font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-xl border border-indigo-200/80 dark:border-indigo-800/80 text-xs">
-                  Tuần {displayWeekNumber} / {task.year}
-                </span>
+                {displayWeekNumber ? (
+                  <span className="font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-xl border border-indigo-200/80 dark:border-indigo-800/80 text-xs">
+                    Tuần {displayWeekNumber} / {task.year || 2026}
+                  </span>
+                ) : (
+                  <span className="font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                    Kho Backlog (Chưa gán tuần)
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -1035,7 +1045,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium">
-                    Effort Tuần {displayWeekNumber}:
+                    {displayWeekNumber ? `Effort Tuần ${displayWeekNumber}:` : 'Effort (Est):'}
                   </span>
                   {accumulatedEffort.hasMultiWeekHistory && (
                     <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">

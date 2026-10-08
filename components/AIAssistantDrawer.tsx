@@ -533,6 +533,7 @@ export const AIAssistantDrawer: React.FC = () => {
 
     try {
       const weekTasks = (tasks || []).filter((t) => {
+        if (!t.weekNumber) return false;
         const w = t.weekNumber <= 53 && (!t.year || t.year === 2026) ? t.weekNumber + 55 : t.weekNumber;
         const targetW = selectedWeek <= 53 && selectedYear === 2026 ? selectedWeek + 55 : selectedWeek;
         return w === targetW;

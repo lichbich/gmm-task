@@ -1858,7 +1858,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       estimatedEffort: Math.min(24, Math.max(0, taskData.estimatedEffort !== undefined ? Number(taskData.estimatedEffort) || 0 : 2)),
       actualEffort: Math.min(24, Math.max(0, Number(taskData.actualEffort) || 0)),
       completionPercentage: pct,
-      weekNumber: taskData.weekNumber || selectedWeek,
+      weekNumber: taskData.weekNumber !== undefined ? taskData.weekNumber : (taskData.assigneeAccount ? selectedWeek : undefined),
       year: taskData.year || selectedYear,
       createdBy: taskData.createdBy || creatorDisplay,
       createdAt: taskData.createdAt || nowIso,
@@ -1947,6 +1947,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      // Auto-assign week when assigning member to an unassigned or backlog task if weekNumber is not explicitly provided
+      if (
+        updates.assigneeAccount &&
+        updates.assigneeAccount.trim() !== '' &&
+        (!t.assigneeAccount || t.assigneeAccount.trim() === '' || !t.weekNumber) &&
+        updates.weekNumber === undefined
+      ) {
+        updates.weekNumber = selectedWeek;
+        updates.year = selectedYear;
+      }
+
       if (options?.skipLog) {
         targetTaskUpdated = {
           ...t,
@@ -1954,6 +1965,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedAt: nowIso,
           updatedBy: updaterDisplay,
         };
+        if ('weekNumber' in updates && (updates.weekNumber === undefined || updates.weekNumber === null)) {
+          delete (targetTaskUpdated as any).weekNumber;
+        }
         return targetTaskUpdated;
       }
 
@@ -1978,6 +1992,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (updates.assigneeAccount !== undefined && updates.assigneeAccount !== t.assigneeAccount) {
         changes.push(`Người phụ trách: ${t.assigneeAccount || 'Chưa gán'} ➔ ${updates.assigneeAccount || 'Chưa gán'}`);
+      }
+      if (updates.weekNumber !== undefined && updates.weekNumber !== t.weekNumber) {
+        const oldW = t.weekNumber ? `Tuần ${t.weekNumber}` : 'Kho Backlog';
+        const newW = updates.weekNumber ? `Tuần ${updates.weekNumber}` : 'Kho Backlog';
+        changes.push(`Kế hoạch: ${oldW} ➔ ${newW}`);
       }
       if (updates.priority && updates.priority !== t.priority) {
         changes.push(`Độ ưu tiên: ${t.priority || 'Medium'} ➔ ${updates.priority}`);
@@ -2024,6 +2043,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedBy: updaterDisplay,
         activityLogs: [logEntry, ...existingLogs],
       };
+      if ('weekNumber' in updates && (updates.weekNumber === undefined || updates.weekNumber === null)) {
+        delete (targetTaskUpdated as any).weekNumber;
+      }
       return targetTaskUpdated;
     });
 
@@ -2677,6 +2699,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (unworkedIds.size > 0) {
       deleteMultipleTasksFromFirebase(Array.from(unworkedIds), authSession?.account).catch(console.error);
     }
+
+    // Release any unassigned tasks still tagged with selectedWeek back to Backlog pool
+    const unassignedInWeek = tasks.filter(
+      (t) =>
+        t.weekNumber === selectedWeek &&
+        (!t.assigneeAccount || t.assigneeAccount.trim() === '') &&
+        (!t.supporterAccounts || t.supporterAccounts.length === 0)
+    );
+    unassignedInWeek.forEach((t) => {
+      updateTask(t.id, { weekNumber: undefined }, { skipLog: true });
+    });
 
     setTasks(newTasksList);
     saveLocalTasksCache(newTasksList);

@@ -277,11 +277,13 @@ export const MilestonesView: React.FC = () => {
       return !hasAnyTask;
     });
 
-    // Unassigned tasks for this role in this week (no assignee or assignee is empty)
-    const unassignedTasksInRole = weekTasks.filter((t) => {
+    // Unassigned tasks for this role across Backlog pool and current/past weeks
+    const unassignedTasksInRole = tasks.filter((t) => {
       const isRoleMatch = isSpecializationMatchingRole(t.role, roleCode);
       const isUnassigned = !t.assigneeAccount || t.assigneeAccount.trim() === '';
-      return isRoleMatch && isUnassigned;
+      if (!isRoleMatch || !isUnassigned) return false;
+      // Available if in Backlog (no week) OR created for current/past week
+      return !t.weekNumber || t.weekNumber <= selectedWeek;
     });
 
     return {
@@ -2171,6 +2173,8 @@ export const MilestonesView: React.FC = () => {
           onAssignTask={(task, user) => {
             updateTask(task.id, {
               assigneeAccount: user.account,
+              weekNumber: selectedWeek,
+              year: selectedYear,
             });
             setAssigningMember(null);
           }}
