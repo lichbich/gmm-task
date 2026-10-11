@@ -355,11 +355,46 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
         nt.year === selectedYear &&
         (nt.parentTaskId === rootId || nt.id === rootId)
     );
+
+    const isZeroWork =
+      (!t.completionPercentage || t.completionPercentage === 0) &&
+      (!t.actualEffort || t.actualEffort === 0);
+
     if (existingInNextWeek) {
+      if (isZeroWork) {
+        deleteTask(t.id);
+      }
       return; // Already transferred
     }
 
-    // Create a continuation task for nextWeek while preserving original task in selectedWeek
+    if (isZeroWork) {
+      // Task 0% tiến độ và 0h: chuyển hẳn sang tuần tới, mất ở tuần cũ luôn
+      updateTask(t.id, {
+        weekNumber: nextWeek,
+        year: selectedYear,
+        actualEffort: 0,
+        status: 'To do',
+        completionPercentage: 0,
+        lastSubmittedAt: undefined,
+        isSubmittedLate: undefined,
+        updatedAt: new Date().toISOString(),
+        activityLogs: [
+          ...(t.activityLogs || []),
+          {
+            id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            timestamp: new Date().toISOString(),
+            authorName: currentUser?.name || 'Leader',
+            authorAccount: currentUser?.account || 'leader',
+            authorRole: currentUser?.role || 'Leader',
+            actionType: 'GENERAL_UPDATE',
+            summary: `Chuyển công việc (0% tiến độ, 0h) từ Tuần ${selectedWeek} sang Tuần ${nextWeek} (To do)`,
+          },
+        ],
+      });
+      return;
+    }
+
+    // Task đã làm dở (>0% hoặc >0h): bảo toàn ở tuần cũ để biết tuần cũ đã làm gì, tuần mới tạo task kế thừa
     const nextWeekTask: Task = {
       ...t,
       id: `tsk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -390,7 +425,10 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   };
 
   const handleUndoTransfer = (t: Task) => {
-    if (t.parentTaskId) {
+    const originalInPrevWeek = tasks.find(
+      (prev) => prev.id === t.parentTaskId && prev.weekNumber === selectedWeek
+    );
+    if (originalInPrevWeek) {
       deleteTask(t.id);
     } else {
       updateTask(t.id, {
@@ -407,7 +445,10 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       type: 'warning',
       confirmText: `Hủy kế hoạch Tuần ${nextWeek}`,
       onConfirm: () => {
-        if (t.parentTaskId) {
+        const originalInPrevWeek = tasks.find(
+          (prev) => prev.id === t.parentTaskId && prev.weekNumber === selectedWeek
+        );
+        if (originalInPrevWeek) {
           deleteTask(t.id);
         } else {
           updateTask(t.id, {

@@ -252,12 +252,13 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
     if (parsedEffort > 0 && completionPercentage === 0) {
       confirmDialog({
         title: 'Nhắc nhở cập nhật % tiến độ',
-        message: `Bạn đang nhập ${parsedEffort}h làm việc nhưng phần trăm tiến độ vẫn để 0%.\n\n• Theo quy định, nếu tiến độ 0% (coi như chưa làm) thì số giờ làm việc thực tế sẽ tự động chuyển về 0h và trạng thái là "To do" (không thể đánh Done).\n• Bạn có muốn quay lại điều chỉnh % tiến độ không? Hoặc bấm "Vẫn lưu 0%" để lưu task chưa làm (số giờ sẽ tự động về 0h).`,
+        message: `Bạn đang nhập ${parsedEffort}h làm việc nhưng phần trăm tiến độ vẫn để 0%.\n\n• Theo quy định, nếu tiến độ 0% (coi như chưa làm) thì số giờ làm việc thực tế sẽ tự động chuyển về 0h.\n• Bạn có muốn quay lại điều chỉnh % tiến độ không? Hoặc bấm "Vẫn lưu 0%" để lưu task chưa làm (số giờ sẽ tự động về 0h).`,
         confirmText: 'Vẫn lưu 0% (Giờ = 0h)',
         cancelText: 'Cập nhật lại tiến độ',
         type: 'warning',
         onConfirm: () => {
-          submitTaskReport(task.id, 0, 0, 'To do', notes, {
+          const finalStatus: TaskStatus = isSundayOrLate ? 'Done' : 'To do';
+          submitTaskReport(task.id, 0, 0, finalStatus, notes, {
             startDate: undefined,
             endDate: undefined,
           }, reportingAccount);
@@ -289,13 +290,13 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
 
     const finalEffort = completionPercentage === 0 ? 0 : parsedEffort;
     const finalStatus: TaskStatus =
-      completionPercentage === 0
-        ? 'To do'
+      isSundayOrLate
+        ? 'Done'
         : completionPercentage === 100
         ? 'Done'
-        : isSundayOrLate
-        ? 'Done'
-        : 'In Progress';
+        : completionPercentage > 0
+        ? 'In Progress'
+        : 'To do';
 
     submitTaskReport(task.id, finalEffort, completionPercentage, finalStatus, notes, {
       startDate: startDate.trim() || undefined,

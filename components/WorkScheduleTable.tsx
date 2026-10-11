@@ -396,6 +396,24 @@ const getRoleOrderRank = (roleCode?: string): number => {
           return false;
         }
 
+        // Ẩn task 0% và 0h nếu đã được chuyển tiếp sang tuần tới (để tuần cũ mất hoàn toàn)
+        const isZeroWork =
+          (!t.completionPercentage || t.completionPercentage === 0) &&
+          (!t.actualEffort || t.actualEffort === 0);
+        if (isZeroWork) {
+          const nextWeek = selectedWeek + 1;
+          const rootId = t.parentTaskId || t.id;
+          const alreadyTransferredToNext = tasks.some(
+            (nt) =>
+              nt.weekNumber === nextWeek &&
+              nt.year === (t.year || selectedYear) &&
+              (nt.parentTaskId === rootId || nt.id === rootId)
+          );
+          if (alreadyTransferredToNext) {
+            return false;
+          }
+        }
+
         // Sub-tab filter: My Tasks default (includes primary assignee and supporters)
         if (subTab === 'MY_TASKS') {
           if (!currentUser) return false;

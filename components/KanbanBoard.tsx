@@ -51,9 +51,24 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
   } = useApp();
 
   const currentWeekTasks = React.useMemo(() => {
-    return tasks.filter(
-      (t) => t.weekNumber === selectedWeek && (!t.year || t.year === selectedYear)
-    );
+    const nextWeek = selectedWeek + 1;
+    return tasks.filter((t) => {
+      if (t.weekNumber !== selectedWeek || (t.year && t.year !== selectedYear)) return false;
+      const isZeroWork =
+        (!t.completionPercentage || t.completionPercentage === 0) &&
+        (!t.actualEffort || t.actualEffort === 0);
+      if (isZeroWork) {
+        const rootId = t.parentTaskId || t.id;
+        const alreadyTransferredToNext = tasks.some(
+          (nt) =>
+            nt.weekNumber === nextWeek &&
+            nt.year === (t.year || selectedYear) &&
+            (nt.parentTaskId === rootId || nt.id === rootId)
+        );
+        if (alreadyTransferredToNext) return false;
+      }
+      return true;
+    });
   }, [tasks, selectedWeek, selectedYear]);
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);

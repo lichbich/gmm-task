@@ -2344,13 +2344,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const isSundayNoonOrLater = now.getTime() >= sundayNoon.getTime();
     const finalStatus: TaskStatus =
-      completionPercentage === 0
-        ? 'To do'
+      isSundayNoonOrLater || status === 'Done'
+        ? 'Done'
         : completionPercentage === 100
         ? 'Done'
-        : isSundayNoonOrLater || status === 'Done'
-        ? 'Done'
-        : 'In Progress';
+        : completionPercentage > 0
+        ? 'In Progress'
+        : 'To do';
 
     const isDone = finalStatus === 'Done' || completionPercentage === 100;
     const isOfficialReport = isDone || isSundayNoonOrLater;
