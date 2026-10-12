@@ -2,17 +2,42 @@
 
 import React from 'react';
 import { useAutoUpdate } from '../hooks/useAutoUpdate';
-import { Sparkles, RefreshCw, X, ArrowUpRight } from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { Sparkles, RefreshCw, X, Clock } from 'lucide-react';
 
 export const AutoUpdateBanner: React.FC = () => {
-  const { hasUpdate, newVersionInfo, isDismissed, dismiss, reloadNow, currentVersion } = useAutoUpdate();
+  const { simulatedTime } = useApp();
+  const {
+    hasUpdate,
+    newVersionInfo,
+    sundayMilestone,
+    isDismissed,
+    dismiss,
+    reloadNow,
+    currentVersion,
+  } = useAutoUpdate(simulatedTime);
 
-  if (!hasUpdate || isDismissed) {
+  const isSundayReload = Boolean(sundayMilestone) && !hasUpdate;
+  const shouldShow = (hasUpdate || isSundayReload) && !isDismissed;
+
+  if (!shouldShow) {
     return null;
   }
 
   const versionText = newVersionInfo?.version ? `v${newVersionInfo.version}` : 'mới nhất';
   const releaseNote = newVersionInfo?.releaseNote;
+
+  const titleText = isSundayReload
+    ? (sundayMilestone?.type === 'SUNDAY_12H'
+        ? 'Cổng báo cáo tuần đã mở (12:00)'
+        : 'Cập nhật trạng thái báo cáo (16:00)')
+    : `Đã có bản cập nhật ${versionText}`;
+
+  const badgeText = isSundayReload ? 'Chủ Nhật' : 'Mới';
+
+  const descText = isSundayReload
+    ? 'Hệ thống cần làm mới trang để đồng bộ các nút báo cáo tuần. Trang sẽ tự reload khi bạn chuyển tab hoặc đóng tác vụ hiện tại.'
+    : (releaseNote || 'Hệ thống sẽ tự động cập nhật ngầm khi bạn chuyển tab, hoặc bạn có thể cập nhật ngay.');
 
   return (
     <div
@@ -27,27 +52,27 @@ export const AutoUpdateBanner: React.FC = () => {
 
         <div className="relative flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shrink-0 shadow-md shadow-blue-500/30">
-              <Sparkles className="w-5 h-5 text-white animate-pulse" />
+            <div className={`w-9 h-9 rounded-xl ${isSundayReload ? 'bg-gradient-to-tr from-amber-500 to-indigo-600' : 'bg-gradient-to-tr from-blue-600 to-indigo-500'} flex items-center justify-center shrink-0 shadow-md shadow-blue-500/30`}>
+              {isSundayReload ? (
+                <Clock className="w-5 h-5 text-white animate-pulse" />
+              ) : (
+                <Sparkles className="w-5 h-5 text-white animate-pulse" />
+              )}
             </div>
 
             <div className="space-y-1 pr-2">
               <div className="flex items-center gap-2">
                 <h4 className="text-sm font-bold text-white tracking-tight">
-                  Đã có bản cập nhật {versionText}
+                  {titleText}
                 </h4>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                  Mới
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${isSundayReload ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30' : 'bg-blue-500/20 text-blue-300 border border-blue-400/30'}`}>
+                  {badgeText}
                 </span>
               </div>
 
-              {releaseNote ? (
-                <p className="text-xs text-slate-300 line-clamp-2">{releaseNote}</p>
-              ) : (
-                <p className="text-xs text-slate-300">
-                  Hệ thống sẽ tự động cập nhật ngầm khi bạn chuyển tab, hoặc bạn có thể cập nhật ngay.
-                </p>
-              )}
+              <p className="text-xs text-slate-300 line-clamp-2">
+                {descText}
+              </p>
             </div>
           </div>
 
@@ -76,10 +101,10 @@ export const AutoUpdateBanner: React.FC = () => {
             </button>
             <button
               onClick={reloadNow}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-blue-600/30 active:scale-95 transition-all"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-blue-600/30 active:scale-95 transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Cập nhật ngay</span>
+              <span>{isSundayReload ? 'Làm mới ngay' : 'Cập nhật ngay'}</span>
             </button>
           </div>
         </div>

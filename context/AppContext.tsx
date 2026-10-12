@@ -18,6 +18,7 @@ import { extractMentions, extractDiscussionParticipants, parseNoteLine } from '.
 import { AIPermissionsConfig, DEFAULT_AI_ALLOWED_ACCOUNTS, isAIFeatureEnabled } from '../lib/geminiService';
 import { SystemPermissionsMatrix, getDefaultPermissionsMatrix, checkUserSystemPermission } from '../lib/permissionsHelper';
 import { ensureTaskTitlePrefix } from '../lib/taskPrefixHelper';
+import { calculateParentMetrics } from '../lib/subtaskHelper';
 
 export interface UpdateTaskNotesOptions {
   isRecall?: boolean;
@@ -474,6 +475,50 @@ export const renumberMilestonesByRole = (rawMilestones: Milestone[]): { renumber
   return { renumbered: allRenumbered, changed };
 };
 
+/**
+ * Re-synchronize parent task metrics (progress %, status, efforts, collaborators)
+ * from its active subtasks within a tasks list array.
+ */
+export const syncParentTaskMetricsInList = (
+  taskList: Task[],
+  parentId: string,
+  simulatedTime?: string
+): { updatedList: Task[]; parentTaskUpdated: Task | null } => {
+  if (!parentId || !parentId.trim()) return { updatedList: taskList, parentTaskUpdated: null };
+  const parent = taskList.find((t) => t.id === parentId);
+  if (!parent || parent.isManualOverride) {
+    return { updatedList: taskList, parentTaskUpdated: null };
+  }
+
+  const subtasks = taskList.filter((t) => t.subtaskParentId === parentId);
+  const metrics = calculateParentMetrics(parent, subtasks);
+
+  const todayStr = getTodayDateOnlyString(simulatedTime);
+  let nextStartDate = parent.startDate;
+  let nextEndDate = parent.endDate;
+  if (metrics.status === 'In Progress' && !nextStartDate) {
+    nextStartDate = todayStr;
+  } else if (metrics.status === 'Done') {
+    if (!nextStartDate) nextStartDate = todayStr;
+    if (!nextEndDate) nextEndDate = todayStr;
+  }
+
+  const updatedParent: Task = {
+    ...parent,
+    isParentTask: subtasks.length > 0,
+    completionPercentage: metrics.completionPercentage,
+    status: metrics.status,
+    estimatedEffort: metrics.totalEstimatedEffort,
+    actualEffort: metrics.totalActualEffort,
+    startDate: nextStartDate,
+    endDate: nextEndDate,
+    supporterAccounts: metrics.collaboratorAccounts.length > 0 ? metrics.collaboratorAccounts : parent.supporterAccounts,
+  };
+
+  const nextList = taskList.map((t) => (t.id === parentId ? updatedParent : t));
+  return { updatedList: nextList, parentTaskUpdated: updatedParent };
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [roles, setRoles] = useState<RoleItem[]>(DEFAULT_ROLES);
@@ -740,8 +785,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
 
           if (mergedTasks.length > 0) {
-            setTasks(mergedTasks);
-            saveLocalTasksCache(mergedTasks);
+            // Reconcile parent task metrics for all parent tasks that have subtasks
+            const parentIds = new Set<string>();
+            mergedTasks.forEach((t) => {
+              if (t.subtaskParentId) parentIds.add(t.subtaskParentId);
+            });
+            let reconciledTasks = mergedTasks;
+            parentIds.forEach((pId) => {
+              const res = syncParentTaskMetricsInList(reconciledTasks, pId);
+              reconciledTasks = res.updatedList;
+            });
+            setTasks(reconciledTasks);
+            saveLocalTasksCache(reconciledTasks);
           } else if (rawRemoteTasks.length === 0 && localCached.length === 0) {
             setTasks([]);
           }
@@ -1867,10 +1922,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       priority: taskData.priority || 'Medium',
       activityLogs: [initialLog],
     };
-    const updated = [...tasks, newTask];
+    let updated = [...tasks, newTask];
+    let parentToSync: Task | null = null;
+    if (newTask.subtaskParentId) {
+      const res = syncParentTaskMetricsInList(updated, newTask.subtaskParentId, simulatedTime);
+      updated = res.updatedList;
+      parentToSync = res.parentTaskUpdated;
+    }
     setTasks(updated);
     saveLocalTasksCache(updated);
     saveTaskToFirebase(newTask).catch(console.error);
+    if (parentToSync) {
+      saveTaskToFirebase(parentToSync).catch(console.error);
+    }
 
     // Push notification to assigned member (only if assigned to someone else)
     if (newTask.assigneeAccount) {
@@ -1900,7 +1964,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let targetTaskUpdated: Task | null = null;
 
-    const updated = tasks.map((t) => {
+    let updated = tasks.map((t) => {
       if (t.id !== id) return t;
 
       if (updates.title !== undefined) {
@@ -2049,6 +2113,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return targetTaskUpdated;
     });
 
+    // Synchronize parent tasks if a subtask was updated or linked/unlinked
+    const parentsToSync = new Set<string>();
+    const currentTaskBeforeUpdate = tasks.find((t) => t.id === id);
+    if (currentTaskBeforeUpdate?.subtaskParentId) {
+      parentsToSync.add(currentTaskBeforeUpdate.subtaskParentId);
+    }
+    if (updates.subtaskParentId) {
+      parentsToSync.add(updates.subtaskParentId);
+    }
+    if (targetTaskUpdated && (targetTaskUpdated as Task).subtaskParentId) {
+      parentsToSync.add((targetTaskUpdated as Task).subtaskParentId!);
+    }
+
+    const parentsUpdated: Task[] = [];
+    parentsToSync.forEach((parentId) => {
+      if (parentId === id) return;
+      const res = syncParentTaskMetricsInList(updated, parentId, simulatedTime);
+      updated = res.updatedList;
+      if (res.parentTaskUpdated) {
+        parentsUpdated.push(res.parentTaskUpdated);
+      }
+    });
+
     setTasks(updated);
     saveLocalTasksCache(updated);
     if (targetTaskUpdated) {
@@ -2073,6 +2160,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         syncArchivesToFirebase(updatedArchives).catch(console.error);
       }
     }
+
+    parentsUpdated.forEach((p) => {
+      saveTaskToFirebase(p).catch(console.error);
+    });
 
     // Push notification if assignee was changed or assigned
     const currentTask = tasks.find((t) => t.id === id);
@@ -2227,19 +2318,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteTask = (id: string) => {
-    const updated = tasks.filter((t) => t.id !== id);
+    const taskToDelete = tasks.find((t) => t.id === id);
+    let updated = tasks.filter((t) => t.id !== id);
+    let parentToSync: Task | null = null;
+    if (taskToDelete?.subtaskParentId) {
+      const res = syncParentTaskMetricsInList(updated, taskToDelete.subtaskParentId, simulatedTime);
+      updated = res.updatedList;
+      parentToSync = res.parentTaskUpdated;
+    }
     setTasks(updated);
     saveLocalTasksCache(updated);
     deleteTaskFromFirebase(id, authSession?.account).catch(console.error);
+    if (parentToSync) {
+      saveTaskToFirebase(parentToSync).catch(console.error);
+    }
   };
 
   const deleteTasks = (ids: string[]) => {
     if (!ids || ids.length === 0) return;
     const idSet = new Set(ids);
-    const updated = tasks.filter((t) => !idSet.has(t.id));
+    const parentsToSync = new Set<string>();
+    tasks.forEach((t) => {
+      if (idSet.has(t.id) && t.subtaskParentId) {
+        parentsToSync.add(t.subtaskParentId);
+      }
+    });
+    let updated = tasks.filter((t) => !idSet.has(t.id));
+    const parentsUpdated: Task[] = [];
+    parentsToSync.forEach((parentId) => {
+      if (!idSet.has(parentId)) {
+        const res = syncParentTaskMetricsInList(updated, parentId, simulatedTime);
+        updated = res.updatedList;
+        if (res.parentTaskUpdated) parentsUpdated.push(res.parentTaskUpdated);
+      }
+    });
     setTasks(updated);
     saveLocalTasksCache(updated);
     deleteMultipleTasksFromFirebase(ids, authSession?.account).catch(console.error);
+    parentsUpdated.forEach((p) => saveTaskToFirebase(p).catch(console.error));
   };
 
   const reorderTasksInMilestone = (milestoneId: string, orderedTaskIds: string[]) => {

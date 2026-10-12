@@ -40,7 +40,17 @@ import {
   Copy,
   Download,
   Reply,
+  Layers,
+  CornerDownRight,
+  Link2,
 } from 'lucide-react';
+import { LinkExistingTasksModal } from './common/LinkExistingTasksModal';
+import {
+  isSubtask,
+  isParentTask,
+  getSubtasksOfParent,
+  calculateParentMetrics,
+} from '../lib/subtaskHelper';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import {
   parseNoteLine,
@@ -77,6 +87,8 @@ interface TaskDetailModalProps {
   onClose: () => void;
   onOpenReport?: (task: Task) => void;
   onEditTask?: (task: Task) => void;
+  onSelectTask?: (task: Task) => void;
+  onOpenCreateSubtask?: (parentTask: Task) => void;
 }
 
 const formatDateTime = (isoOrStr?: string): string => {
@@ -101,6 +113,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onClose,
   onOpenReport,
   onEditTask,
+  onSelectTask,
+  onOpenCreateSubtask,
 }) => {
   const {
     tasks,
@@ -131,6 +145,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   const [notesText, setNotesText] = useState('');
   const [quickComment, setQuickComment] = useState('');
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{
@@ -374,6 +389,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Parse description for interactive checklist / sub-tasks (Hook at top level before conditional return)
   const parsedDesc = useMemo(() => parseDescription(task?.description), [task?.description]);
 
+  // Subtasks list logic in TaskDetailModal (Hooks at top level before conditional return)
+  const subtasksList = useMemo(() => {
+    return task ? getSubtasksOfParent(task.id, tasks) : [];
+  }, [task?.id, tasks]);
+  const hasSubtasks = subtasksList.length > 0;
+  const parentMetrics = useMemo(() => {
+    if (!task || !hasSubtasks) return null;
+    return calculateParentMetrics(task, subtasksList);
+  }, [task, hasSubtasks, subtasksList]);
+
   if (!isRendered || !task) return null;
 
   const milestone = milestones.find((m) => m.id === task.milestoneId);
@@ -411,14 +436,28 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     : task.weekNumber <= 53
     ? task.weekNumber + 55
     : task.weekNumber;
+
+  const displayCompletionPct = (hasSubtasks && !task.isManualOverride && parentMetrics)
+    ? parentMetrics.completionPercentage
+    : (task.completionPercentage || 0);
+
+  const displayActualEffort = (hasSubtasks && !task.isManualOverride && parentMetrics)
+    ? parentMetrics.totalActualEffort
+    : (task.actualEffort || 0);
+
+  const displayEstimatedEffort = (hasSubtasks && !task.isManualOverride && parentMetrics)
+    ? parentMetrics.totalEstimatedEffort
+    : (task.estimatedEffort || 0);
+
   const isTaskFullyDone =
-    (task.completionPercentage !== undefined && task.completionPercentage >= 100) ||
-    (task.completionPercentage === undefined && task.status === 'Done');
-  const effectiveDisplayStatus = isTaskFullyDone
+    displayCompletionPct >= 100 ||
+    ((hasSubtasks && !task.isManualOverride && parentMetrics) ? parentMetrics.status === 'Done' : task.status === 'Done');
+
+  const effectiveDisplayStatus = (hasSubtasks && !task.isManualOverride && parentMetrics)
+    ? parentMetrics.status
+    : isTaskFullyDone
     ? 'Done'
-    : (task.completionPercentage && task.completionPercentage > 0) || task.status === 'In Progress'
-    ? 'In Progress'
-    : task.status === 'Done'
+    : displayCompletionPct > 0 || task.status === 'In Progress'
     ? 'In Progress'
     : task.status;
 
@@ -933,6 +972,175 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             )}
           </div>
 
+          {/* Subtask Parent Relationship Banner */}
+          {task && isSubtask(task) && (
+            <div className="bg-indigo-50/90 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 p-3 rounded-2xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center shrink-0 text-indigo-600 dark:text-indigo-400">
+                  <CornerDownRight className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                    Subtask trực thuộc task lớn
+                  </div>
+                  <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                    {(() => {
+                      const parentObj = task.subtaskParentId ? tasks.find((t) => t.id === task.subtaskParentId) : null;
+                      return parentObj?.title || task.subtaskParentTitle || 'Task lớn';
+                    })()}
+                  </div>
+                  {(task.subtaskReviewerAccount) && (
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Reviewer / Leader: @{task.subtaskReviewerAccount}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {task.subtaskParentId && onSelectTask && (() => {
+                const parentObj = tasks.find((t) => t.id === task.subtaskParentId);
+                return parentObj ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectTask(parentObj)}
+                    className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 text-indigo-700 dark:text-indigo-300 font-bold text-xs rounded-xl border border-indigo-200 dark:border-indigo-700 shadow-2xs shrink-0 transition cursor-pointer active:scale-95"
+                  >
+                    Xem task cha
+                  </button>
+                ) : null;
+              })()}
+            </div>
+          )}
+
+          {/* Subtasks List Section (If task is a parent task or has subtasks) */}
+          {task && (() => {
+            const subtasksList = getSubtasksOfParent(task.id, tasks);
+            if (subtasksList.length === 0) return null;
+            return (
+              <div className="bg-white dark:bg-slate-850 p-3.5 sm:p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span className="font-bold text-xs text-slate-800 dark:text-slate-100">
+                      Danh sách Subtask ({subtasksList.length})
+                    </span>
+                    {!task.isManualOverride ? (
+                      <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold">
+                        Tự động tổng hợp
+                      </span>
+                    ) : (
+                      <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-semibold">
+                        Ghi đè thủ công
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsLinkModalOpen(true)}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 transition flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs"
+                      title="Chọn thêm các task có sẵn để gộp vào task này"
+                    >
+                      <Link2 className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>+ Gộp task có sẵn</span>
+                    </button>
+                    {onOpenCreateSubtask && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenCreateSubtask(task)}
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800 transition flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs"
+                      >
+                        <CornerDownRight className="w-3.5 h-3.5" />
+                        <span>+ Thêm Subtask</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                  {subtasksList.map((st) => {
+                    const stUser = users.find((u) => u.account.toLowerCase() === (st.assigneeAccount || '').toLowerCase());
+                    return (
+                      <div
+                        key={st.id}
+                        onClick={() => onSelectTask?.(st)}
+                        className={`p-2.5 flex items-center justify-between gap-3 text-xs bg-slate-50/50 dark:bg-slate-900/40 hover:bg-indigo-50/60 dark:hover:bg-slate-800/80 transition ${
+                          onSelectTask ? 'cursor-pointer' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <span className="text-indigo-400 font-mono text-xs select-none">↳</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                              {st.title}
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                              <span>Effort: <strong className="font-mono text-indigo-600 dark:text-indigo-400">{st.actualEffort || st.estimatedEffort}h</strong></span>
+                              <span>•</span>
+                              <span>Tiến độ: <strong className="font-mono text-slate-600 dark:text-slate-300">{st.completionPercentage || 0}%</strong></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {st.assigneeAccount ? (
+                            <div className="flex items-center gap-1">
+                              <UserAvatar user={stUser} account={st.assigneeAccount} size="xs" shape="circle" />
+                              <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                                {st.assigneeAccount}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-amber-500 font-medium">Chưa gán</span>
+                          )}
+
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            st.status === 'Done' || (st.completionPercentage || 0) >= 100
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+                              : st.status === 'In Progress' || (st.completionPercentage || 0) > 0
+                              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300'
+                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                          }`}>
+                            {st.status || 'To do'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Quick Subtask conversion / Link existing tasks for standalone tasks */}
+          {task && !isSubtask(task) && getSubtasksOfParent(task.id, tasks).length === 0 && (
+            <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 min-w-0">
+                <Layers className="w-4 h-4 text-indigo-500 shrink-0" />
+                <span className="truncate">Chưa có Subtask. Bạn có thể gộp các task lẻ có sẵn vào task này.</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsLinkModalOpen(true)}
+                  className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold rounded-xl border border-indigo-200 dark:border-indigo-800 shadow-2xs transition active:scale-95 flex items-center gap-1 cursor-pointer"
+                >
+                  <Link2 className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Gộp task có sẵn</span>
+                </button>
+                {onOpenCreateSubtask && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenCreateSubtask(task)}
+                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-2xs transition active:scale-95 flex items-center gap-1 cursor-pointer"
+                  >
+                    <CornerDownRight className="w-3.5 h-3.5" />
+                    <span>+ Subtask mới</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Comprehensive Metadata Section */}
           <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
             {/* Top row: Assignee and Milestone */}
@@ -1054,9 +1262,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   )}
                 </div>
                 <div className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 flex items-baseline gap-1">
-                  <span>{task.actualEffort}h</span>
+                  <span>{displayActualEffort}h</span>
                   <span className="text-slate-300 dark:text-slate-600 font-normal">/</span>
-                  <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{task.estimatedEffort}h (Est)</span>
+                  <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{displayEstimatedEffort}h (Est)</span>
                 </div>
               </div>
 
@@ -1064,7 +1272,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Tiến độ hoàn thành:</span>
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-sm text-indigo-600 dark:text-indigo-400 font-mono">
-                    {task.completionPercentage}%
+                    {displayCompletionPct}%
                   </span>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                     effectiveDisplayStatus === 'Done'
@@ -1542,6 +1750,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Link Existing Tasks Modal */}
+      {task && (
+        <LinkExistingTasksModal
+          parentTask={task}
+          isOpen={isLinkModalOpen}
+          onClose={() => setIsLinkModalOpen(false)}
+        />
+      )}
 
       {/* Lightbox Image Preview Modal with Pan, Zoom & Delete */}
       <ImageLightbox

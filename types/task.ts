@@ -328,6 +328,13 @@ export interface Task {
   parentTaskId?: string; // ID của task gốc khi rolled over sang tuần mới
   activityLogs?: TaskActivityLog[]; // Nhật ký lịch sử các lần cập nhật task
   ticketId?: string; // ID của request ticket liên kết nếu task được sinh ra từ ticket
+  // --- SUBTASK HIERARCHY SYSTEM ---
+  isParentTask?: boolean; // true nếu đây là Task lớn chứa các Subtasks
+  isSubtask?: boolean; // true nếu đây là Subtask trực thuộc một Task lớn
+  subtaskParentId?: string; // ID của Task lớn mà subtask này trực thuộc
+  subtaskParentTitle?: string; // Tên Task lớn (để hiển thị badge ngữ cảnh nhanh)
+  subtaskReviewerAccount?: string; // Người review / Leader của Task lớn
+  isManualOverride?: boolean; // true nếu Leader chủ động sửa % hoặc effort thủ công trên task lớn
 }
 
 /**

@@ -19,6 +19,7 @@ import { QuickResourceFloatingButton } from './QuickResourceFloatingButton';
 import { ScrollToTopButton } from './ScrollToTopButton';
 import { AutoUpdateBanner } from './AutoUpdateBanner';
 import { AIAssistantDrawer } from './AIAssistantDrawer';
+import { NewFeatureTourBanner } from './common/NewFeatureTourBanner';
 import { Task } from '../types/task';
 
 function MainApp() {
@@ -33,14 +34,33 @@ function MainApp() {
   const [taskModalDefaultWeek, setTaskModalDefaultWeek] = useState<number | undefined>(undefined);
   const [taskModalDefaultAssignee, setTaskModalDefaultAssignee] = useState<string | undefined>(undefined);
   const [taskModalDefaultRole, setTaskModalDefaultRole] = useState<string | undefined>(undefined);
+  const [taskModalInitialSubtaskParent, setTaskModalInitialSubtaskParent] = useState<Task | null>(null);
 
-  const handleOpenTaskModal = (task?: Task, defaultWeek?: number, defaultAssignee?: string, defaultRole?: string) => {
+  const handleOpenTaskModal = (
+    task?: Task,
+    defaultWeek?: number,
+    defaultAssignee?: string,
+    defaultRole?: string,
+    initialSubtaskParent?: Task
+  ) => {
     setSelectedTaskForEdit(task || null);
     setTaskModalDefaultWeek(defaultWeek);
     setTaskModalDefaultAssignee(defaultAssignee);
     setTaskModalDefaultRole(defaultRole);
+    setTaskModalInitialSubtaskParent(initialSubtaskParent || null);
     setIsTaskModalOpen(true);
   };
+
+  // Đóng modal khi tour hướng dẫn được khởi động
+  useEffect(() => {
+    const handleCloseAll = () => {
+      setSelectedTaskForDetail(null);
+      setIsTaskModalOpen(false);
+      setSelectedTicketIdForView(null);
+    };
+    window.addEventListener('saho-close-all-modals', handleCloseAll);
+    return () => window.removeEventListener('saho-close-all-modals', handleCloseAll);
+  }, []);
 
   const handleSelectTaskFromNotification = useCallback(
     (targetId: string, notif?: any) => {
@@ -271,12 +291,20 @@ function MainApp() {
             defaultWeek={taskModalDefaultWeek}
             defaultAssignee={taskModalDefaultAssignee}
             initialRole={taskModalDefaultRole}
+            initialSubtaskParent={taskModalInitialSubtaskParent}
+            onOpenCreateSubtask={(parent) => {
+              handleOpenTaskModal(undefined, parent.weekNumber, undefined, parent.role, parent);
+            }}
+            onSelectTaskToEdit={(st) => {
+              handleOpenTaskModal(st);
+            }}
             onClose={() => {
               setIsTaskModalOpen(false);
               setSelectedTaskForEdit(null);
               setTaskModalDefaultWeek(undefined);
               setTaskModalDefaultAssignee(undefined);
               setTaskModalDefaultRole(undefined);
+              setTaskModalInitialSubtaskParent(null);
             }}
           />
 
@@ -299,6 +327,9 @@ function MainApp() {
 
       {/* Floating Auto Update Banner */}
       <AutoUpdateBanner />
+
+      {/* Floating New Feature Tour Announcement Banner (Tạm thời ẩn theo yêu cầu) */}
+      {/* <NewFeatureTourBanner setActiveTaskTab={handleSetActiveTaskTab} /> */}
 
       {/* Floating AI Project Intelligence Assistant (Admin/Leader) */}
       <AIAssistantDrawer />

@@ -826,3 +826,154 @@ pre.code-block-content code::selection {
   -webkit-text-fill-color: #ffffff !important;
   text-shadow: none !important;
 }
+
+/* ==========================================================================
+   SAHO INTERACTIVE TOUR (DRIVER.JS) MODERN STYLING
+   ========================================================================== */
+.driver-popover.saho-tour-popover {
+  background-color: #ffffff;
+  color: #0f172a;
+  border-radius: 1.25rem !important; /* rounded-2xl */
+  padding: 1.25rem 1.4rem !important;
+  box-shadow: 0 20px 30px -10px rgba(15, 23, 42, 0.18), 0 10px 15px -3px rgba(15, 23, 42, 0.08) !important;
+  border: 1px solid #e2e8f0 !important;
+  font-family: inherit !important;
+  max-width: 380px !important;
+  z-index: 1000000 !important;
+}
+
+.dark .driver-popover.saho-tour-popover {
+  background-color: #0b0f19 !important;
+  color: #f8fafc !important;
+  border-color: #1e293b !important;
+  box-shadow: 0 25px 40px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-title {
+  font-size: 0.975rem !important;
+  font-weight: 800 !important;
+  color: #1e1b4b !important;
+  margin-bottom: 0.4rem !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.dark .driver-popover.saho-tour-popover .driver-popover-title {
+  color: #818cf8 !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-description {
+  font-size: 0.8125rem !important;
+  line-height: 1.55 !important;
+  color: #475569 !important;
+  margin-bottom: 0.85rem !important;
+}
+
+.dark .driver-popover.saho-tour-popover .driver-popover-description {
+  color: #cbd5e1 !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.5rem !important;
+  margin-top: 0.75rem !important;
+  padding-top: 0.75rem !important;
+  border-top: 1px solid #f1f5f9 !important;
+}
+
+.dark .driver-popover.saho-tour-popover .driver-popover-footer {
+  border-top-color: #1e293b !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-progress-text {
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  color: #4f46e5 !important;
+  background: #eef2ff !important;
+  padding: 0.25rem 0.6rem !important;
+  border-radius: 9999px !important;
+}
+
+.dark .driver-popover.saho-tour-popover .driver-popover-progress-text {
+  color: #a5b4fc !important;
+  background: rgba(99, 102, 241, 0.2) !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-navigation-btns {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-btn {
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  padding: 0.45rem 0.95rem !important;
+  border-radius: 0.75rem !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  text-shadow: none !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-next-btn {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3) !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-next-btn:hover {
+  background-color: #4338ca !important;
+  transform: translateY(-1px) !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-prev-btn {
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-prev-btn:hover {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+.dark .driver-popover.saho-tour-popover .driver-popover-prev-btn {
+  background-color: #1e293b !important;
+  color: #94a3b8 !important;
+  border-color: #334155 !important;
+}
+
+.dark .driver-popover.saho-tour-popover .driver-popover-prev-btn:hover {
+  background-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-close-btn {
+  color: #94a3b8 !important;
+  font-size: 1.25rem !important;
+  top: 1rem !important;
+  right: 1.1rem !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-close-btn:hover {
+  color: #ef4444 !important;
+}
+
+.driver-popover.saho-tour-popover .driver-popover-arrow {
+  border-color: #ffffff !important;
+}
+
+.dark .driver-popover.saho-tour-popover .driver-popover-arrow {
+  border-color: #0b0f19 !important;
+}
+
+/* Highlight Stage animated ring */
+.driver-stage {
+  border-radius: 0.85rem !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.6), 0 0 25px rgba(99, 102, 241, 0.35) !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}

@@ -51,6 +51,10 @@ import {
   Sparkles,
   ShieldCheck,
   ArrowUp,
+  CornerDownRight,
+  ChevronRight,
+  ChevronDown,
+  Layers,
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { NextWeekDefineView } from './NextWeekDefineView';
@@ -65,9 +69,16 @@ import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { AIWeeklySummaryModal } from './AIWeeklySummaryModal';
 import { isAIFeatureEnabled } from '../lib/geminiService';
+import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
 
 interface WorkScheduleTableProps {
-  onOpenTaskModal?: (task?: Task, defaultWeek?: number, defaultAssignee?: string, defaultRole?: string) => void;
+  onOpenTaskModal?: (
+    task?: Task,
+    defaultWeek?: number,
+    defaultAssignee?: string,
+    defaultRole?: string,
+    initialSubtaskParent?: Task
+  ) => void;
 }
 
 export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTaskModal }) => {
@@ -116,6 +127,20 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
+  const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
+
+  const toggleParentCollapse = (parentId: string) => {
+    setCollapsedParentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(parentId)) {
+        next.delete(parentId);
+      } else {
+        next.add(parentId);
+      }
+      return next;
+    });
+  };
+
   const [assigningMember, setAssigningMember] = useState<{
     user: User;
     roleCode: string;
@@ -748,10 +773,19 @@ const getRoleOrderRank = (roleCode?: string): number => {
   }, []);
 
   const totalEstimatedEffort =
-    Math.round(filteredTasks.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0) * 100) / 100;
+    Math.round(
+      filteredTasks.reduce((acc, t) => {
+        const hasSubtasksInFiltered = filteredTasks.some((st) => st.subtaskParentId === t.id);
+        if (hasSubtasksInFiltered) return acc;
+        return acc + (t.estimatedEffort || 0);
+      }, 0) * 100
+    ) / 100;
+
   const totalActualEffort =
     Math.round(
       filteredTasks.reduce((acc, t) => {
+        const hasSubtasksInFiltered = filteredTasks.some((st) => st.subtaskParentId === t.id);
+        if (hasSubtasksInFiltered) return acc;
         if (subTab === 'MY_TASKS' && currentUser?.account) {
           return acc + getMemberTaskEffort(t, currentUser.account);
         }
@@ -800,16 +834,40 @@ const getRoleOrderRank = (roleCode?: string): number => {
     return award?.isTopEffort || false;
   };
 
-  // Reusable task row renderer
-  const renderTaskRow = (t: Task, displayIdx: number, forAccount?: string) => {
+  // Reusable task row renderer with subtask tree hierarchy support
+  const renderTaskRow = (
+    t: Task,
+    displayIdx: number,
+    forAccount?: string,
+    isNestedSubtask?: boolean
+  ) => {
     const todayStr = getTodayDateOnlyString(simulatedTime);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
     const nowTime = new Date(simulatedTime).getTime();
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
-    const effStatus = getEffectiveTaskStatus(t);
+    const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+    const hasSub = taskSubtasks.length > 0;
+    const isParent = isParentTask(t, tasks);
+    const isSub = isSubtask(t);
+    const parentMetrics = hasSub ? calculateParentMetrics(t, taskSubtasks) : null;
+    const isCollapsed = collapsedParentIds.has(t.id);
+
+    const effStatus = (parentMetrics && !t.isManualOverride)
+      ? parentMetrics.status
+      : getEffectiveTaskStatus(t);
     const accEffort = calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
-    const isTaskDone = effStatus === 'Done' || t.status === 'Done' || t.completionPercentage === 100;
+    const displayEst = (parentMetrics && !t.isManualOverride)
+      ? parentMetrics.totalEstimatedEffort
+      : (t.estimatedEffort ?? 0);
+    const displayActual = (parentMetrics && !t.isManualOverride)
+      ? parentMetrics.totalActualEffort
+      : (t.actualEffort ?? displayEst);
+    const displayPct = (parentMetrics && !t.isManualOverride)
+      ? parentMetrics.completionPercentage
+      : (t.completionPercentage ?? 0);
+
+    const isTaskDone = effStatus === 'Done' || t.status === 'Done' || displayPct >= 100;
     // A task is officially reported if it is Done 100% OR submitted at/after Sunday 12:00 PM of that week
     const isReported =
       isTaskDone ||
@@ -830,21 +888,68 @@ const getRoleOrderRank = (roleCode?: string): number => {
           handleTaskClick(t);
         }}
         className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/70 transition cursor-pointer group ${
-          isOverdue ? 'bg-red-50/30 dark:bg-red-950/20' : ''
+          isOverdue
+            ? 'bg-red-50/30 dark:bg-red-950/20'
+            : isNestedSubtask
+            ? 'bg-slate-50/40 dark:bg-slate-900/40 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/30'
+            : ''
         }`}
       >
         {/* STT */}
-        <td className="py-3 px-4 text-center text-slate-400 dark:text-slate-400 font-mono font-medium">
-          {displayIdx}
+        <td className="py-3 px-4 text-center font-mono font-medium">
+          {isNestedSubtask ? (
+            <span className="text-indigo-400 dark:text-indigo-400 font-bold text-xs select-none">↳</span>
+          ) : (
+            <span className="text-slate-400 dark:text-slate-400">{displayIdx}</span>
+          )}
         </td>
 
-        {/* Task Name: Clean & minimal, identical layout for all rows */}
+        {/* Task Name */}
         <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-100">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-1.5 flex-wrap">
+              {isNestedSubtask && (
+                <div className="flex items-center gap-1 mr-0.5">
+                  <span className="text-indigo-400 font-mono text-xs select-none">└── ↳</span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300 font-bold shrink-0">
+                    Subtask
+                  </span>
+                </div>
+              )}
+              {hasSub && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleParentCollapse(t.id);
+                  }}
+                  className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition text-slate-500 dark:text-slate-400 shrink-0"
+                  title={isCollapsed ? 'Mở rộng xem các subtask' : 'Thu gọn các subtask'}
+                >
+                  {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
               <span className="line-clamp-2 font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
                 <FormattedTaskTitle title={t.title} />
               </span>
+              {hasSub && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleParentCollapse(t.id);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] shrink-0 cursor-pointer hover:bg-indigo-100"
+                  title={`${taskSubtasks.length} subtask trực thuộc. Bấm để ${isCollapsed ? 'mở rộng' : 'thu gọn'}`}
+                >
+                  <Layers className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  {taskSubtasks.length} Subtask{isCollapsed ? ' (đang ẩn)' : ''}
+                </span>
+              )}
+              {isSub && !isNestedSubtask && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold shrink-0">
+                  ↳ Thuộc: {t.subtaskParentTitle || 'Task lớn'}
+                </span>
+              )}
               {isTicketTask && (
                 <span
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold text-[10px] shrink-0 shadow-2xs"
@@ -904,16 +1009,19 @@ const getRoleOrderRank = (roleCode?: string): number => {
         <td className="py-3 px-3 text-center font-mono">
           <div className="flex flex-col items-center">
             {(() => {
-              const currentEffort = forAccount ? getMemberTaskEffort(t, forAccount) : (t.actualEffort ?? t.estimatedEffort);
+              const currentEffort = forAccount
+                ? getMemberTaskEffort(t, forAccount)
+                : (isReported ? displayActual : (displayActual > 0 ? displayActual : displayEst));
+
               if (isReported) {
                 return (
                   <>
                     <span className="font-bold text-indigo-600 dark:text-indigo-400">
                       {currentEffort}h
                     </span>
-                    {t.estimatedEffort !== undefined && currentEffort !== t.estimatedEffort && (
+                    {displayEst !== undefined && currentEffort !== displayEst && (
                       <span className="text-[9px] text-slate-400 dark:text-slate-400">
-                        est: {t.estimatedEffort}h
+                        est: {displayEst}h
                       </span>
                     )}
                   </>
@@ -926,9 +1034,9 @@ const getRoleOrderRank = (roleCode?: string): number => {
                     <span className="font-medium text-slate-700 dark:text-slate-300">
                       {currentEffort}h
                     </span>
-                    {t.estimatedEffort !== undefined && currentEffort !== t.estimatedEffort && (
+                    {displayEst !== undefined && currentEffort !== displayEst && (
                       <span className="text-[9px] text-slate-400 dark:text-slate-400">
-                        est: {t.estimatedEffort}h
+                        est: {displayEst}h
                       </span>
                     )}
                   </>
@@ -938,7 +1046,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
               return (
                 <>
                   <span className="font-medium text-slate-700 dark:text-slate-300">
-                    {t.estimatedEffort}h
+                    {displayEst}h
                   </span>
                   <span className="text-[9px] text-slate-400 dark:text-slate-500">
                     (est)
@@ -973,7 +1081,11 @@ const getRoleOrderRank = (roleCode?: string): number => {
         <td className="py-3 px-3 font-medium">
           <div className="space-y-1">
             {(() => {
-              const currentAcc = forAccount || t.assigneeAccount;
+              const currentAcc = forAccount || t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
+              const collabs = (parentMetrics && parentMetrics.collaboratorAccounts.length > 0)
+                ? parentMetrics.collaboratorAccounts
+                : (t.supporterAccounts || []);
+
               if (currentAcc) {
                 const userObj = users.find((u) => u.account.toLowerCase() === currentAcc.toLowerCase());
                 const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
@@ -989,12 +1101,12 @@ const getRoleOrderRank = (roleCode?: string): number => {
                       <span className={getUserRoleColorClass(userRole)}>{currentAcc}</span>
                     </div>
 
-                    {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                    {collabs.length > 0 && (
                       <div className="pt-0.5">
                         <TaskSupportersBadge
-                          supporterAccounts={t.supporterAccounts}
+                          supporterAccounts={collabs}
                           users={users}
-                          primaryAssignee={t.assigneeAccount}
+                          primaryAssignee={currentAcc}
                           currentViewingAccount={forAccount}
                           size="sm"
                         />
@@ -1009,10 +1121,10 @@ const getRoleOrderRank = (roleCode?: string): number => {
                   <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1 text-[11px]">
                     <UserX className="w-3.5 h-3.5" /> Task trống
                   </span>
-                  {t.supporterAccounts && t.supporterAccounts.length > 0 && (
+                  {collabs.length > 0 && (
                     <div className="pt-0.5">
                       <TaskSupportersBadge
-                        supporterAccounts={t.supporterAccounts}
+                        supporterAccounts={collabs}
                         users={users}
                         size="sm"
                       />
@@ -1028,18 +1140,18 @@ const getRoleOrderRank = (roleCode?: string): number => {
         <td className="py-3 px-3">
           <div className="space-y-1">
             <div className="flex justify-between text-[10px]">
-              <span className="text-slate-500 font-medium">{t.completionPercentage}%</span>
+              <span className="text-slate-500 font-medium">{displayPct}%</span>
             </div>
             <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
               <div
                 className={`h-full transition-all duration-300 ${
-                  t.completionPercentage === 100
+                  displayPct === 100
                     ? 'bg-emerald-500'
-                    : t.completionPercentage > 0
+                    : displayPct > 0
                     ? 'bg-indigo-600'
                     : 'bg-slate-300'
                 }`}
-                style={{ width: `${t.completionPercentage}%` }}
+                style={{ width: `${displayPct}%` }}
               />
             </div>
           </div>
@@ -1149,6 +1261,21 @@ const getRoleOrderRank = (roleCode?: string): number => {
               </button>
             )}
 
+            {/* Leader/Advisor/Admin/PM Quick Add Subtask Button */}
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && !isNestedSubtask && (
+              <button
+                data-tour="quick-add-subtask-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenTaskModal?.(undefined, t.weekNumber || selectedWeek, undefined, t.role, t);
+                }}
+                className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/80 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-500 dark:text-slate-400 rounded-xl transition-all shadow-xs"
+                title="Thêm Subtask trực thuộc cho task này"
+              >
+                <CornerDownRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {/* Leader/Advisor/Admin/PM Edit & Delete Buttons */}
             {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
               <>
@@ -1182,16 +1309,40 @@ const getRoleOrderRank = (roleCode?: string): number => {
     );
   };
 
-  const renderMobileTaskCard = (t: Task, displayIdx: number, forAccount?: string) => {
+  const renderMobileTaskCard = (
+    t: Task,
+    displayIdx: number,
+    forAccount?: string,
+    isNestedSubtask?: boolean
+  ) => {
     const todayStr = getTodayDateOnlyString(simulatedTime);
     const isAssignedToMe = canReportTask(t);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
     const nowTime = new Date(simulatedTime).getTime();
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
-    const effStatus = getEffectiveTaskStatus(t);
+    const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+    const hasSub = taskSubtasks.length > 0;
+    const isParent = isParentTask(t, tasks);
+    const isSub = isSubtask(t);
+    const parentMetrics = hasSub ? calculateParentMetrics(t, taskSubtasks) : null;
+    const isCollapsed = collapsedParentIds.has(t.id);
+
+    const effStatus = (parentMetrics && !t.isManualOverride)
+      ? parentMetrics.status
+      : getEffectiveTaskStatus(t);
     const accEffort = calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
-    const isTaskDone = effStatus === 'Done' || t.status === 'Done' || t.completionPercentage === 100;
+    const displayEst = (parentMetrics && !t.isManualOverride)
+      ? parentMetrics.totalEstimatedEffort
+      : (t.estimatedEffort ?? 0);
+    const displayActual = (parentMetrics && !t.isManualOverride)
+      ? parentMetrics.totalActualEffort
+      : (t.actualEffort ?? displayEst);
+    const displayPct = (parentMetrics && !t.isManualOverride)
+      ? parentMetrics.completionPercentage
+      : (t.completionPercentage ?? 0);
+
+    const isTaskDone = effStatus === 'Done' || t.status === 'Done' || displayPct >= 100;
     const isReported =
       isTaskDone ||
       (!!t.lastSubmittedAt &&
@@ -1222,9 +1373,33 @@ const getRoleOrderRank = (roleCode?: string): number => {
         {/* Top Header: STT, Role, Priority, Status */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-              #{displayIdx}
-            </span>
+            {isNestedSubtask ? (
+              <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md">
+                ↳ Subtask
+              </span>
+            ) : (
+              <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                #{displayIdx}
+              </span>
+            )}
+            {hasSub && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleParentCollapse(t.id);
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold text-[10px]"
+              >
+                <Layers className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                {taskSubtasks.length} Subtask {isCollapsed ? '▶' : '▼'}
+              </button>
+            )}
+            {isSub && !isNestedSubtask && (
+              <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold">
+                ↳ Thuộc: {t.subtaskParentTitle || 'Task lớn'}
+              </span>
+            )}
             {isTicketTask && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/70 border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 font-bold text-[10px]">
                 <TicketIcon className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
@@ -1287,7 +1462,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
                 {(() => {
-                  const currentAcc = forAccount || t.assigneeAccount;
+                  const currentAcc = forAccount || t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
                   if (currentAcc) {
                     const userObj = users.find((u) => u.account.toLowerCase() === currentAcc.toLowerCase());
                     const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
@@ -1313,15 +1488,20 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 })()}
               </div>
 
-              {t.supporterAccounts && t.supporterAccounts.length > 0 && (
-                <TaskSupportersBadge
-                  supporterAccounts={t.supporterAccounts}
-                  users={users}
-                  primaryAssignee={t.assigneeAccount}
-                  currentViewingAccount={forAccount}
-                  size="xs"
-                />
-              )}
+              {(() => {
+                const collabs = (parentMetrics && parentMetrics.collaboratorAccounts.length > 0)
+                  ? parentMetrics.collaboratorAccounts
+                  : (t.supporterAccounts || []);
+                return collabs.length > 0 ? (
+                  <TaskSupportersBadge
+                    supporterAccounts={collabs}
+                    users={users}
+                    primaryAssignee={t.assigneeAccount || t.subtaskReviewerAccount}
+                    currentViewingAccount={forAccount}
+                    size="xs"
+                  />
+                ) : null;
+              })()}
             </div>
 
             {/* Effort */}
@@ -1329,25 +1509,17 @@ const getRoleOrderRank = (roleCode?: string): number => {
               <span className="text-[11px] text-slate-400 dark:text-slate-400 mr-1">Effort:</span>
               <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs">
                 {(() => {
-                  const currentEffort = forAccount ? getMemberTaskEffort(t, forAccount) : (t.actualEffort ?? t.estimatedEffort);
-                  return isReported
-                    ? `${currentEffort}h`
-                    : currentEffort > 0
-                    ? `${currentEffort}h`
-                    : `${t.estimatedEffort}h`;
+                  const currentEffort = forAccount
+                    ? getMemberTaskEffort(t, forAccount)
+                    : (isReported ? displayActual : (displayActual > 0 ? displayActual : displayEst));
+                  return `${currentEffort}h`;
                 })()}
               </span>
-              {(() => {
-                const currentEffort = forAccount ? getMemberTaskEffort(t, forAccount) : (t.actualEffort ?? t.estimatedEffort);
-                if (t.estimatedEffort !== undefined && currentEffort !== t.estimatedEffort) {
-                  return (
-                    <span className="text-[10px] text-slate-400 ml-1 font-mono">
-                      (est: {t.estimatedEffort}h)
-                    </span>
-                  );
-                }
-                return null;
-              })()}
+              {displayEst !== undefined && (
+                <span className="text-[10px] text-slate-400 ml-1 font-mono">
+                  (est: {displayEst}h)
+                </span>
+              )}
               {accEffort.hasMultiWeekHistory && (
                 <div className="text-[9.5px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
                   (Tổng: {accEffort.totalEffort}h)
@@ -1360,18 +1532,18 @@ const getRoleOrderRank = (roleCode?: string): number => {
           <div className="space-y-1">
             <div className="flex justify-between text-[10px]">
               <span className="text-slate-500 dark:text-slate-400 font-medium">Tiến độ</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300 font-mono">{t.completionPercentage}%</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300 font-mono">{displayPct}%</span>
             </div>
             <div className="w-full bg-slate-200/80 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all duration-300 ${
-                  t.completionPercentage === 100
+                  displayPct === 100
                     ? 'bg-emerald-500'
-                    : t.completionPercentage > 0
+                    : displayPct > 0
                     ? 'bg-blue-500'
                     : 'bg-slate-300 dark:bg-slate-600'
                 }`}
-                style={{ width: `${t.completionPercentage}%` }}
+                style={{ width: `${displayPct}%` }}
               />
             </div>
           </div>
@@ -1428,6 +1600,17 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
           <div className="flex items-center gap-1.5">
             <TaskShareButton task={t} variant="icon" align="left" />
+
+            {/* Quick Add Subtask Button */}
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && !isNestedSubtask && (
+              <button
+                onClick={() => onOpenTaskModal?.(undefined, t.weekNumber || selectedWeek, undefined, t.role, t)}
+                className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/80 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-300 rounded-xl transition shadow-2xs active:scale-95 cursor-pointer"
+                title="Thêm Subtask trực thuộc cho task này"
+              >
+                <CornerDownRight className="w-3.5 h-3.5" />
+              </button>
+            )}
 
             {/* Edit Button */}
             {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
@@ -1993,11 +2176,27 @@ const getRoleOrderRank = (roleCode?: string): number => {
                                   <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
                                 </tr>
                               )}
-                              {[...accTasks].sort(sortByPriority).map((t) => {
-                                const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                                const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                                return renderTaskRow(t, displayIdx, acc || undefined);
-                              })}
+                              {(() => {
+                                const sortedAccTasks = [...accTasks].sort(sortByPriority);
+                                const rootAccTasks = sortedAccTasks.filter(
+                                  (t) => !t.subtaskParentId || !sortedAccTasks.some((p) => p.id === t.subtaskParentId)
+                                );
+                                return rootAccTasks.map((t) => {
+                                  const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                                  const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
+                                  const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+                                  const isCollapsed = collapsedParentIds.has(t.id);
+                                  return (
+                                    <React.Fragment key={t.id}>
+                                      {renderTaskRow(t, displayIdx, acc || undefined, false)}
+                                      {!isCollapsed &&
+                                        taskSubtasks.map((st) =>
+                                          renderTaskRow(st, displayIdx, acc || undefined, true)
+                                        )}
+                                    </React.Fragment>
+                                  );
+                                });
+                              })()}
                             </React.Fragment>
                           ));
                         })()}
@@ -2006,11 +2205,26 @@ const getRoleOrderRank = (roleCode?: string): number => {
                   })
                 ) : (
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                    {filteredTasks.map((t, idx) => {
-                      const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                      const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
-                      return renderTaskRow(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined);
-                    })}
+                    {(() => {
+                      const rootFilteredTasks = filteredTasks.filter(
+                        (t) => !t.subtaskParentId || !filteredTasks.some((p) => p.id === t.subtaskParentId)
+                      );
+                      return rootFilteredTasks.map((t, idx) => {
+                        const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                        const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
+                        const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+                        const isCollapsed = collapsedParentIds.has(t.id);
+                        return (
+                          <React.Fragment key={t.id}>
+                            {renderTaskRow(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, false)}
+                            {!isCollapsed &&
+                              taskSubtasks.map((st) =>
+                                renderTaskRow(st, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, true)
+                              )}
+                          </React.Fragment>
+                        );
+                      });
+                    })()}
                   </tbody>
                 )}
 
@@ -2218,11 +2432,30 @@ const getRoleOrderRank = (roleCode?: string): number => {
                               <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
                             </div>
                           )}
-                          {[...accTasks].sort(sortByPriority).map((t) => {
-                            const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                            const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                            return renderMobileTaskCard(t, displayIdx, acc || undefined);
-                          })}
+                          {(() => {
+                            const sortedAccTasks = [...accTasks].sort(sortByPriority);
+                            const rootAccTasks = sortedAccTasks.filter(
+                              (t) => !t.subtaskParentId || !sortedAccTasks.some((p) => p.id === t.subtaskParentId)
+                            );
+                            return rootAccTasks.map((t) => {
+                              const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                              const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
+                              const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+                              const isCollapsed = collapsedParentIds.has(t.id);
+                              return (
+                                <React.Fragment key={t.id}>
+                                  {renderMobileTaskCard(t, displayIdx, acc || undefined, false)}
+                                  {!isCollapsed && taskSubtasks.length > 0 && (
+                                    <div className="pl-3 border-l-2 border-indigo-200 dark:border-indigo-800 space-y-2 mt-1">
+                                      {taskSubtasks.map((st) =>
+                                        renderMobileTaskCard(st, displayIdx, acc || undefined, true)
+                                      )}
+                                    </div>
+                                  )}
+                                </React.Fragment>
+                              );
+                            });
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -2230,11 +2463,29 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 );
               })
             ) : (
-              filteredTasks.map((t, idx) => {
-                const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
-                return renderMobileTaskCard(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined);
-              })
+              (() => {
+                const rootFilteredTasks = filteredTasks.filter(
+                  (t) => !t.subtaskParentId || !filteredTasks.some((p) => p.id === t.subtaskParentId)
+                );
+                return rootFilteredTasks.map((t, idx) => {
+                  const taskIdx = tasks.findIndex((item) => item.id === t.id);
+                  const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
+                  const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+                  const isCollapsed = collapsedParentIds.has(t.id);
+                  return (
+                    <React.Fragment key={t.id}>
+                      {renderMobileTaskCard(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, false)}
+                      {!isCollapsed && taskSubtasks.length > 0 && (
+                        <div className="pl-3 border-l-2 border-indigo-200 dark:border-indigo-800 space-y-2 mt-1">
+                          {taskSubtasks.map((st) =>
+                            renderMobileTaskCard(st, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, true)
+                          )}
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                });
+              })()
             )}
 
             {/* Mobile Summary Card */}
@@ -2407,6 +2658,17 @@ const getRoleOrderRank = (roleCode?: string): number => {
             t,
             t.requestedWeekNumber || t.weekNumber,
             t.assignmentRequestedBy || t.assigneeAccount
+          );
+        }}
+        onSelectTask={(t) => setViewingDetailTask(t)}
+        onOpenCreateSubtask={(parent) => {
+          setViewingDetailTask(null);
+          onOpenTaskModal?.(
+            undefined,
+            parent.weekNumber || selectedWeek,
+            undefined,
+            parent.role,
+            parent
           );
         }}
       />

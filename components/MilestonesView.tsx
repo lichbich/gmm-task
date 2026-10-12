@@ -40,9 +40,12 @@ import {
   Calendar,
   Clock,
   Ticket as TicketIcon,
+  CornerDownRight,
+  ChevronRight,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
+import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
 import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
@@ -221,11 +224,39 @@ export const MilestonesView: React.FC = () => {
   const [msDeliverable, setMsDeliverable] = useState('');
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [parentTaskForSubtask, setParentTaskForSubtask] = useState<Task | null>(null);
+  const [collapsedParentIds, setCollapsedParentIds] = useState<Set<string>>(new Set());
   const [targetMilestoneId, setTargetMilestoneId] = useState<string>('');
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
   const [discussingTask, setDiscussingTask] = useState<Task | null>(null);
+
+  const toggleParentCollapse = (parentId: string) => {
+    setCollapsedParentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(parentId)) {
+        next.delete(parentId);
+      } else {
+        next.add(parentId);
+      }
+      return next;
+    });
+  };
+
+  // Lắng nghe sự kiện đóng tất cả modal khi tour hướng dẫn bắt đầu
+  React.useEffect(() => {
+    const handleCloseAll = () => {
+      setViewingDetailTask(null);
+      setIsTaskModalOpen(false);
+      setViewingTicket(null);
+      setDiscussingTask(null);
+      setIsAddMsOpen(false);
+    };
+    window.addEventListener('saho-close-all-modals', handleCloseAll);
+    return () => window.removeEventListener('saho-close-all-modals', handleCloseAll);
+  }, []);
+
   const [assigningMember, setAssigningMember] = useState<{
     user: User;
     roleCode: string;
@@ -761,7 +792,7 @@ export const MilestonesView: React.FC = () => {
     setIsTaskModalOpen(true);
   };
 
-  const renderTaskRow = (t: Task, idx: number, isDone: boolean, milestoneId?: string) => {
+  const renderTaskRow = (t: Task, idx: number, isDone: boolean, milestoneId?: string, isNestedSubtask?: boolean) => {
     const isDragging = draggedMilestoneTaskId === t.id;
     const isOver = dragOverTaskId === t.id && !isDragging;
     const canToggle = canToggleTaskCheck(t);
@@ -771,6 +802,27 @@ export const MilestonesView: React.FC = () => {
     const isMyPendingRequest = isRequested && Boolean(currentUser?.account && t.assignmentRequestedBy?.toLowerCase() === currentUser.account.toLowerCase());
     const isOtherPendingRequest = isRequested && !isMyPendingRequest;
     const isMember = currentUser?.role === 'Member';
+
+    // Subtask hierarchy logic
+    const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+    const hasSub = taskSubtasks.length > 0;
+    const isParent = hasSub || Boolean(t.isParentTask);
+    const isCollapsed = collapsedParentIds.has(t.id);
+    const parentMetrics = hasSub ? calculateParentMetrics(t, taskSubtasks) : null;
+    const isSub = Boolean(t.isSubtask || t.subtaskParentId);
+    const displayEst = (hasSub && !t.isManualOverride && parentMetrics)
+      ? parentMetrics.totalEstimatedEffort
+      : t.estimatedEffort;
+    const displayActual = (hasSub && !t.isManualOverride && parentMetrics)
+      ? parentMetrics.totalActualEffort
+      : (t.actualEffort || 0);
+    const displayPct = (hasSub && !t.isManualOverride && parentMetrics)
+      ? parentMetrics.completionPercentage
+      : (t.completionPercentage || 0);
+    const effStatus = (hasSub && !t.isManualOverride && parentMetrics)
+      ? parentMetrics.status
+      : (t.status || 'To do');
+    const isEffectiveDone = effStatus === 'Done' || displayPct >= 100 || isDone;
 
     return (
       <React.Fragment key={t.id}>
@@ -810,8 +862,13 @@ export const MilestonesView: React.FC = () => {
             setDragOverTaskId(null);
           }}
           onClick={() => handleTaskClick(t)}
+          data-tour={hasSub || idx === 0 ? "subtask-parent-row" : undefined}
           className={`p-3.5 transition-all hidden md:flex items-center justify-between gap-4 text-xs cursor-pointer group select-none ${
-            isDone ? 'bg-emerald-50/30 hover:bg-emerald-50/70' : 'hover:bg-slate-50/90 bg-white'
+            isNestedSubtask
+              ? 'pl-10 bg-slate-50/60 border-l-4 border-l-indigo-400 hover:bg-indigo-50/30'
+              : isDone
+              ? 'bg-emerald-50/30 hover:bg-emerald-50/70'
+              : 'hover:bg-slate-50/90 bg-white'
           } ${
             isDragging ? 'opacity-35 bg-indigo-50/40 border border-dashed border-indigo-300' : ''
           } ${
@@ -872,12 +929,29 @@ export const MilestonesView: React.FC = () => {
               <Check className={`w-3.5 h-3.5 ${(!milestoneId ? selectedAdhocTaskIds.has(t.id) : isDone) ? 'stroke-[3]' : 'stroke-[2]'}`} />
             </button>
 
-            <span className="w-5 text-center font-mono text-slate-400 font-bold shrink-0 text-[11px]">
-              #{idx + 1}
-            </span>
+            {isNestedSubtask ? (
+              <span className="text-indigo-500 font-mono text-xs font-bold pl-1 shrink-0">↳</span>
+            ) : (
+              <span className="w-5 text-center font-mono text-slate-400 font-bold shrink-0 text-[11px]">
+                #{idx + 1}
+              </span>
+            )}
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
+                {hasSub && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleParentCollapse(t.id);
+                    }}
+                    className="p-1 rounded-md hover:bg-slate-200 text-indigo-600 transition cursor-pointer shrink-0"
+                    title={isCollapsed ? `Mở rộng ${taskSubtasks.length} subtask` : 'Thu gọn subtask'}
+                  >
+                    {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                )}
                 <span
                   className={`font-semibold transition truncate ${
                     isDone ? 'line-through text-slate-400' : 'text-slate-800 group-hover:text-indigo-600'
@@ -885,6 +959,25 @@ export const MilestonesView: React.FC = () => {
                 >
                   <FormattedTaskTitle title={t.title} />
                 </span>
+                {hasSub && (
+                  <span
+                    className="text-[9px] px-1.5 py-0.5 rounded border bg-indigo-50 text-indigo-700 border-indigo-200 font-bold shrink-0 inline-flex items-center gap-1 shadow-2xs"
+                    title={`Task lớn gồm ${taskSubtasks.length} subtask`}
+                  >
+                    <Layers className="w-2.5 h-2.5 text-indigo-500" />
+                    {taskSubtasks.length} Subtasks ({taskSubtasks.filter(s => s.status === 'Done' || (s.completionPercentage || 0) >= 100).length}/{taskSubtasks.length} xong)
+                  </span>
+                )}
+                {isNestedSubtask && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-bold shrink-0">
+                    ↳ Subtask
+                  </span>
+                )}
+                {isSub && !isNestedSubtask && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold shrink-0">
+                    ↳ Thuộc: {t.subtaskParentTitle || 'Task lớn'}
+                  </span>
+                )}
                 {(() => {
                   const linkedTicket = getLinkedTicket(t);
                   const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
@@ -911,13 +1004,13 @@ export const MilestonesView: React.FC = () => {
                 <span className="text-[9px] px-1.5 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-semibold shrink-0">
                   {t.role}
                 </span>
-                {isDone ? (
+                {isEffectiveDone ? (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold shrink-0">
                     Đã xong
                   </span>
-                ) : (t.completionPercentage !== undefined && t.completionPercentage > 0) ? (
+                ) : displayPct > 0 ? (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold shrink-0">
-                    Tiến độ: {t.completionPercentage}%
+                    Tiến độ: {displayPct}%
                   </span>
                 ) : null}
               </div>
@@ -933,8 +1026,11 @@ export const MilestonesView: React.FC = () => {
                 </p>
               )}
 
-              <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1 flex-wrap">
-                <span>Effort: <strong className="text-indigo-600 font-mono">{t.estimatedEffort}h</strong></span>
+              <div
+                data-tour={hasSub || idx === 0 ? "subtask-metrics-cell" : undefined}
+                className="flex items-center gap-3 text-[11px] text-slate-400 mt-1 flex-wrap"
+              >
+                <span>Effort: <strong className="text-indigo-600 font-mono">{displayEst}h</strong></span>
                 <span>•</span>
                 <span>
                   Phân công:
@@ -1021,18 +1117,18 @@ export const MilestonesView: React.FC = () => {
 
             <span
               className={`px-2.5 py-1 text-[10px] font-semibold rounded-full border ${
-                isDone
+                isEffectiveDone
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                  : (t.completionPercentage && t.completionPercentage > 0) || t.status === 'In Progress'
+                  : effStatus === 'In Progress' || displayPct > 0
                   ? 'bg-blue-50 text-blue-700 border-blue-300'
                   : 'bg-slate-100 text-slate-500 border-slate-300'
               }`}
             >
-              {isDone
+              {isEffectiveDone
                 ? 'Done'
-                : (t.completionPercentage && t.completionPercentage > 0)
-                ? `In Progress (${t.completionPercentage}%)`
-                : (t.status === 'Done' ? 'In Progress' : t.status)}
+                : displayPct > 0
+                ? `In Progress (${displayPct}%)`
+                : effStatus}
             </span>
 
             <button
@@ -1058,6 +1154,23 @@ export const MilestonesView: React.FC = () => {
 
             {(canEditTask(t) || isUserAdminOrPM(currentUser)) && (
               <div className="flex items-center gap-1">
+                {!isNestedSubtask && (
+                  <button
+                    data-tour="quick-add-subtask-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setParentTaskForSubtask(t);
+                      setEditingTask(null);
+                      setTargetMilestoneId(t.milestoneId || milestoneId || '');
+                      setModalInitialRole(t.role);
+                      setIsTaskModalOpen(true);
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                    title="Thêm Subtask trực thuộc cho task này"
+                  >
+                    <CornerDownRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1175,18 +1288,18 @@ export const MilestonesView: React.FC = () => {
 
             <span
               className={`px-2 py-0.5 text-[10px] font-bold rounded-full border shrink-0 ${
-                isDone
+                isEffectiveDone
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                  : (t.completionPercentage && t.completionPercentage > 0) || t.status === 'In Progress'
+                  : effStatus === 'In Progress' || displayPct > 0
                   ? 'bg-blue-50 text-blue-700 border-blue-300'
                   : 'bg-slate-100 text-slate-500 border-slate-300'
               }`}
             >
-              {isDone
+              {isEffectiveDone
                 ? 'Done'
-                : (t.completionPercentage && t.completionPercentage > 0)
-                ? `${t.completionPercentage}%`
-                : (t.status === 'Done' ? 'In Progress' : t.status)}
+                : displayPct > 0
+                ? `${displayPct}%`
+                : effStatus}
             </span>
           </div>
 
@@ -1293,6 +1406,22 @@ export const MilestonesView: React.FC = () => {
 
               {(canEditTask(t) || isUserAdminOrPM(currentUser)) && (
                 <>
+                  {!isNestedSubtask && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setParentTaskForSubtask(t);
+                        setEditingTask(null);
+                        setTargetMilestoneId(t.milestoneId || milestoneId || '');
+                        setModalInitialRole(t.role);
+                        setIsTaskModalOpen(true);
+                      }}
+                      className="p-1.5 bg-slate-100 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg active:scale-95"
+                      title="Thêm Subtask trực thuộc cho task này"
+                    >
+                      <CornerDownRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1331,6 +1460,11 @@ export const MilestonesView: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* NESTED SUBTASKS ACCORDION LIST */}
+        {hasSub && !isCollapsed && (
+          taskSubtasks.map((st, sIdx) => renderTaskRow(st, sIdx, st.status === 'Done' || (st.completionPercentage || 0) >= 100, milestoneId, true))
+        )}
       </React.Fragment>
     );
   };
@@ -1908,7 +2042,9 @@ export const MilestonesView: React.FC = () => {
                             🎉 Tất cả các đầu việc trong cột mốc này đã hoàn thành! (xem ở phần bên dưới)
                           </div>
                         ) : (
-                          activeMsTasks.map((t, idx) => renderTaskRow(t, idx, false, ms.id))
+                          activeMsTasks
+                            .filter((t) => !t.subtaskParentId || !activeMsTasks.some((p) => p.id === t.subtaskParentId))
+                            .map((t, idx) => renderTaskRow(t, idx, false, ms.id))
                         )}
                       </div>
 
@@ -1944,7 +2080,9 @@ export const MilestonesView: React.FC = () => {
                           {/* Card Tasks Content */}
                           {!isDoneCollapsed && (
                             <div className="divide-y divide-emerald-100/80 bg-white/80">
-                              {doneMsTasks.map((t, idx) => renderTaskRow(t, idx, true, ms.id))}
+                              {doneMsTasks
+                                .filter((t) => !t.subtaskParentId || !doneMsTasks.some((p) => p.id === t.subtaskParentId))
+                                .map((t, idx) => renderTaskRow(t, idx, true, ms.id))}
                             </div>
                           )}
                         </div>
@@ -2083,7 +2221,9 @@ export const MilestonesView: React.FC = () => {
                       🎉 Tất cả các task tự do & phát sinh đã hoàn thành! (xem ở phần bên dưới)
                     </div>
                   ) : (
-                    adhocActiveTasks.map((t, idx) => renderTaskRow(t, idx, false))
+                    adhocActiveTasks
+                      .filter((t) => !t.subtaskParentId || !adhocActiveTasks.some((p) => p.id === t.subtaskParentId))
+                      .map((t, idx) => renderTaskRow(t, idx, false))
                   )}
                 </div>
 
@@ -2119,7 +2259,9 @@ export const MilestonesView: React.FC = () => {
                     {/* Card Tasks Content */}
                     {!isAdhocDoneCollapsed && (
                       <div className="divide-y divide-emerald-100/80 bg-white/80">
-                        {adhocDoneTasks.map((t, idx) => renderTaskRow(t, idx, true))}
+                        {adhocDoneTasks
+                          .filter((t) => !t.subtaskParentId || !adhocDoneTasks.some((p) => p.id === t.subtaskParentId))
+                          .map((t, idx) => renderTaskRow(t, idx, true))}
                       </div>
                     )}
                   </div>
@@ -2148,6 +2290,15 @@ export const MilestonesView: React.FC = () => {
           setEditingTask(t);
           setTargetMilestoneId(t.milestoneId || '');
           setModalInitialRole(t.role);
+          setIsTaskModalOpen(true);
+        }}
+        onSelectTask={(t) => setViewingDetailTask(t)}
+        onOpenCreateSubtask={(parent) => {
+          setViewingDetailTask(null);
+          setParentTaskForSubtask(parent);
+          setEditingTask(null);
+          setTargetMilestoneId(parent.milestoneId || '');
+          setModalInitialRole(parent.role);
           setIsTaskModalOpen(true);
         }}
       />
@@ -2192,16 +2343,32 @@ export const MilestonesView: React.FC = () => {
 
       {/* Task Creation & Edit Modal with Strict Synchronization */}
       <TaskModal
-        key={`${targetMilestoneId}-${editingTask?.id || 'new'}-${modalInitialRole || 'def'}-${modalDefaultAssignee || 'none'}-${isTaskModalOpen}`}
+        key={`${targetMilestoneId}-${editingTask?.id || 'new'}-${modalInitialRole || 'def'}-${modalDefaultAssignee || 'none'}-${parentTaskForSubtask?.id || 'nosub'}-${isTaskModalOpen}`}
         task={editingTask}
         isOpen={isTaskModalOpen}
         initialMilestoneId={targetMilestoneId}
         initialRole={modalInitialRole}
         defaultWeek={modalDefaultWeek}
         defaultAssignee={modalDefaultAssignee}
+        initialSubtaskParent={parentTaskForSubtask}
+        onOpenCreateSubtask={(parent) => {
+          setParentTaskForSubtask(parent);
+          setEditingTask(null);
+          setTargetMilestoneId(parent.milestoneId || '');
+          setModalInitialRole(parent.role);
+          setIsTaskModalOpen(true);
+        }}
+        onSelectTaskToEdit={(st) => {
+          setParentTaskForSubtask(null);
+          setEditingTask(st);
+          setTargetMilestoneId(st.milestoneId || '');
+          setModalInitialRole(st.role);
+          setIsTaskModalOpen(true);
+        }}
         onClose={() => {
           setIsTaskModalOpen(false);
           setEditingTask(null);
+          setParentTaskForSubtask(null);
           setModalInitialRole(undefined);
           setModalDefaultAssignee(undefined);
           setModalDefaultWeek(undefined);

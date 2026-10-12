@@ -45,7 +45,94 @@ export function isSafeToReload(): boolean {
   return true;
 }
 
-export function useAutoUpdate() {
+export interface SundayMilestoneInfo {
+  milestoneKey: string;
+  type: 'SUNDAY_12H' | 'SUNDAY_16H';
+  label: string;
+}
+
+/**
+ * Checks if current time hits Sunday 12:00 or 16:00 milestone requiring a reload.
+ * Ensures:
+ * 1. Only triggers on Sunday (day 0).
+ * 2. Does NOT trigger if already reloaded for this milestone today (persisted in localStorage).
+ * 3. Does NOT trigger if page was mounted fresh AFTER the milestone time.
+ */
+export function getSundayMilestone(date: Date, mountTime: number): SundayMilestoneInfo | null {
+  if (typeof window === 'undefined') return null;
+  if (date.getDay() !== 0) return null;
+
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const dateKey = `${y}-${m}-${d}`;
+
+  const currentMs = date.getTime();
+  const noon12 = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0).getTime();
+  const afternoon16 = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 16, 0, 0, 0).getTime();
+
+  // Clean up stale sunday markers from previous weeks
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('saho_sunday_reload_') && !k.includes(dateKey)) {
+        localStorage.removeItem(k);
+      }
+    }
+  } catch {}
+
+  // 1. Check 16h milestone (4:00 PM Sunday)
+  if (currentMs >= afternoon16) {
+    const key16 = `saho_sunday_reload_${dateKey}_16h`;
+    let is16Done = false;
+    try {
+      is16Done = Boolean(localStorage.getItem(key16));
+    } catch {}
+
+    if (!is16Done) {
+      if (mountTime >= afternoon16) {
+        // Page was loaded after 16:00 -> already has fresh afternoon state
+        try {
+          localStorage.setItem(key16, 'done');
+        } catch {}
+      } else {
+        return {
+          milestoneKey: key16,
+          type: 'SUNDAY_16H',
+          label: '16h chiều Chủ nhật',
+        };
+      }
+    }
+  }
+
+  // 2. Check 12h milestone (12:00 PM Sunday)
+  if (currentMs >= noon12) {
+    const key12 = `saho_sunday_reload_${dateKey}_12h`;
+    let is12Done = false;
+    try {
+      is12Done = Boolean(localStorage.getItem(key12));
+    } catch {}
+
+    if (!is12Done) {
+      if (mountTime >= noon12) {
+        // Page was loaded after 12:00 -> already has fresh noon state
+        try {
+          localStorage.setItem(key12, 'done');
+        } catch {}
+      } else {
+        return {
+          milestoneKey: key12,
+          type: 'SUNDAY_12H',
+          label: '12h trưa Chủ nhật',
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function useAutoUpdate(customTime?: string) {
   const isDev =
     process.env.NODE_ENV === 'development' ||
     (typeof window !== 'undefined' &&
@@ -57,6 +144,12 @@ export function useAutoUpdate() {
   const [newVersionInfo, setNewVersionInfo] = useState<Partial<SystemVersionInfo> | null>(null);
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const [isIdle, setIsIdle] = useState<boolean>(false);
+
+  // Sunday scheduled reload states
+  const pageMountTimeRef = useRef<number>(Date.now());
+  const [sundayMilestone, setSundayMilestone] = useState<SundayMilestoneInfo | null>(null);
+  const sundayMilestoneRef = useRef<SundayMilestoneInfo | null>(null);
+  const [dismissedSundayKey, setDismissedSundayKey] = useState<string | null>(null);
 
   const lastActivityRef = useRef<number>(Date.now());
   const hasUpdateRef = useRef<boolean>(false);
@@ -71,12 +164,31 @@ export function useAutoUpdate() {
   const reloadNow = useCallback(() => {
     if (typeof window === 'undefined' || isReloadingRef.current) return;
     isReloadingRef.current = true;
+    if (sundayMilestoneRef.current) {
+      try {
+        localStorage.setItem(sundayMilestoneRef.current.milestoneKey, 'done');
+      } catch {}
+    }
     try {
       window.location.reload();
     } catch {
       window.location.href = window.location.href;
     }
   }, []);
+
+  const checkSundaySchedule = useCallback(() => {
+    const now = customTime ? new Date(customTime) : new Date();
+    const milestone = getSundayMilestone(now, pageMountTimeRef.current);
+    sundayMilestoneRef.current = milestone;
+    setSundayMilestone(milestone);
+
+    if (milestone) {
+      // If tab is currently hidden and it's safe -> reload immediately in background
+      if (document.hidden && isSafeToReload()) {
+        reloadNow();
+      }
+    }
+  }, [customTime, reloadNow]);
 
   // 1. Function to inspect remote version
   const checkVersion = useCallback(async () => {
@@ -156,23 +268,29 @@ export function useAutoUpdate() {
 
   // 3. Periodic Polling & Visibility Change
   useEffect(() => {
-    if (isDev) return;
+    checkSundaySchedule();
 
     // Initial check after short delay (let app initialize first)
     const initialTimer = setTimeout(() => {
-      checkVersion();
+      if (!isDev) checkVersion();
     }, 5000);
 
-    // Periodic polling
+    // Periodic version polling
     const pollInterval = setInterval(() => {
-      checkVersion();
+      if (!isDev) checkVersion();
     }, POLL_INTERVAL_MS);
+
+    // Periodic Sunday milestone check (every 10 seconds)
+    const sundayInterval = setInterval(() => {
+      checkSundaySchedule();
+    }, 10000);
 
     // On visibility change (e.g. user switches tabs)
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        // Tab became hidden. If update is waiting and safe -> schedule reload after 1.5s
-        if (hasUpdateRef.current && isSafeToReload()) {
+        // Tab became hidden. If update or Sunday milestone is waiting and safe -> schedule reload after 1.5s
+        const isPending = hasUpdateRef.current || Boolean(sundayMilestoneRef.current);
+        if (isPending && isSafeToReload()) {
           hiddenTimerRef.current = setTimeout(() => {
             if (document.hidden && isSafeToReload()) {
               reloadNow();
@@ -180,21 +298,24 @@ export function useAutoUpdate() {
           }, 1500);
         }
       } else {
-        // Tab became visible. Clear hidden timer and check for latest version
+        // Tab became visible. Clear hidden timer and check for latest version / Sunday schedule
         if (hiddenTimerRef.current) {
           clearTimeout(hiddenTimerRef.current);
           hiddenTimerRef.current = null;
         }
-        checkVersion();
+        if (!isDev) checkVersion();
+        checkSundaySchedule();
       }
     };
 
     const handleFocus = () => {
-      checkVersion();
+      if (!isDev) checkVersion();
+      checkSundaySchedule();
     };
 
     const handleOnline = () => {
-      checkVersion();
+      if (!isDev) checkVersion();
+      checkSundaySchedule();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -204,17 +325,16 @@ export function useAutoUpdate() {
     return () => {
       clearTimeout(initialTimer);
       clearInterval(pollInterval);
+      clearInterval(sundayInterval);
       if (hiddenTimerRef.current) clearTimeout(hiddenTimerRef.current);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('online', handleOnline);
     };
-  }, [isDev, checkVersion, reloadNow]);
+  }, [isDev, checkVersion, checkSundaySchedule, reloadNow]);
 
   // 4. Inactivity / Idle Tracker
   useEffect(() => {
-    if (isDev) return;
-
     let throttleTimer: NodeJS.Timeout | null = null;
 
     const recordActivity = () => {
@@ -242,8 +362,9 @@ export function useAutoUpdate() {
       if (elapsed >= IDLE_TIMEOUT_MS) {
         setIsIdle(true);
 
-        // If user is idle, update is waiting, and no modal is blocking -> reload safely
-        if (hasUpdateRef.current && isSafeToReload()) {
+        // If user is idle, update or Sunday milestone is waiting, and no modal is blocking -> reload safely
+        const isPending = hasUpdateRef.current || Boolean(sundayMilestoneRef.current);
+        if (isPending && isSafeToReload()) {
           reloadNow();
         }
       }
@@ -254,7 +375,7 @@ export function useAutoUpdate() {
       clearInterval(idleCheckInterval);
       events.forEach((evt) => window.removeEventListener(evt, handleUserInteraction));
     };
-  }, [isDev, isIdle, reloadNow]);
+  }, [isIdle, reloadNow]);
 
   // 5. Global ChunkLoadError Auto-Recovery
   useEffect(() => {
@@ -297,16 +418,21 @@ export function useAutoUpdate() {
   }, []);
 
   const isDismissed = Boolean(
-    isDev || (newVersionInfo?.version && dismissedVersion === newVersionInfo.version)
+    (newVersionInfo?.version && dismissedVersion === newVersionInfo.version) ||
+    (sundayMilestone && dismissedSundayKey === sundayMilestone.milestoneKey)
   );
 
   return {
     hasUpdate,
     newVersionInfo,
+    sundayMilestone,
     isDismissed,
     dismiss: () => {
       if (newVersionInfo?.version) {
         setDismissedVersion(newVersionInfo.version);
+      }
+      if (sundayMilestoneRef.current) {
+        setDismissedSundayKey(sundayMilestoneRef.current.milestoneKey);
       }
     },
     reloadNow,

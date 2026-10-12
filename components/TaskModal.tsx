@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Specialization, TaskStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
-import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2 } from 'lucide-react';
+import { Task, Specialization, TaskStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, isSpecializationMatchingRole } from '../types/task';
+import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2, CornerDownRight, GitFork, Layers, ChevronDown, ChevronRight, Check, Link2 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
@@ -15,6 +15,8 @@ import { TaskTitleInput } from './common/TaskTitleInput';
 import { AITaskChatBox } from './AITaskChatBox';
 import { SubTaskSuggestion, requestAIEffortSuggestion, isAIFeatureEnabled } from '../lib/geminiService';
 import { ensureTaskTitlePrefix, getRoleTaskPrefix } from '../lib/taskPrefixHelper';
+import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
+import { LinkExistingTasksModal } from './common/LinkExistingTasksModal';
 
 interface TaskModalProps {
   task?: Task | null;
@@ -24,6 +26,9 @@ interface TaskModalProps {
   initialRole?: Specialization;
   defaultWeek?: number;
   defaultAssignee?: string;
+  initialSubtaskParent?: Task | null;
+  onOpenCreateSubtask?: (parentTask: Task) => void;
+  onSelectTaskToEdit?: (task: Task) => void;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -34,8 +39,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   initialRole,
   defaultWeek,
   defaultAssignee,
+  initialSubtaskParent,
+  onOpenCreateSubtask,
+  onSelectTaskToEdit,
 }) => {
-  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI } = useApp();
+  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI, tasks } = useApp();
 
   // AI features enabled based on permission config (Default: Admin, LichDT, QuynhNV, NhiHT)
   const canUseAI = isUserAllowedAI(currentUser, 'assistant');
@@ -106,6 +114,113 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Subtask system state
+  const [isSubtaskMode, setIsSubtaskMode] = useState<boolean>(false);
+  const [subtaskParentId, setSubtaskParentId] = useState<string>('');
+  const [subtaskParentTitle, setSubtaskParentTitle] = useState<string>('');
+  const [subtaskReviewerAccount, setSubtaskReviewerAccount] = useState<string>('');
+  const [isManualOverride, setIsManualOverride] = useState<boolean>(false);
+  const [isLinkExistingModalOpen, setIsLinkExistingModalOpen] = useState<boolean>(false);
+
+  // Subtasks list for current task (if parent)
+  const existingSubtasks = task ? tasks.filter((t) => t.subtaskParentId === task.id) : [];
+  const hasSubtasks = existingSubtasks.length > 0;
+  const parentMetrics = hasSubtasks && task ? calculateParentMetrics(task, existingSubtasks) : null;
+
+  // Helper to extract creation timestamp of a task
+  const getTaskCreatedTime = (t: Task): number => {
+    if (t.createdAt) {
+      const time = new Date(t.createdAt).getTime();
+      if (!isNaN(time) && time > 0) return time;
+    }
+    if (t.id && t.id.startsWith('tsk-')) {
+      const match = t.id.match(/^tsk-(\d+)/);
+      if (match) {
+        const time = parseInt(match[1], 10);
+        if (!isNaN(time) && time > 0) return time;
+      }
+    }
+    if (t.updatedAt) {
+      const time = new Date(t.updatedAt).getTime();
+      if (!isNaN(time) && time > 0) return time;
+    }
+    const idx = tasks.indexOf(t);
+    return idx >= 0 ? idx : 0;
+  };
+
+  // Potential parent tasks candidate list (only suggest tasks matching current task's role)
+  const potentialParentTasks = useMemo(() => {
+    return tasks
+      .filter((t) => {
+        // Exclude itself
+        if (task && t.id === task.id) return false;
+        // Exclude current subtasks of this task (prevent circular hierarchy)
+        if (task && t.subtaskParentId === task.id) return false;
+        // Exclude any task that is already a subtask
+        if (t.isSubtask || (t.subtaskParentId && t.subtaskParentId.trim() !== '')) return false;
+
+        // Keep already selected parent task even if roles differ
+        if (subtaskParentId && t.id === subtaskParentId) return true;
+
+        // Only suggest candidate parent tasks matching current task's role
+        if (role && !isSpecializationMatchingRole(t.role, role)) return false;
+
+        return true;
+      })
+      .sort((a, b) => {
+        // 1. Đẩy các task mới tạo nhất lên đầu danh sách (đặc biệt khi vừa tạo task bố xong tạo tiếp task con)
+        const aCreated = getTaskCreatedTime(a);
+        const bCreated = getTaskCreatedTime(b);
+        if (aCreated !== bCreated) {
+          return bCreated - aCreated;
+        }
+
+        // 2. Ưu tiên tuần hiện tại
+        const aWeek = a.weekNumber || 0;
+        const bWeek = b.weekNumber || 0;
+        const targetWeek = weekNumber || selectedWeek || 0;
+        const aSameWeek = aWeek === targetWeek ? 1 : 0;
+        const bSameWeek = bWeek === targetWeek ? 1 : 0;
+        if (aSameWeek !== bSameWeek) return bSameWeek - aSameWeek;
+        if (bWeek !== aWeek) return bWeek - aWeek;
+
+        // 3. Alphabetical
+        return (a.title || '').localeCompare(b.title || '');
+      });
+  }, [tasks, task, role, subtaskParentId, weekNumber, selectedWeek]);
+
+  // Options formatted for common Dropdown component
+  const parentDropdownOptions = useMemo<DropdownOption[]>(() => {
+    const list: DropdownOption[] = [
+      {
+        value: '',
+        label: '-- Task độc lập (Không thuộc task nào) --',
+        subLabel: 'Task này đứng riêng, không phụ thuộc task cha',
+      },
+    ];
+
+    potentialParentTasks.forEach((p) => {
+      const weekStr = p.weekNumber ? `Tuần ${p.weekNumber}` : 'Backlog';
+      const assigneeStr = p.assigneeAccount ? `@${p.assigneeAccount}` : 'Chưa gán';
+      const statusStr = p.status ? ` • ${p.status}` : '';
+      const createdTime = getTaskCreatedTime(p);
+      const isVeryRecent = Date.now() - createdTime < 24 * 60 * 60 * 1000 && createdTime > 1000000;
+
+      list.push({
+        value: p.id,
+        label: `[${p.role}] ${p.title}`,
+        subLabel: `${weekStr} • Phụ trách: ${assigneeStr}${statusStr}`,
+        badge: isVeryRecent ? (
+          <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 font-semibold px-1.5 py-0.5 rounded-md border border-emerald-300/80 dark:border-emerald-700">
+            Mới tạo
+          </span>
+        ) : undefined,
+      });
+    });
+
+    return list;
+  }, [potentialParentTasks]);
 
   // Mobile tab state ('form' | 'ai')
   const [activeMobileTab, setActiveMobileTab] = useState<'form' | 'ai'>('form');
@@ -478,21 +593,41 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!isOpen) return;
 
     if (task) {
-      const initialStatus = task.status || 'To do';
-      const initialPct =
-        task.completionPercentage !== undefined
-          ? task.completionPercentage
-          : task.status === 'Done'
-          ? 100
-          : 0;
-      const initialEffort = task.actualEffort !== undefined ? task.actualEffort : 0;
+      const isSub = Boolean(task.isSubtask || (task.subtaskParentId && task.subtaskParentId.trim() !== ''));
+      setIsSubtaskMode(isSub);
+      setSubtaskParentId(task.subtaskParentId || '');
+      setSubtaskParentTitle(task.subtaskParentTitle || '');
+      setSubtaskReviewerAccount(task.subtaskReviewerAccount || '');
+      setIsManualOverride(Boolean(task.isManualOverride));
+
+      const subtasksList = tasks.filter((t) => t.subtaskParentId === task.id);
+      const metrics = subtasksList.length > 0 ? calculateParentMetrics(task, subtasksList) : null;
+
+      const initialStatus = (metrics && !task.isManualOverride) ? metrics.status : (task.status || 'To do');
+      const initialPct = (metrics && !task.isManualOverride)
+        ? metrics.completionPercentage
+        : task.completionPercentage !== undefined
+        ? task.completionPercentage
+        : task.status === 'Done'
+        ? 100
+        : 0;
+      const initialEst = (metrics && !task.isManualOverride)
+        ? metrics.totalEstimatedEffort
+        : task.estimatedEffort !== undefined
+        ? task.estimatedEffort
+        : 2;
+      const initialEffort = (metrics && !task.isManualOverride)
+        ? metrics.totalActualEffort
+        : task.actualEffort !== undefined
+        ? task.actualEffort
+        : 0;
       const initialStartDate = task.startDate || '';
       const initialEndDate = task.endDate || '';
 
       setTitle(task.title || '');
       setDescription(task.description || '');
       setRole(task.role || defaultRole);
-      setEstimatedEffort(task.estimatedEffort !== undefined ? task.estimatedEffort : 2);
+      setEstimatedEffort(initialEst);
       setActualEffort(initialEffort);
       setCompletionPercentage(initialPct);
       // Auto-select assignee: use existing assignee, or fallback to member requesting task, or defaultAssignee
@@ -510,9 +645,28 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setWeekNumber(task.weekNumber);
       setNotes(task.notes || '');
     } else {
+      if (initialSubtaskParent) {
+        setIsSubtaskMode(true);
+        setSubtaskParentId(initialSubtaskParent.id);
+        setSubtaskParentTitle(initialSubtaskParent.title);
+        setSubtaskReviewerAccount(initialSubtaskParent.assigneeAccount || initialSubtaskParent.subtaskReviewerAccount || '');
+        setMilestoneId(initialSubtaskParent.milestoneId || (initialMilestoneId !== undefined ? initialMilestoneId : ''));
+        setWeekNumber(initialSubtaskParent.weekNumber || defaultWeek || selectedWeek);
+        if (initialSubtaskParent.role) {
+          setRole(matchRoleInAllowed(initialSubtaskParent.role) || defaultRole);
+        }
+      } else {
+        setIsSubtaskMode(false);
+        setSubtaskParentId('');
+        setSubtaskParentTitle('');
+        setSubtaskReviewerAccount('');
+        if (defaultRole) {
+          setRole(defaultRole);
+        }
+      }
+      setIsManualOverride(false);
       setTitle('');
       setDescription('');
-      setRole(defaultRole);
       setEstimatedEffort(2);
       setActualEffort(0);
       setCompletionPercentage(0);
@@ -527,8 +681,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setAssigneeAccount(initialAssigneeVal);
       setWeekNumber(initialAssigneeVal ? (defaultWeek || selectedWeek) : undefined);
       setSupporterAccounts([]);
-      // If initialMilestoneId is explicitly passed, use it unconditionally; otherwise Members default to '' (ad-hoc)
-      setMilestoneId(initialMilestoneId !== undefined ? initialMilestoneId : '');
+      if (!initialSubtaskParent) {
+        setMilestoneId(initialMilestoneId !== undefined ? initialMilestoneId : '');
+      }
       setStatus('To do');
       setPriority('Medium');
       setNotes('');
@@ -537,7 +692,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setAiEffortError(null);
     setIsAILoadingEffort(false);
     setActiveMobileTab('form');
-  }, [isOpen, task?.id]);
+  }, [isOpen, task?.id, initialSubtaskParent?.id]);
 
   if (!isRendered) return null;
 
@@ -645,6 +800,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         startDate: startDate.trim() || undefined,
         endDate: endDate.trim() || undefined,
         notes,
+        isParentTask: hasSubtasks || task.isParentTask,
+        isSubtask: isSubtaskMode,
+        subtaskParentId: isSubtaskMode ? subtaskParentId : undefined,
+        subtaskParentTitle: isSubtaskMode ? subtaskParentTitle : undefined,
+        subtaskReviewerAccount: isSubtaskMode ? subtaskReviewerAccount : undefined,
+        isManualOverride: hasSubtasks ? isManualOverride : undefined,
         ...(isAdminOrPM
           ? {
               actualEffort: safeActualEffort,
@@ -679,10 +840,20 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         startDate: startDate.trim() || undefined,
         endDate: endDate.trim() || undefined,
         notes,
+        isSubtask: isSubtaskMode,
+        subtaskParentId: isSubtaskMode ? subtaskParentId : undefined,
+        subtaskParentTitle: isSubtaskMode ? subtaskParentTitle : undefined,
+        subtaskReviewerAccount: isSubtaskMode ? subtaskReviewerAccount : undefined,
         ...(isAdminOrPM && (finalCompletionPercentage === 100 || finalStatus === 'Done')
           ? { lastSubmittedAt: new Date().toISOString() }
           : {}),
       });
+
+      if (initialSubtaskParent) {
+        updateTask(initialSubtaskParent.id, { isParentTask: true }, { skipLog: true });
+      } else if (isSubtaskMode && subtaskParentId) {
+        updateTask(subtaskParentId, { isParentTask: true }, { skipLog: true });
+      }
     }
     forceClose();
   };
@@ -906,6 +1077,206 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                       <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
                         Hệ thống đã tự động chọn <b>@{task.assignmentRequestedBy}</b> ở mục <b>Phân Công Thành Viên</b> bên dưới. Bạn có thể kiểm tra mô tả, thời lượng rồi bấm <b>"Duyệt & Phân Công Task"</b> để hoàn tất.
                       </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Subtask Parent Linking Selector (Option 1) */}
+                {!hasSubtasks && (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-indigo-600 dark:text-indigo-400 font-mono text-sm font-bold">↳</span>
+                        <span>Thuộc Task lớn nào (Task cha trực thuộc)?</span>
+                        {role && (
+                          <span className="text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 px-1.5 py-0.5 rounded-md font-semibold border border-indigo-200/60 dark:border-indigo-800">
+                            Chỉ gợi ý team {role}
+                          </span>
+                        )}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {isSubtaskMode && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsSubtaskMode(false);
+                              setSubtaskParentId('');
+                              setSubtaskParentTitle('');
+                              setSubtaskReviewerAccount('');
+                            }}
+                            className="text-[11px] text-rose-600 hover:text-rose-700 font-medium underline cursor-pointer"
+                          >
+                            Tách ra độc lập
+                          </button>
+                        )}
+                        {task && !isSubtaskMode && (
+                          <button
+                            type="button"
+                            onClick={() => setIsLinkExistingModalOpen(true)}
+                            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200"
+                            title="Gộp các task lẻ khác vào làm Subtask của task này"
+                          >
+                            <Link2 className="w-3 h-3" />
+                            Gộp task khác vào đây
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <Dropdown
+                        value={isSubtaskMode ? subtaskParentId : ''}
+                        onChange={(val) => {
+                          if (!val) {
+                            setIsSubtaskMode(false);
+                            setSubtaskParentId('');
+                            setSubtaskParentTitle('');
+                            setSubtaskReviewerAccount('');
+                          } else {
+                            const p = potentialParentTasks.find((item: Task) => item.id === val);
+                            if (p) {
+                              setIsSubtaskMode(true);
+                              setSubtaskParentId(p.id);
+                              setSubtaskParentTitle(p.title);
+                              setSubtaskReviewerAccount(p.assigneeAccount || p.subtaskReviewerAccount || '');
+                            }
+                          }
+                        }}
+                        options={parentDropdownOptions}
+                        searchable={true}
+                        placeholder="Chọn hoặc gõ tìm kiếm task cha..."
+                        className="w-full"
+                        buttonClassName="w-full py-2.5 px-3 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium rounded-xl text-slate-800 dark:text-slate-200 shadow-2xs hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors"
+                      />
+                    </div>
+
+                    {isSubtaskMode && (
+                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 pt-0.5 bg-indigo-50/60 dark:bg-indigo-950/40 p-2 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                        <span>✓ Sẽ hiển thị lùi đầu dòng dưới:</span>
+                        <strong className="truncate max-w-xs">{subtaskParentTitle}</strong>
+                        {subtaskReviewerAccount && <span>(Reviewer: @{subtaskReviewerAccount})</span>}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Parent Task Subtasks Management Panel */}
+                {hasSubtasks && (
+                  <div className="p-4 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-3 shadow-2xs">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-xl bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center text-xs shadow-2xs">
+                          🌳
+                        </span>
+                        <div>
+                          <span className="font-bold text-slate-800 text-xs block">
+                            Subtasks trực thuộc ({existingSubtasks.length} đầu việc con)
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            Task cha tổng hợp tiến độ và thời lượng từ các subtask
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setIsManualOverride(!isManualOverride)}
+                          className={`text-[11px] px-2.5 py-1 rounded-xl border font-semibold transition cursor-pointer flex items-center gap-1 ${
+                            isManualOverride
+                              ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
+                          }`}
+                          title={
+                            isManualOverride
+                              ? 'Đang bật ghi đè thủ công. Bấm để bật tính toán tự động'
+                              : 'Đang tự động tính từ Subtask. Bấm để cho phép ghi đè thủ công'
+                          }
+                        >
+                          {isManualOverride ? '✏️ Ghi đè thủ công' : '⚡ Tự động tính từ Subtask'}
+                        </button>
+                        {task && (
+                          <button
+                            type="button"
+                            onClick={() => setIsLinkExistingModalOpen(true)}
+                            className="text-[11px] px-2.5 py-1 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                            title="Chọn thêm các task có sẵn để gộp vào task này"
+                          >
+                            <Link2 className="w-3 h-3 text-indigo-600" />
+                            Gộp task có sẵn
+                          </button>
+                        )}
+                        {onOpenCreateSubtask && task && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              forceClose();
+                              onOpenCreateSubtask(task);
+                            }}
+                            className="text-[11px] px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Thêm Subtask
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Summary metrics badge */}
+                    {parentMetrics && !isManualOverride && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Tổng Est:</span>
+                          <span className="font-bold text-indigo-600 font-mono text-xs">{parentMetrics.totalEstimatedEffort}h</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Tổng Actual:</span>
+                          <span className="font-bold text-emerald-600 font-mono text-xs">{parentMetrics.totalActualEffort}h</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Tiến độ tổng:</span>
+                          <span className="font-bold text-slate-700 text-xs">{parentMetrics.completionPercentage}%</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Trạng thái:</span>
+                          <span className="font-bold text-slate-700 text-xs">{parentMetrics.status}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Subtask list */}
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                      {existingSubtasks.map((st) => (
+                        <div
+                          key={st.id}
+                          onClick={() => {
+                            if (onSelectTaskToEdit) {
+                              forceClose();
+                              onSelectTaskToEdit(st);
+                            }
+                          }}
+                          className="p-2.5 bg-white border border-slate-200/90 rounded-xl flex items-center justify-between gap-2 text-xs hover:border-indigo-300 hover:bg-indigo-50/40 transition cursor-pointer group shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-indigo-400 font-mono text-xs font-bold">↳</span>
+                            <span className="font-semibold text-slate-800 group-hover:text-indigo-600 transition truncate">
+                              {st.title}
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200 font-semibold shrink-0">
+                              {st.role}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 text-[11px]">
+                            <span className="font-mono text-slate-500">{st.estimatedEffort}h</span>
+                            <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] ${
+                              st.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {st.completionPercentage}%
+                            </span>
+                            <span className="font-medium text-slate-600">@{st.assigneeAccount || 'Trống'}</span>
+                            <Edit2 className="w-3 h-3 text-slate-400 group-hover:text-indigo-600" />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1483,6 +1854,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         imageUrl={lightboxUrl}
         onClose={() => setLightboxUrl(null)}
       />
+
+      {/* Link Existing Tasks Modal */}
+      {task && (
+        <LinkExistingTasksModal
+          parentTask={task}
+          isOpen={isLinkExistingModalOpen}
+          onClose={() => setIsLinkExistingModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

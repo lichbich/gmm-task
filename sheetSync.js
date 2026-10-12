@@ -356,13 +356,59 @@ function syncTasksFormattedToSheet() {
             validAssignees.forEach((assigneeItem, accIdx) => {
                 const { accName, tasks: personTasks } = assigneeItem;
 
-                personTasks.forEach(t => {
-                    const rawPct = (t.completionPercentage !== undefined && t.completionPercentage !== null)
+                // Sắp xếp dạng cây: Task cha đứng trước, các subtask trực thuộc xếp ngay liền kề bên dưới
+                const arrangedTasks = [];
+                const subtasksNestedSet = new Set();
+                const personTasksList = personTasks;
+
+                personTasksList.forEach(t => {
+                    if (t.subtaskParentId && personTasksList.some(p => p.id === t.subtaskParentId)) {
+                        subtasksNestedSet.add(t.id);
+                    }
+                });
+
+                personTasksList.forEach(t => {
+                    if (!subtasksNestedSet.has(t.id)) {
+                        arrangedTasks.push(t);
+                        personTasksList.forEach(st => {
+                            if (st.subtaskParentId === t.id) {
+                                arrangedTasks.push(st);
+                            }
+                        });
+                    }
+                });
+
+                arrangedTasks.forEach(t => {
+                    let rawPct = (t.completionPercentage !== undefined && t.completionPercentage !== null)
                         ? Number(t.completionPercentage)
                         : 0;
 
                     const currentWeekNum = getCurrentSahoWeekNum() || 96;
                     const isPastWeek = weekData.sahoWeekNum < currentWeekNum;
+
+                    const isSub = Boolean(t.isSubtask || (t.subtaskParentId && String(t.subtaskParentId).trim() !== ''));
+                    const allSubtasksOfT = taskList.filter(st => st.subtaskParentId === t.id);
+                    const isParent = Boolean(t.isParentTask || allSubtasksOfT.length > 0);
+
+                    // Nếu là task cha và không ghi đè thủ công, tự động tổng hợp số liệu từ các subtask
+                    if (allSubtasksOfT.length > 0 && !t.isManualOverride && !isPastWeek) {
+                        const sumEst = Math.round(allSubtasksOfT.reduce((s, st) => s + (Number(st.estimatedEffort) || 0), 0) * 100) / 100;
+                        const sumAct = Math.round(allSubtasksOfT.reduce((s, st) => s + (Number(st.actualEffort) || 0), 0) * 100) / 100;
+                        const totalWeight = allSubtasksOfT.reduce((s, st) => s + (Number(st.estimatedEffort) || Number(st.actualEffort) || 1), 0);
+                        let calcPct = 0;
+                        if (totalWeight > 0) {
+                            const weightedSum = allSubtasksOfT.reduce((s, st) => {
+                                const weight = Number(st.estimatedEffort) || Number(st.actualEffort) || 1;
+                                const pct = Number(st.completionPercentage) || 0;
+                                return s + pct * weight;
+                            }, 0);
+                            calcPct = Math.round(weightedSum / totalWeight);
+                        } else {
+                            const sumPct = allSubtasksOfT.reduce((s, st) => s + (Number(st.completionPercentage) || 0), 0);
+                            calcPct = Math.round(sumPct / allSubtasksOfT.length);
+                        }
+                        rawPct = calcPct;
+                    }
 
                     let finalStatus = "To do";
                     let effortVal = 0;
@@ -386,27 +432,49 @@ function syncTasksFormattedToSheet() {
                         // 1. Task hoàn thành: Đạt 100% hoặc status là "Done" trên hệ thống -> "Done"
                         // 2. Task đang thực hiện: Có tiến độ (>0%) hoặc status là "In Progress" -> "In Progress"
                         // 3. Task chưa bắt đầu: 0% tiến độ và status "To do" -> "To do"
-                        // TUYỆT ĐỐI KHÔNG dùng lastSubmittedAt để ép Done vì các task chuyển tuần giữ timestamp cũ sẽ bị Done sai
-                        if (rawPct >= 100 || t.status === 'Done') {
-                            finalStatus = "Done";
-                        } else if (rawPct > 0 || t.status === 'In Progress') {
-                            finalStatus = "In Progress";
-                        } else {
-                            finalStatus = "To do";
-                        }
+                        if (allSubtasksOfT.length > 0 && !t.isManualOverride) {
+                            const allSubDone = allSubtasksOfT.every(st => st.status === 'Done' || (Number(st.completionPercentage) || 0) >= 100);
+                            const anySubProg = allSubtasksOfT.some(st => st.status === 'In Progress' || (Number(st.completionPercentage) || 0) > 0);
+                            if (allSubDone && rawPct >= 100) {
+                                finalStatus = "Done";
+                            } else if (anySubProg || rawPct > 0) {
+                                finalStatus = "In Progress";
+                            } else {
+                                finalStatus = "To do";
+                            }
 
-                        if (t.memberEfforts && t.memberEfforts[accName] !== undefined) {
-                            effortVal = Number(t.memberEfforts[accName]) || 0;
+                            const sumAct = Math.round(allSubtasksOfT.reduce((s, st) => s + (Number(st.actualEffort) || 0), 0) * 100) / 100;
+                            const sumEst = Math.round(allSubtasksOfT.reduce((s, st) => s + (Number(st.estimatedEffort) || 0), 0) * 100) / 100;
+                            effortVal = sumAct > 0 ? sumAct : sumEst;
                         } else {
-                            effortVal = (t.estimatedEffort !== undefined && t.estimatedEffort !== null && t.estimatedEffort !== '')
-                                ? Number(t.estimatedEffort) || 0
-                                : (Number(t.actualEffort) || 0);
+                            if (rawPct >= 100 || t.status === 'Done') {
+                                finalStatus = "Done";
+                            } else if (rawPct > 0 || t.status === 'In Progress') {
+                                finalStatus = "In Progress";
+                            } else {
+                                finalStatus = "To do";
+                            }
+
+                            if (t.memberEfforts && t.memberEfforts[accName] !== undefined) {
+                                effortVal = Number(t.memberEfforts[accName]) || 0;
+                            } else {
+                                effortVal = (t.estimatedEffort !== undefined && t.estimatedEffort !== null && t.estimatedEffort !== '')
+                                    ? Number(t.estimatedEffort) || 0
+                                    : (Number(t.actualEffort) || 0);
+                            }
                         }
+                    }
+
+                    // Tên task hiển thị: Thêm thụt dòng "   ↳ " cho các Subtask
+                    let sheetTitle = t.title || "";
+                    if (isSub) {
+                        const trimmedTitle = sheetTitle.trim();
+                        sheetTitle = trimmedTitle.startsWith('↳') ? `   ${trimmedTitle}` : `   ↳ ${trimmedTitle}`;
                     }
 
                     allRowsToInsert.push([
                         "",                      // Col A (1): Trống (Bỏ STT)
-                        t.title,                 // Col B (2): Tên Task
+                        sheetTitle,              // Col B (2): Tên Task (Có thụt dòng nếu là subtask)
                         t.role || bannerName,    // Col C (3): Role
                         "",                      // Col D (4): Trống
                         pctStr,                  // Col E (5): Phần trăm công việc (%)
@@ -416,7 +484,7 @@ function syncTasksFormattedToSheet() {
                         "",                      // Col I (9): Trống
                         ""                       // Col J (10): Trống
                     ]);
-                    rowFormats.push({ type: 'TASK', task: t, finalStatus: finalStatus, accName: accName, role: t.role || bannerName });
+                    rowFormats.push({ type: 'TASK', task: t, finalStatus: finalStatus, accName: accName, role: t.role || bannerName, isParent: isParent, isSub: isSub });
                 });
 
                 // Hàng trống phân cách 2 người khác nhau
@@ -479,7 +547,7 @@ function syncTasksFormattedToSheet() {
                 // Task row: Nền sạch (#FFFFFF) để Chip hiển thị dạng pill nổi bật
                 backgrounds.push(["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"]);
                 fontColors.push(["#000000", "#1E293B", "#334155", "#000000", "#0F172A", "#0F172A", "#000000", "#1E293B", "#000000", "#000000"]);
-                fontWeights.push(["normal", "normal", "normal", "normal", "bold", "normal", "normal", "normal", "normal", "normal"]);
+                fontWeights.push(["normal", fmt.isParent ? "bold" : "normal", "normal", "normal", "bold", "normal", "normal", "normal", "normal", "normal"]);
                 fontSizes.push([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
                 fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
                 horizontalAlignments.push(["center", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);

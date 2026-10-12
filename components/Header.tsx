@@ -6,6 +6,7 @@ import { UserProfileModal } from './UserProfileModal';
 import { GMMLogo } from './common/GMMLogo';
 import { NotificationBell } from './NotificationBell';
 import { UserAvatar } from './common/UserAvatar';
+import { HelpTourButton } from './common/HelpTourButton';
 
 import {
   LayoutGrid,
@@ -195,6 +196,9 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Notification Bell with Unread Popover & Push Toggle */}
             <NotificationBell onSelectTask={onSelectTask} />
 
+            {/* Help & Interactive Feature Tours (Tạm thời ẩn theo yêu cầu) */}
+            {/* <HelpTourButton activeTaskTab={activeTaskTab} setActiveTaskTab={setActiveTaskTab} /> */}
+
             {/* Theme Toggle Button (Sleek Circular Icon Button) */}
             <button
               onClick={toggleTheme}
@@ -325,6 +329,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
+              data-tour="tab-milestones"
               onClick={() => setActiveTaskTab('milestones')}
               className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-semibold rounded-t-xl transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer shrink-0 ${
                 activeTaskTab === 'milestones'
