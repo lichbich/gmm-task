@@ -104,8 +104,25 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     isUserAllowedAI,
   } = useApp();
 
-  // Sub-tabs state: ALWAYS DEFAULT to 'MY_TASKS' when accessing
-  const [subTab, setSubTab] = useState<'MY_TASKS' | 'ALL_TASKS' | 'DEFINE_NEXT_WEEK'>('MY_TASKS');
+  // Sub-tabs state: default to 'MY_TASKS' or remembered from localStorage
+  const [subTab, setSubTabState] = useState<'MY_TASKS' | 'ALL_TASKS' | 'DEFINE_NEXT_WEEK'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('saho_schedule_subtab');
+        if (saved === 'MY_TASKS' || saved === 'ALL_TASKS' || saved === 'DEFINE_NEXT_WEEK') return saved;
+      } catch {}
+    }
+    return 'MY_TASKS';
+  });
+
+  const setSubTab = (newSubTab: 'MY_TASKS' | 'ALL_TASKS' | 'DEFINE_NEXT_WEEK') => {
+    setSubTabState(newSubTab);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('saho_schedule_subtab', newSubTab);
+      } catch {}
+    }
+  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('ALL');

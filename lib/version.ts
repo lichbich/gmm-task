@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.9.5';
+export const APP_VERSION = '2.9.6';
 export const APP_RELEASE_NOTE =
-  'Fix thanh bar role';
+  'Lưu trạng thái tab khi tải lại trang, Quản lý Subtask phân cấp';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 

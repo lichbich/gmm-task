@@ -22,10 +22,45 @@ import { AIAssistantDrawer } from './AIAssistantDrawer';
 import { NewFeatureTourBanner } from './common/NewFeatureTourBanner';
 import { Task } from '../types/task';
 
+const VALID_TASK_TABS = ['schedule', 'milestones', 'tickets', 'kanban', 'awards', 'history', 'nextweek'];
+const VALID_MAIN_SECTIONS: MainSectionType[] = ['tasks', 'resources', 'users'];
+
+function getInitialMainSection(): MainSectionType {
+  if (typeof window === 'undefined') return 'tasks';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const sectionParam = params.get('section') as MainSectionType;
+    if (sectionParam && VALID_MAIN_SECTIONS.includes(sectionParam)) {
+      return sectionParam;
+    }
+    const saved = localStorage.getItem('saho_active_main_section') as MainSectionType;
+    if (saved && VALID_MAIN_SECTIONS.includes(saved)) {
+      return saved;
+    }
+  } catch {}
+  return 'tasks';
+}
+
+function getInitialTaskTab(): string {
+  if (typeof window === 'undefined') return 'schedule';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam && VALID_TASK_TABS.includes(tabParam)) {
+      return tabParam;
+    }
+    const saved = localStorage.getItem('saho_active_task_tab');
+    if (saved && VALID_TASK_TABS.includes(saved)) {
+      return saved;
+    }
+  } catch {}
+  return 'schedule';
+}
+
 function MainApp() {
   const { authSession, tasks, weeklyArchives } = useApp();
-  const [activeMainSection, setActiveMainSection] = useState<MainSectionType>('tasks');
-  const [activeTaskTab, setActiveTaskTab] = useState<string>('schedule');
+  const [activeMainSection, setActiveMainSection] = useState<MainSectionType>(getInitialMainSection);
+  const [activeTaskTab, setActiveTaskTab] = useState<string>(getInitialTaskTab);
 
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
@@ -163,6 +198,11 @@ function MainApp() {
       }
     }
 
+    const sectionParam = params.get('section') as MainSectionType | null;
+    if (sectionParam && VALID_MAIN_SECTIONS.includes(sectionParam)) {
+      setActiveMainSection(sectionParam);
+    }
+
     if (openTicketId) {
       setActiveMainSection('tasks');
       setActiveTaskTab('tickets');
@@ -172,16 +212,19 @@ function MainApp() {
       url.searchParams.delete('ticketId');
       url.searchParams.delete('ticket');
       window.history.replaceState({}, '', url.pathname + (url.search || ''));
-    } else if (tab === 'tickets') {
-      setActiveMainSection('tasks');
-      setActiveTaskTab('tickets');
     } else if (openTaskId && (tasks.length > 0 || (weeklyArchives && weeklyArchives.length > 0))) {
+      setActiveMainSection('tasks');
       handleSelectTaskFromNotification(openTaskId);
       const url = new URL(window.location.href);
       url.searchParams.delete('openTaskId');
       url.searchParams.delete('taskId');
       url.searchParams.delete('task');
       window.history.replaceState({}, '', url.pathname + (url.search || ''));
+    } else if (tab && VALID_TASK_TABS.includes(tab)) {
+      if (!sectionParam) {
+        setActiveMainSection('tasks');
+      }
+      setActiveTaskTab(tab);
     }
 
     // 2. Listen to message from Service Worker (when a notification is clicked while tab is already open)
@@ -210,6 +253,14 @@ function MainApp() {
       setSelectedTicketIdForView(null);
     }
     setActiveTaskTab(tab);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('saho_active_task_tab', tab);
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        window.history.replaceState({}, '', url.pathname + url.search);
+      } catch {}
+    }
   };
 
   const handleSetActiveMainSection = (section: MainSectionType) => {
@@ -217,6 +268,18 @@ function MainApp() {
       setSelectedTicketIdForView(null);
     }
     setActiveMainSection(section);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('saho_active_main_section', section);
+        const url = new URL(window.location.href);
+        if (section === 'tasks') {
+          url.searchParams.delete('section');
+        } else {
+          url.searchParams.set('section', section);
+        }
+        window.history.replaceState({}, '', url.pathname + url.search);
+      } catch {}
+    }
   };
 
   return (

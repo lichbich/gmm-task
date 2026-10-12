@@ -167,8 +167,25 @@ export const MilestonesView: React.FC = () => {
     selectedYear,
   } = useApp();
 
-  // Sub-tabs: Milestones vs Ad-hoc tasks (Default to ADHOC)
-  const [subTab, setSubTab] = useState<'MILESTONES' | 'ADHOC'>('ADHOC');
+  // Sub-tabs: Milestones vs Ad-hoc tasks (Default to ADHOC or remembered from localStorage)
+  const [subTab, setSubTabState] = useState<'MILESTONES' | 'ADHOC'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('saho_milestones_subtab');
+        if (saved === 'MILESTONES' || saved === 'ADHOC') return saved;
+      } catch {}
+    }
+    return 'ADHOC';
+  });
+
+  const setSubTab = (newSubTab: 'MILESTONES' | 'ADHOC') => {
+    setSubTabState(newSubTab);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('saho_milestones_subtab', newSubTab);
+      } catch {}
+    }
+  };
 
   // Helper to normalize milestone title display
   const formatMilestoneTitle = (title: string, orderNumber: number): string => {
