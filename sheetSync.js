@@ -3,13 +3,13 @@
  * - Đồng bộ danh sách công việc từ Firebase DB (/tasks.json) vào Google Sheet
  * - Không ghi đè hay can thiệp vào Data Validation của Google Sheet để bảo tồn 100% kiểu "Khối" (Chip)
  * - Nghiệp vụ đồng bộ chuẩn xác:
- *   + Tuần 95 trở xuống (Tuần đã làm / báo cáo):
- *     - Thành viên đã nộp báo cáo / có tiến độ: Status = "Done", Effort = actualEffort thực tế.
- *     - Bỏ qua các task 0% & 0h vì đã được chuyển sang Tuần 96.
- *   + Tuần 96 trở đi (Tuần mới / tuần kế hoạch):
- *     - Tất cả task 0% tiến độ: Status = "To do", Effort = estimatedEffort (giờ ước tính est).
- *     - Tất cả task làm dở (>0% và <100%): Status = "In Progress", Effort = estimatedEffort (giờ ước tính est).
- *     - Task hoàn thành (100%): Status = "Done", Effort = estimatedEffort.
+ *   + Xử lý chuyển giao tuần (Rollover):
+ *     - Task 0% tiến độ nếu đã được chuyển sang tuần sau: Tự động XÓA ở tuần cũ, chỉ hiển thị ở tuần mới.
+ *     - Task đã có % tiến độ (> 0%): Giữ nguyên ở tuần cũ để ghi nhận kết quả, tuần mới tiếp tục hiển thị.
+ *   + Trạng thái và Effort:
+ *     - Task 0% tiến độ (tuần kế hoạch): Status = "To do", Effort = estimatedEffort.
+ *     - Task làm dở (>0% và <100%): Status = "In Progress", Effort = estimatedEffort.
+ *     - Task hoàn thành (100% hoặc tuần chốt): Status = "Done".
  * - Banner Tuần Chữ Đỏ + Banner Role Vàng + Cách 1 hàng trống giữa các nhân sự
  * ========================================================================= */
 
@@ -133,7 +133,7 @@ function syncTasksFormattedToSheet() {
         const rawWeek = Number(t.weekNumber) || 38;
         // Task weekNumber trên hệ thống Saho đã là số tuần cộng dồn (VD: 93, 94, 95, 96). Nếu <= 53 mới cần + 55.
         const sahoWeekNum = rawWeek > 50 ? rawWeek : rawWeek + 55;
-        
+
         // BỎ QUA CÁC TUẦN < 95: Tuần 94 trở xuống chỉ lưu trong Lịch Sử Công Việc, đồng bộ từ Tuần 95 trở đi làm chuẩn
         if (sahoWeekNum < 95) return;
 
@@ -179,8 +179,8 @@ function syncTasksFormattedToSheet() {
                 const supRoles = (supUser && supUser.specializations && supUser.specializations.length > 0)
                     ? supUser.specializations
                     : (supUser && supUser.role)
-                    ? [supUser.role]
-                    : [t.role];
+                        ? [supUser.role]
+                        : [t.role];
 
                 // Xác định role phù hợp cho thành viên Collab này
                 let targetRole = t.role;
@@ -297,14 +297,48 @@ function syncTasksFormattedToSheet() {
                     }
                 });
 
-                // Nếu là tuần cũ đã kết thúc / đã chốt (Tuần 95 trở xuống):
-                // Bỏ qua các task 0% tiến độ & 0h effort vì chúng đã được chuyển tiếp sang Tuần 96!
+                // Kiểm tra xem task này đã được chuyển/cắt sang tuần sau hay chưa
+                const isTransferredToFutureWeek = (taskItem) => {
+                    const rootId = taskItem.parentTaskId || taskItem.id;
+                    const tTitle = String(taskItem.title || '').trim().toLowerCase();
+                    const tAcc = String(accName || taskItem.syncAccount || taskItem.assigneeAccount || '').trim().toLowerCase();
+
+                    return taskList.some(nt => {
+                        const ntRawWeek = Number(nt.weekNumber) || 38;
+                        const ntWeekNum = ntRawWeek > 50 ? ntRawWeek : ntRawWeek + 55;
+                        if (ntWeekNum <= weekData.sahoWeekNum) return false;
+
+                        // 1. Khớp theo parentTaskId hoặc id
+                        if (rootId && (nt.parentTaskId === rootId || nt.id === rootId)) return true;
+
+                        // 2. Khớp theo Title và Account
+                        const ntTitle = String(nt.title || '').trim().toLowerCase();
+                        const ntAcc = String(nt.assigneeAccount || nt.syncAccount || '').trim().toLowerCase();
+                        if (ntTitle === tTitle && ntAcc === tAcc) return true;
+
+                        return false;
+                    });
+                };
+
+                // Lọc bỏ task:
+                // - Những task 0% của tuần này nếu đã cắt/chuyển sang tuần sau thì sẽ xoá ở tuần này đi.
+                // - Những task nào đã có phần trăm (> 0%) thì giữ nguyên ở tuần này.
                 const filteredTasks = Array.from(personTasksMap.values()).filter(t => {
-                    if (!isPastWeek) return true; // Tuần 96+: giữ nguyên toàn bộ (bao gồm cả task 0% kế thừa)
                     const rawPct = (t.completionPercentage !== undefined && t.completionPercentage !== null) ? Number(t.completionPercentage) : 0;
-                    const effort = Number(t.actualEffort) || 0;
-                    const isUnworked = rawPct === 0 && effort === 0 && t.status !== 'Done';
-                    return !isUnworked; // Chỉ giữ task có tiến độ hoặc đã làm ở tuần cũ
+
+                    // 1. Task 0% tiến độ nếu đã được chuyển sang tuần sau -> Xóa ở tuần cũ đi
+                    if (rawPct === 0 && isTransferredToFutureWeek(t)) {
+                        return false;
+                    }
+
+                    // 2. Với các tuần cũ trong quá khứ (< 96): bỏ qua các task unworked chưa làm
+                    if (isPastWeek) {
+                        const effort = Number(t.actualEffort) || 0;
+                        const isUnworked = rawPct === 0 && effort === 0 && t.status !== 'Done';
+                        if (isUnworked) return false;
+                    }
+
+                    return true;
                 });
 
                 if (filteredTasks.length > 0) {
@@ -327,43 +361,46 @@ function syncTasksFormattedToSheet() {
                         ? Number(t.completionPercentage)
                         : 0;
 
-                    const isWeek96OrFuture = weekData.sahoWeekNum >= 96;
+                    const currentWeekNum = getCurrentSahoWeekNum() || 96;
+                    const isPastWeek = weekData.sahoWeekNum < currentWeekNum;
 
                     let finalStatus = "To do";
                     let effortVal = 0;
                     let pctStr = `${rawPct}%`;
 
-                    if (isWeek96OrFuture) {
+                    if (isPastWeek) {
                         // ==========================================
-                        // TUẦN 96+: Tuần mới / tuần kế hoạch chưa làm
-                        // ==========================================
-                        // 1. Task 0% tiến độ -> Status "To do"
-                        // 2. Task làm dở (>0% và <100%) -> Status "In Progress"
-                        // 3. Task hoàn thành (100%) -> Status "Done"
-                        // Effort: Lấy theo giờ ước tính (estimatedEffort) được define cho tuần mới
-                        if (rawPct > 0 && rawPct < 100) {
-                            finalStatus = "In Progress";
-                        } else if (rawPct >= 100) {
-                            finalStatus = "Done";
-                        } else {
-                            finalStatus = "To do";
-                        }
-                        if (t.memberEfforts && t.memberEfforts[accName] !== undefined) {
-                            effortVal = Number(t.memberEfforts[accName]) || 0;
-                        } else {
-                            effortVal = (t.estimatedEffort !== undefined && t.estimatedEffort !== null && t.estimatedEffort !== '')
-                                ? Number(t.estimatedEffort) || 0
-                                : (Number(t.actualEffort) || 0);
-                        }
-                    } else {
-                        // ==========================================
-                        // TUẦN 95 TRỞ XUỐNG: Tuần đã làm / đã báo cáo
+                        // TUẦN CŨ: Tuần đã chốt trong quá khứ
                         // ==========================================
                         finalStatus = "Done";
                         if (t.memberEfforts && typeof t.memberEfforts === 'object' && Object.keys(t.memberEfforts).length > 0) {
                             effortVal = t.memberEfforts[accName] !== undefined ? (Number(t.memberEfforts[accName]) || 0) : 0;
                         } else {
                             effortVal = Number(t.actualEffort) || 0;
+                        }
+                    } else {
+                        // ==========================================
+                        // TUẦN HIỆN TẠI & TUẦN TƯƠNG LAI:
+                        // ==========================================
+                        // Khớp 100% theo trạng thái và tiến độ thực tế trong hệ thống/Firebase:
+                        // 1. Task hoàn thành: Đạt 100% hoặc status là "Done" trên hệ thống -> "Done"
+                        // 2. Task đang thực hiện: Có tiến độ (>0%) hoặc status là "In Progress" -> "In Progress"
+                        // 3. Task chưa bắt đầu: 0% tiến độ và status "To do" -> "To do"
+                        // TUYỆT ĐỐI KHÔNG dùng lastSubmittedAt để ép Done vì các task chuyển tuần giữ timestamp cũ sẽ bị Done sai
+                        if (rawPct >= 100 || t.status === 'Done') {
+                            finalStatus = "Done";
+                        } else if (rawPct > 0 || t.status === 'In Progress') {
+                            finalStatus = "In Progress";
+                        } else {
+                            finalStatus = "To do";
+                        }
+
+                        if (t.memberEfforts && t.memberEfforts[accName] !== undefined) {
+                            effortVal = Number(t.memberEfforts[accName]) || 0;
+                        } else {
+                            effortVal = (t.estimatedEffort !== undefined && t.estimatedEffort !== null && t.estimatedEffort !== '')
+                                ? Number(t.estimatedEffort) || 0
+                                : (Number(t.actualEffort) || 0);
                         }
                     }
 

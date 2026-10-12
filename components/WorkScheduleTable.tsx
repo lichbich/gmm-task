@@ -1496,7 +1496,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
           <div
             className={`${
               showFloatingRoleBar && activeRoleInView ? 'pointer-events-auto' : 'pointer-events-none'
-            } bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/90 shadow-xl shadow-slate-900/10 dark:shadow-black/50 rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 sm:gap-3 max-w-full sm:max-w-4xl overflow-x-auto no-scrollbar transition-transform duration-300 ease-out`}
+            } bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-700/90 shadow-xl shadow-slate-900/10 dark:shadow-black/50 rounded-2xl px-3 py-1.5 sm:px-4 sm:py-2 flex items-center gap-2 sm:gap-3 w-fit max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-3rem)] overflow-x-auto no-scrollbar transition-transform duration-300 ease-out`}
           >
             {/* Active Role Indicator */}
             {(() => {
@@ -1551,7 +1551,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
             <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 shrink-0 mx-0.5" />
 
             {/* Quick Role Switcher Pills */}
-            <div className="flex items-center gap-1 shrink-0 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1 min-w-0 overflow-x-auto no-scrollbar">
               {groupedTasksByRole.map((group) => {
                 const isActive = group.role === activeRoleInView;
                 return (
