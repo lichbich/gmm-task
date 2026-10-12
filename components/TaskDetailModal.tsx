@@ -751,7 +751,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Scrollable Body with custom-scrollbar */}
-        <div className="p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4 min-h-0 bg-white dark:bg-slate-900">
+        <div className="p-5 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-4 min-h-0 min-w-0 bg-white dark:bg-slate-900">
           {/* 1. Leader View: Pending Task Assignment Request Banner */}
           {isLeaderOrAdmin && isRequested && (
             <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
@@ -876,7 +876,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </div>
 
           {/* Task Details / Description Section */}
-          <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-2.5 relative">
+          <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-2.5 relative min-w-0 overflow-hidden">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
                 <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
@@ -943,7 +943,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             ) : (
               <div>
                 {task.description ? (
-                  <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3.5">
+                  <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3.5 min-w-0 overflow-hidden">
                     <RichDescriptionViewer
                       content={task.description}
                       onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
@@ -1383,7 +1383,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             {/* Rich Thread Display & Quick Discussion Post */}
             <div className="space-y-2.5">
               {/* Discussion History Container */}
-              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-56 overflow-y-auto custom-scrollbar space-y-2">
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-56 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-2 min-w-0">
                 {noteLines.length === 0 ? (
                   <div className="text-center py-5 text-slate-400 dark:text-slate-400 text-xs flex flex-col items-center gap-1.5">
                     <MessageSquare className="w-5 h-5 text-slate-300 dark:text-slate-600" />
@@ -1401,7 +1401,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                         <div
                           key={idx}
                           id={`task-detail-note-${idx}`}
-                          className={`rounded-xl p-2.5 shadow-2xs text-xs space-y-1.5 transition-all duration-300 ${
+                          className={`rounded-xl p-2.5 shadow-2xs text-xs space-y-1.5 transition-all duration-300 min-w-0 break-words [overflow-wrap:anywhere] ${
                             isHighlighted
                               ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
                               : parsed.isMyMessage
@@ -1510,7 +1510,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                               </div>
                             </div>
                           ) : (
-                            <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed whitespace-pre-wrap pl-1 break-words">
+                            <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed whitespace-pre-wrap pl-1 break-words [overflow-wrap:anywhere] min-w-0">
                               {renderFormattedMessage(parsed.messageBody, users)}
                             </p>
                           )}
@@ -1522,13 +1522,13 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       <div
                         key={idx}
                         id={`task-detail-note-${idx}`}
-                        className={`rounded-xl p-2.5 text-xs leading-relaxed whitespace-pre-wrap space-y-1.5 transition-all duration-300 ${
+                        className={`rounded-xl p-2.5 text-xs leading-relaxed whitespace-pre-wrap space-y-1.5 transition-all duration-300 min-w-0 break-words [overflow-wrap:anywhere] ${
                           isHighlighted
                             ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
                             : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200'
                         }`}
                       >
-                        <div>{line}</div>
+                        <div className="break-words [overflow-wrap:anywhere] min-w-0">{renderFormattedMessage(line, users)}</div>
                         <div className="flex items-center justify-end pt-1 border-t border-slate-100 dark:border-slate-700/60">
                           <button
                             type="button"
@@ -1575,7 +1575,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               )}
 
               {/* Collaborative Input Field for ANY team member */}
-              <form onSubmit={handleSendComment} className="flex flex-col sm:flex-row gap-2">
+              <form onSubmit={handleSendComment} className="flex flex-col sm:flex-row gap-2 min-w-0">
                 <MentionInput
                   as="input"
                   value={quickComment}

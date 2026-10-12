@@ -1014,7 +1014,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
                     Nội dung yêu cầu chi tiết
                   </label>
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200 leading-relaxed min-w-0 overflow-hidden">
                     <RichDescriptionViewer
                       content={ticket.description}
                       onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
@@ -1031,7 +1031,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span>Giải pháp / Kết quả xử lý ({ticket.resolvedByName || ticket.resolvedBy})</span>
                 </div>
-                <p className="text-xs text-emerald-900 dark:text-emerald-200 whitespace-pre-wrap leading-relaxed">
+                <p className="text-xs text-emerald-900 dark:text-emerald-200 whitespace-pre-wrap leading-relaxed break-words [overflow-wrap:anywhere] min-w-0">
                   {ticket.resolutionNote}
                 </p>
                 {ticket.resolvedAt && (
@@ -1371,7 +1371,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
 
                     {/* Bubble */}
                     <div
-                      className={`max-w-[90%] p-3 rounded-2xl text-xs leading-relaxed shadow-2xs ${
+                      className={`max-w-[90%] p-3 rounded-2xl text-xs leading-relaxed shadow-2xs min-w-0 break-words [overflow-wrap:anywhere] ${
                         isMe
                           ? 'bg-indigo-600 text-white rounded-tr-xs'
                           : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-tl-xs'
@@ -1397,7 +1397,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
                             );
                           }
                           return (
-                            <p key={cItem.id} className="whitespace-pre-wrap leading-relaxed">
+                            <p key={cItem.id} className="whitespace-pre-wrap leading-relaxed break-words [overflow-wrap:anywhere] min-w-0">
                               {renderFormattedMessage(cItem.text, users)}
                             </p>
                           );

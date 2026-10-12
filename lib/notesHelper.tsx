@@ -264,16 +264,16 @@ export function NoteReplyQuoteBlock({
           onClick();
         }
       }}
-      className={`mb-1.5 px-2.5 py-1.5 rounded-lg border-l-3 border-indigo-500 bg-slate-100/90 dark:bg-slate-900/60 text-[11px] space-y-0.5 select-none transition-all group ${
+      className={`mb-1.5 px-2.5 py-1.5 rounded-lg border-l-3 border-indigo-500 bg-slate-100/90 dark:bg-slate-900/60 text-[11px] space-y-0.5 select-none transition-all group min-w-0 ${
         onClick
           ? 'cursor-pointer hover:bg-indigo-50/70 dark:hover:bg-indigo-950/60 hover:border-indigo-600 active:scale-[0.98]'
           : ''
       }`}
       title={onClick ? 'Bấm để trượt đến tin nhắn được trả lời' : undefined}
     >
-      <div className="flex items-center justify-between gap-1.5">
-        <div className="flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400 text-[10.5px] truncate">
-          <span className="text-xs group-hover:-translate-x-0.5 transition-transform">↩</span>
+      <div className="flex items-center justify-between gap-1.5 min-w-0">
+        <div className="flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400 text-[10.5px] truncate min-w-0">
+          <span className="text-xs group-hover:-translate-x-0.5 transition-transform shrink-0">↩</span>
           <span className="truncate">{replyTo.replyAuthor}</span>
         </div>
         {onClick && (
@@ -282,7 +282,7 @@ export function NoteReplyQuoteBlock({
           </span>
         )}
       </div>
-      <p className="text-slate-600 dark:text-slate-300 italic truncate text-[11px] leading-tight">
+      <p className="text-slate-600 dark:text-slate-300 italic truncate text-[11px] leading-tight min-w-0">
         "{replyTo.replyText}"
       </p>
     </div>
@@ -296,12 +296,31 @@ export function NoteReplyQuoteBlock({
 export function renderFormattedMessage(text: string, users: User[] = []): React.ReactNode {
   if (!text) return null;
 
-  // Split text by @mention tokens while retaining delimiters
-  const parts = text.split(/(@[a-zA-Z0-9._-]+)/g);
+  // Split text by markdown links, @mention tokens, and bare URLs
+  const parts = text.split(/(\[[^\]]+\]\s*\(https?:\/\/[^\s\)]+\)|@[a-zA-Z0-9._-]+|https?:\/\/[^\s\)<>"]+)/gi);
 
   return (
     <>
       {parts.map((part, index) => {
+        if (!part) return null;
+
+        // Markdown link: [Title](url) or [Title] (url)
+        const mdLinkMatch = part.match(/^\[([^\]]+)\]\s*\((https?:\/\/[^\s\)]+)\)$/i);
+        if (mdLinkMatch) {
+          return (
+            <a
+              key={`mdlink-${index}`}
+              href={mdLinkMatch[2]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline underline-offset-2 break-all [overflow-wrap:anywhere] font-semibold inline"
+              title={mdLinkMatch[2]}
+            >
+              {mdLinkMatch[1]}
+            </a>
+          );
+        }
+
         if (part.startsWith('@') && part.length > 1) {
           const accountToken = part.slice(1);
           const matchedUser = users.find(
@@ -312,7 +331,7 @@ export function renderFormattedMessage(text: string, users: User[] = []): React.
             return (
               <span
                 key={`mention-${index}-${accountToken}`}
-                className={`font-bold inline-block ${getUserRoleColorClass(matchedUser.role)}`}
+                className={`font-bold inline-block break-words [overflow-wrap:anywhere] ${getUserRoleColorClass(matchedUser.role)}`}
               >
                 @{matchedUser.account}
               </span>
@@ -320,7 +339,31 @@ export function renderFormattedMessage(text: string, users: User[] = []): React.
           }
         }
 
-        return <React.Fragment key={`text-${index}`}>{part}</React.Fragment>;
+        if (/^https?:\/\/[^\s\)<>"]+$/i.test(part)) {
+          const match = part.match(/^(https?:\/\/[^\s\)<>"]+?)([.,;:!?]*)$/);
+          const url = match ? match[1] : part;
+          const trailing = match ? match[2] : '';
+          return (
+            <React.Fragment key={`link-${index}`}>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline underline-offset-2 break-all [overflow-wrap:anywhere] font-medium inline"
+                title={url}
+              >
+                {url}
+              </a>
+              {trailing && <span className="break-words [overflow-wrap:anywhere]">{trailing}</span>}
+            </React.Fragment>
+          );
+        }
+
+        return (
+          <span key={`text-${index}`} className="break-words [overflow-wrap:anywhere]">
+            {part}
+          </span>
+        );
       })}
     </>
   );

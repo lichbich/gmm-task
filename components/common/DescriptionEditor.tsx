@@ -620,7 +620,7 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
   };
 
   return (
-    <div className={`space-y-1.5 ${className}`}>
+    <div className={`space-y-1.5 min-w-0 ${className}`}>
       {/* Hidden file input for image upload */}
       <input
         type="file"
@@ -837,11 +837,11 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
       <div
         onPaste={handlePaste}
         onDrop={handleDrop}
-        className="w-full bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition shadow-2xs relative min-h-[110px]"
+        className="w-full bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl p-3 focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition shadow-2xs relative min-h-[110px] min-w-0 overflow-hidden"
       >
         {editorMode === 'preview' ? (
           // Preview Render
-          <div className="p-1">
+          <div className="p-1 min-w-0 overflow-hidden">
             <RichDescriptionViewer
               content={value}
               onPreviewImage={onPreviewImage}
@@ -849,7 +849,7 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
           </div>
         ) : (
           // Visual Flow Mode
-          <div className="space-y-2">
+          <div className="space-y-2 min-w-0">
             {blocks.map((block, idx) => {
               if (block.type === 'text') {
                 return (
@@ -868,7 +868,7 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
                     onFocus={() => {
                       focusedBlockIndexRef.current = idx;
                     }}
-                    className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 resize-none leading-relaxed font-sans"
+                    className="w-full bg-transparent border-0 outline-hidden focus:outline-hidden focus:ring-0 p-0 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 resize-none leading-relaxed font-sans min-w-0 break-words [overflow-wrap:anywhere]"
                   />
                 );
               }

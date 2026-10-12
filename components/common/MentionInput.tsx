@@ -200,7 +200,7 @@ export const MentionInput = forwardRef<MentionInputHandle, MentionInputProps>(
     };
 
     return (
-      <div ref={containerRef} className="relative w-full flex-1">
+      <div ref={containerRef} className="relative w-full flex-1 min-w-0">
         {/* Autocomplete Dropdown Popup */}
         {isOpen && filteredUsers.length > 0 && (
           <div

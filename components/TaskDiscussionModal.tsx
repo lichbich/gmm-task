@@ -306,7 +306,7 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
         </div>
 
         {/* Scrollable Conversation Body */}
-        <div className="p-4 sm:p-5 flex-1 overflow-y-auto custom-scrollbar space-y-3 min-h-0 bg-slate-50/50 dark:bg-slate-900/60">
+        <div className="p-4 sm:p-5 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-3 min-h-0 min-w-0 bg-slate-50/50 dark:bg-slate-900/60">
           <div className="flex items-center justify-between pb-1">
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
               <span>Nội dung ghi chú & trao đổi ({noteLines.length}):</span>
@@ -314,7 +314,7 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
           </div>
 
           {/* Message Bubbles Stream */}
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 min-w-0">
             {noteLines.length === 0 ? (
               <div className="text-center py-10 text-slate-400 text-xs flex flex-col items-center gap-2">
                 <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-center text-indigo-500">
@@ -338,7 +338,7 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
                     <div
                       key={idx}
                       id={`discussion-note-${idx}`}
-                      className={`rounded-2xl p-3 text-xs space-y-1.5 shadow-2xs transition-all duration-300 ${
+                      className={`rounded-2xl p-3 text-xs space-y-1.5 shadow-2xs transition-all duration-300 min-w-0 break-words [overflow-wrap:anywhere] ${
                         isHighlighted
                           ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
                           : parsed.isMyMessage
@@ -448,7 +448,7 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
                           </div>
                         </div>
                       ) : (
-                        <p className="text-slate-800 dark:text-slate-100 text-xs leading-relaxed whitespace-pre-wrap pl-0.5 pt-0.5 break-words">
+                        <p className="text-slate-800 dark:text-slate-100 text-xs leading-relaxed whitespace-pre-wrap pl-0.5 pt-0.5 break-words [overflow-wrap:anywhere] min-w-0">
                           {renderFormattedMessage(parsed.messageBody, users)}
                         </p>
                       )}
@@ -461,13 +461,13 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
                   <div
                     key={idx}
                     id={`discussion-note-${idx}`}
-                    className={`rounded-2xl p-3 text-xs leading-relaxed whitespace-pre-wrap space-y-1.5 mr-4 transition-all duration-300 ${
+                    className={`rounded-2xl p-3 text-xs leading-relaxed whitespace-pre-wrap space-y-1.5 mr-4 transition-all duration-300 min-w-0 break-words [overflow-wrap:anywhere] ${
                       isHighlighted
                         ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
                         : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200'
                     }`}
                   >
-                    <div>{line}</div>
+                    <div className="break-words [overflow-wrap:anywhere] min-w-0">{renderFormattedMessage(line, users)}</div>
                     <div className="flex items-center justify-end pt-1 border-t border-slate-100 dark:border-slate-700/60">
                       <button
                         type="button"
@@ -517,7 +517,7 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleSendComment} className="flex gap-2">
+          <form onSubmit={handleSendComment} className="flex gap-2 min-w-0">
             <MentionInput
               as="input"
               value={quickComment}

@@ -22,18 +22,56 @@ const IMAGE_EXTENSION_REGEX = /\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i;
 export const renderInlineFormatting = (text: string): React.ReactNode => {
   if (!text) return null;
 
-  // Split on bold, italic, underline, strikethrough, highlight, inline code
-  // **bold**, *italic*, <u>underline</u>, ~~strike~~, <mark>highlight</mark>, ==highlight==, `code`
-  const tokenRegex = /(\*\*[^*]+\*\*|\*[^*]+\*|<u>.*?<\/u>|~~.*?~~|<mark>.*?<\/mark>|==[^=]+==|`[^`]+`)/gi;
+  // Split on markdown links, bare URLs, bold, italic, underline, strikethrough, highlight, inline code
+  // [text](url) or [text] (url), https://..., **bold**, *italic*, <u>underline</u>, ~~strike~~, <mark>highlight</mark>, ==highlight==, `code`
+  const tokenRegex = /(\[[^\]]+\]\s*\(https?:\/\/[^\s\)]+\)|https?:\/\/[^\s\)<>"]+|\*\*[^*]+\*\*|\*[^*]+\*|<u>.*?<\/u>|~~.*?~~|<mark>.*?<\/mark>|==[^=]+==|`[^`]+`)/gi;
   const parts = text.split(tokenRegex);
 
   return parts.map((part, idx) => {
     if (!part) return null;
 
+    // Markdown link: [text](https://...) or [text] (https://...)
+    const mdLinkMatch = part.match(/^\[([^\]]+)\]\s*\((https?:\/\/[^\s\)]+)\)$/i);
+    if (mdLinkMatch) {
+      return (
+        <a
+          key={idx}
+          href={mdLinkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline underline-offset-2 break-all [overflow-wrap:anywhere] font-semibold inline"
+          title={mdLinkMatch[2]}
+        >
+          {mdLinkMatch[1]}
+        </a>
+      );
+    }
+
+    // Bare URL: https://...
+    if (/^https?:\/\/[^\s\)<>"]+$/i.test(part)) {
+      const match = part.match(/^(https?:\/\/[^\s\)<>"]+?)([.,;:!?]*)$/);
+      const url = match ? match[1] : part;
+      const trailing = match ? match[2] : '';
+      return (
+        <React.Fragment key={idx}>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline underline-offset-2 break-all [overflow-wrap:anywhere] font-medium inline"
+            title={url}
+          >
+            {url}
+          </a>
+          {trailing && <span className="break-words [overflow-wrap:anywhere]">{trailing}</span>}
+        </React.Fragment>
+      );
+    }
+
     // Bold **text**
     if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
       return (
-        <strong key={idx} className="font-bold text-slate-900 dark:text-white">
+        <strong key={idx} className="font-bold text-slate-900 dark:text-white break-words [overflow-wrap:anywhere]">
           {renderInlineFormatting(part.substring(2, part.length - 2))}
         </strong>
       );
@@ -42,7 +80,7 @@ export const renderInlineFormatting = (text: string): React.ReactNode => {
     // Italic *text*
     if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
       return (
-        <em key={idx} className="italic text-slate-800 dark:text-slate-200">
+        <em key={idx} className="italic text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">
           {renderInlineFormatting(part.substring(1, part.length - 1))}
         </em>
       );
@@ -52,7 +90,7 @@ export const renderInlineFormatting = (text: string): React.ReactNode => {
     const uMatch = part.match(/^<u>(.*?)<\/u>$/i);
     if (uMatch) {
       return (
-        <span key={idx} className="underline decoration-indigo-400 underline-offset-2">
+        <span key={idx} className="underline decoration-indigo-400 underline-offset-2 break-words [overflow-wrap:anywhere]">
           {renderInlineFormatting(uMatch[1])}
         </span>
       );
@@ -61,7 +99,7 @@ export const renderInlineFormatting = (text: string): React.ReactNode => {
     // Strikethrough ~~text~~
     if (part.startsWith('~~') && part.endsWith('~~') && part.length >= 4) {
       return (
-        <del key={idx} className="line-through text-slate-400 dark:text-slate-500">
+        <del key={idx} className="line-through text-slate-400 dark:text-slate-500 break-words [overflow-wrap:anywhere]">
           {renderInlineFormatting(part.substring(2, part.length - 2))}
         </del>
       );
@@ -73,7 +111,7 @@ export const renderInlineFormatting = (text: string): React.ReactNode => {
       return (
         <mark
           key={idx}
-          className="bg-amber-200/90 dark:bg-amber-900/60 text-slate-900 dark:text-amber-100 px-1 py-0.5 rounded-sm font-medium"
+          className="bg-amber-200/90 dark:bg-amber-900/60 text-slate-900 dark:text-amber-100 px-1 py-0.5 rounded-sm font-medium break-words [overflow-wrap:anywhere]"
         >
           {renderInlineFormatting(markMatch[1])}
         </mark>
@@ -83,7 +121,7 @@ export const renderInlineFormatting = (text: string): React.ReactNode => {
       return (
         <mark
           key={idx}
-          className="bg-amber-200/90 dark:bg-amber-900/60 text-slate-900 dark:text-amber-100 px-1 py-0.5 rounded-sm font-medium"
+          className="bg-amber-200/90 dark:bg-amber-900/60 text-slate-900 dark:text-amber-100 px-1 py-0.5 rounded-sm font-medium break-words [overflow-wrap:anywhere]"
         >
           {renderInlineFormatting(part.substring(2, part.length - 2))}
         </mark>
@@ -95,14 +133,18 @@ export const renderInlineFormatting = (text: string): React.ReactNode => {
       return (
         <code
           key={idx}
-          className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-mono text-[11px] border border-slate-200/80 dark:border-slate-700 font-semibold"
+          className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-mono text-[11px] border border-slate-200/80 dark:border-slate-700 font-semibold break-all [overflow-wrap:anywhere]"
         >
           {part.substring(1, part.length - 1)}
         </code>
       );
     }
 
-    return <React.Fragment key={idx}>{part}</React.Fragment>;
+    return (
+      <span key={idx} className="break-words [overflow-wrap:anywhere]">
+        {part}
+      </span>
+    );
   });
 };
 
@@ -119,16 +161,16 @@ export const CodeBlockViewer: React.FC<{ code: string; language?: string }> = ({
   };
 
   return (
-    <div className="code-block-container my-2.5 rounded-xl border border-slate-750 bg-slate-900 text-slate-100 dark:bg-slate-950 shadow-md overflow-hidden font-mono text-[11.5px] selection:bg-indigo-600 selection:text-white">
-      <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-800/90 dark:bg-slate-900/90 border-b border-slate-700/70 text-[10.5px] text-slate-400 select-none">
-        <span className="font-semibold text-indigo-400 flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
-          <CodeIcon className="w-3.5 h-3.5" />
+    <div className="code-block-container my-2.5 rounded-xl border border-slate-750 bg-slate-900 text-slate-100 dark:bg-slate-950 shadow-md overflow-hidden font-mono text-[11.5px] selection:bg-indigo-600 selection:text-white min-w-0 max-w-full">
+      <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-800/90 dark:bg-slate-900/90 border-b border-slate-700/70 text-[10.5px] text-slate-400 select-none min-w-0">
+        <span className="font-semibold text-indigo-400 flex items-center gap-1.5 uppercase tracking-wider text-[10px] truncate">
+          <CodeIcon className="w-3.5 h-3.5 shrink-0" />
           {language || 'Code'}
         </span>
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-[10px] font-sans"
+          className="flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-[10px] font-sans shrink-0"
           title="Sao chép toàn bộ mã"
         >
           {copied ? (
@@ -144,8 +186,8 @@ export const CodeBlockViewer: React.FC<{ code: string; language?: string }> = ({
           )}
         </button>
       </div>
-      <pre className="code-block-content p-3.5 overflow-x-auto custom-scrollbar leading-relaxed text-slate-100 font-mono selection:bg-indigo-600 selection:text-white">
-        <code className="font-mono text-slate-100 selection:bg-indigo-600 selection:text-white">{code}</code>
+      <pre className="code-block-content p-3.5 overflow-x-auto custom-scrollbar leading-relaxed text-slate-100 font-mono selection:bg-indigo-600 selection:text-white min-w-0 max-w-full">
+        <code className="font-mono text-slate-100 selection:bg-indigo-600 selection:text-white break-normal">{code}</code>
       </pre>
     </div>
   );
@@ -290,7 +332,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
               <Square className="w-4 h-4 text-slate-400 dark:text-slate-500 hover:text-indigo-500" />
             )}
           </span>
-          <span className={`min-w-0 ${isChecked ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
+          <span className={`min-w-0 break-words [overflow-wrap:anywhere] ${isChecked ? 'line-through text-slate-400 dark:text-slate-500' : ''}`}>
             {renderInlineFormatting(itemText)}
           </span>
         </div>
@@ -302,7 +344,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
     // 7. Headings: ###, ##, #
     if (trimmed.startsWith('### ')) {
       renderedElements.push(
-        <h4 key={`h3-${i}`} className="font-bold text-xs text-slate-900 dark:text-white pt-1">
+        <h4 key={`h3-${i}`} className="font-bold text-xs text-slate-900 dark:text-white pt-1 break-words [overflow-wrap:anywhere]">
           {renderInlineFormatting(trimmed.substring(4))}
         </h4>
       );
@@ -311,7 +353,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
     }
     if (trimmed.startsWith('## ')) {
       renderedElements.push(
-        <h3 key={`h2-${i}`} className="font-bold text-sm text-indigo-700 dark:text-indigo-300 pt-1.5 pb-0.5 border-b border-slate-200/60 dark:border-slate-800">
+        <h3 key={`h2-${i}`} className="font-bold text-sm text-indigo-700 dark:text-indigo-300 pt-1.5 pb-0.5 border-b border-slate-200/60 dark:border-slate-800 break-words [overflow-wrap:anywhere]">
           {renderInlineFormatting(trimmed.substring(3))}
         </h3>
       );
@@ -320,7 +362,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
     }
     if (trimmed.startsWith('# ')) {
       renderedElements.push(
-        <h2 key={`h1-${i}`} className="font-extrabold text-sm text-slate-900 dark:text-white pt-2 pb-1 border-b border-indigo-200 dark:border-indigo-900/60">
+        <h2 key={`h1-${i}`} className="font-extrabold text-sm text-slate-900 dark:text-white pt-2 pb-1 border-b border-indigo-200 dark:border-indigo-900/60 break-words [overflow-wrap:anywhere]">
           {renderInlineFormatting(trimmed.substring(2))}
         </h2>
       );
@@ -333,7 +375,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
       renderedElements.push(
         <blockquote
           key={`quote-${i}`}
-          className="border-l-3 border-indigo-400 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 px-3 py-1.5 my-1 rounded-r-lg text-slate-700 dark:text-slate-300 italic text-[11.5px]"
+          className="border-l-3 border-indigo-400 dark:border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 px-3 py-1.5 my-1 rounded-r-lg text-slate-700 dark:text-slate-300 italic text-[11.5px] break-words [overflow-wrap:anywhere]"
         >
           {renderInlineFormatting(trimmed.substring(2))}
         </blockquote>
@@ -348,7 +390,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
       renderedElements.push(
         <div key={`bullet-${i}`} className="flex items-start gap-2 pl-2 py-0.5">
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400 mt-1.5 shrink-0" />
-          <span className="min-w-0">{renderInlineFormatting(cleanText)}</span>
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{renderInlineFormatting(cleanText)}</span>
         </div>
       );
       i++;
@@ -364,7 +406,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
           <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-[11px] shrink-0 min-w-[16px]">
             {num}.
           </span>
-          <span className="min-w-0">{renderInlineFormatting(itemText)}</span>
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{renderInlineFormatting(itemText)}</span>
         </div>
       );
       i++;
@@ -373,7 +415,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
 
     // 11. Regular paragraph
     renderedElements.push(
-      <p key={`p-${i}`} className="leading-relaxed">
+      <p key={`p-${i}`} className="leading-relaxed break-words [overflow-wrap:anywhere] min-w-0">
         {renderInlineFormatting(line)}
       </p>
     );
@@ -381,7 +423,7 @@ export const RichDescriptionViewer: React.FC<RichDescriptionViewerProps> = ({
   }
 
   return (
-    <div className={`space-y-1.5 text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-sans ${className}`}>
+    <div className={`space-y-1.5 text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-sans min-w-0 break-words [overflow-wrap:anywhere] overflow-x-hidden ${className}`}>
       {renderedElements}
     </div>
   );
