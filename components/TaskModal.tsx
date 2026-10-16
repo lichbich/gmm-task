@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { Task, Specialization, TaskStatus, TaskActivityLog, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, isSpecializationMatchingRole } from '../types/task';
-import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2, CornerDownRight, GitFork, Layers, ChevronDown, ChevronRight, ChevronUp, Check, Link2, User, Flag, FolderOpen, History, Activity, Clock, UserCheck, CheckCircle2 } from 'lucide-react';
+import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2, CornerDownRight, GitFork, Layers, ChevronDown, ChevronRight, ChevronUp, Check, Copy, Link2, User, Flag, FolderOpen, History, Activity, Clock, UserCheck, CheckCircle2 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
@@ -16,6 +16,7 @@ import { AITaskChatBox } from './AITaskChatBox';
 import { SubTaskSuggestion, requestAIEffortSuggestion, isAIFeatureEnabled } from '../lib/geminiService';
 import { ensureTaskTitlePrefix, getRoleTaskPrefix } from '../lib/taskPrefixHelper';
 import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
+import { generateNextTaskCode } from '../lib/taskCodeHelper';
 import { LinkExistingTasksModal } from './common/LinkExistingTasksModal';
 
 const formatDateTime = (isoOrStr: string) => {
@@ -296,6 +297,27 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   }, [task]);
 
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  const [copiedCode, setCopiedCode] = useState<boolean>(false);
+
+  const previewCode = useMemo(() => {
+    const isUnchanged =
+      Boolean(task?.code) &&
+      task?.milestoneId === milestoneId &&
+      task?.role === role &&
+      Boolean(task?.isSubtask || task?.subtaskParentId) === Boolean(isSubtaskMode || subtaskParentId) &&
+      (task?.subtaskParentId || '') === (subtaskParentId || '');
+
+    if (isUnchanged) return task!.code;
+
+    return generateNextTaskCode({
+      milestoneId: milestoneId,
+      role: role,
+      isSubtask: Boolean(isSubtaskMode || subtaskParentId),
+      subtaskParentId: subtaskParentId,
+      existingTasks: tasks.filter((t) => t.id !== task?.id),
+      milestones,
+    });
+  }, [task, milestoneId, role, isSubtaskMode, subtaskParentId, tasks, milestones]);
 
   const assigneeUser = useMemo(() => {
     if (!task?.assigneeAccount) return null;
@@ -1083,13 +1105,39 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               {task ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             </div>
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
-                {task
-                  ? 'Chỉnh Sửa & Phân Công Task'
-                  : milestoneId
-                  ? 'Break Task Mới từ Milestone'
-                  : 'Tạo Task Tự Do Mới'}
-              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+                  {task
+                    ? 'Chỉnh Sửa & Phân Công Task'
+                    : milestoneId
+                    ? 'Break Task Mới từ Milestone'
+                    : 'Tạo Task Tự Do Mới'}
+                </h3>
+                {task?.code && previewCode === task.code ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(task.code!);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-mono text-xs font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition cursor-pointer active:scale-95"
+                    title="Bấm để sao chép mã task"
+                  >
+                    <span>{task.code}</span>
+                    {copiedCode ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 opacity-60" />}
+                  </button>
+                ) : (
+                  previewCode && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-mono text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                      title={task ? 'Mã task mới dự kiến khi lưu thay đổi' : 'Mã định danh dự kiến khi khởi tạo'}
+                    >
+                      {task ? `Mã mới: ${previewCode}` : `Mã: ${previewCode}`}
+                    </span>
+                  )
+                )}
+              </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate">Thiết lập đầu việc, số giờ ước tính, phân công và ghi chú luồng task</p>
             </div>
           </div>
@@ -1424,6 +1472,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             >
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className="text-indigo-400 font-mono text-xs font-bold">↳</span>
+                                {st.code && (
+                                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
+                                    {st.code}
+                                  </span>
+                                )}
                                 <span className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate">
                                   {st.title}
                                 </span>

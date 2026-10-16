@@ -19,6 +19,13 @@ import { AIPermissionsConfig, DEFAULT_AI_ALLOWED_ACCOUNTS, isAIFeatureEnabled } 
 import { SystemPermissionsMatrix, getDefaultPermissionsMatrix, checkUserSystemPermission } from '../lib/permissionsHelper';
 import { ensureTaskTitlePrefix } from '../lib/taskPrefixHelper';
 import { calculateParentMetrics } from '../lib/subtaskHelper';
+import {
+  generateNextTaskCode,
+  parseTaskCode,
+  isValidTaskCode,
+  promoteSubtasksToStandalone,
+  enrichTasksWithHierarchicalCodes,
+} from '../lib/taskCodeHelper';
 
 export interface UpdateTaskNotesOptions {
   isRecall?: boolean;
@@ -693,9 +700,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }));
             setUsers(formattedUsers);
           }
+          let activeMilestones: Milestone[] = [];
           if (data.milestones) {
             const milestoneList = Object.values(data.milestones) as Milestone[];
             const { renumbered, changed } = renumberMilestonesByRole(milestoneList);
+            activeMilestones = renumbered;
             setMilestones(renumbered);
             if (changed) {
               syncMilestonesToFirebase(renumbered);
@@ -785,28 +794,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
 
           if (mergedTasks.length > 0) {
-            // Reconcile parent task metrics for all parent tasks that have subtasks
-            const parentIds = new Set<string>();
-            mergedTasks.forEach((t) => {
-              if (t.subtaskParentId) parentIds.add(t.subtaskParentId);
+            // Enrich with hierarchical task codes (Enterprise Standard)
+            const { enrichedTasks, hasChanges: codesChanged } = enrichTasksWithHierarchicalCodes(mergedTasks, activeMilestones);
+            if (codesChanged) {
+              hasLegacy = true;
+            }
+
+            // Reconcile parent task metrics in a single O(N) pass
+            const subtasksByParent = new Map<string, Task[]>();
+            enrichedTasks.forEach((t) => {
+              if (t.subtaskParentId) {
+                const list = subtasksByParent.get(t.subtaskParentId) || [];
+                list.push(t);
+                subtasksByParent.set(t.subtaskParentId, list);
+              }
             });
-            let reconciledTasks = mergedTasks;
-            parentIds.forEach((pId) => {
-              const res = syncParentTaskMetricsInList(reconciledTasks, pId);
-              reconciledTasks = res.updatedList;
+            const todayStr = getTodayDateOnlyString(simulatedTime);
+            const reconciledTasks = enrichedTasks.map((t) => {
+              const subtasks = subtasksByParent.get(t.id);
+              if (!subtasks || subtasks.length === 0) return t;
+              const metrics = calculateParentMetrics(t, subtasks);
+              let nextStartDate = t.startDate;
+              let nextEndDate = t.endDate;
+              if (metrics.status === 'In Progress' && !nextStartDate) nextStartDate = todayStr;
+              else if (metrics.status === 'Done') {
+                if (!nextStartDate) nextStartDate = todayStr;
+                if (!nextEndDate) nextEndDate = todayStr;
+              }
+              return {
+                ...t,
+                isParentTask: true,
+                completionPercentage: metrics.completionPercentage,
+                status: metrics.status,
+                estimatedEffort: metrics.totalEstimatedEffort,
+                actualEffort: metrics.totalActualEffort,
+                startDate: nextStartDate,
+                endDate: nextEndDate,
+                supporterAccounts: metrics.collaboratorAccounts.length > 0 ? metrics.collaboratorAccounts : t.supporterAccounts,
+              };
             });
             setTasks(reconciledTasks);
-            saveLocalTasksCache(reconciledTasks);
+            setTimeout(() => {
+              saveLocalTasksCache(reconciledTasks);
+            }, 0);
+
+            if (hasLegacy) {
+              const obj: Record<string, Task> = {};
+              reconciledTasks.forEach((t) => {
+                obj[t.id] = sanitizeForFirebase(t);
+              });
+              update(ref(database, `${DB_ROOT_NODE}/tasks`), obj).catch(console.error);
+            }
           } else if (rawRemoteTasks.length === 0 && localCached.length === 0) {
             setTasks([]);
-          }
-
-          if (hasLegacy) {
-            const obj: Record<string, Task> = {};
-            formattedRemoteTasks.forEach((t) => {
-              obj[t.id] = sanitizeForFirebase(t);
-            });
-            update(ref(database, `${DB_ROOT_NODE}/tasks`), obj).catch(console.error);
           }
 
           if (data.weeklyArchives) {
@@ -1882,6 +1922,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const authorRole = authSession?.role || 'Admin';
     const creatorDisplay = `${authorName} (@${authorAccount})`;
 
+    const assignedCode = taskData.code || generateNextTaskCode({
+      milestoneId: taskData.milestoneId,
+      role: taskData.role,
+      isSubtask: Boolean(taskData.isSubtask || taskData.subtaskParentId),
+      subtaskParentId: taskData.subtaskParentId,
+      existingTasks: tasks,
+      milestones,
+    });
+
     const initialLog: TaskActivityLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: nowIso,
@@ -1889,7 +1938,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       authorAccount,
       authorRole,
       actionType: 'CREATE',
-      summary: 'Khởi tạo công việc mới',
+      summary: `Khởi tạo công việc mới [${assignedCode}]`,
     };
 
     const pct = taskData.completionPercentage || 0;
@@ -1906,6 +1955,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newTask: Task = {
       ...taskData,
+      code: assignedCode,
       title: safeTitle,
       id: `tsk-${Date.now()}`,
       orderInMilestone: milestoneTasks.length + 1,
@@ -2022,10 +2072,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updates.year = selectedYear;
       }
 
+      // Hierarchical Task Code Management
+      let nextCode = updates.code !== undefined ? updates.code : t.code;
+      const isBecomingSubtask = updates.subtaskParentId && updates.subtaskParentId !== t.subtaskParentId;
+      const isDetachingSubtask =
+        (updates.subtaskParentId === '' || updates.subtaskParentId === null || updates.isSubtask === false) &&
+        Boolean(t.subtaskParentId);
+      const isMilestoneChanged = updates.milestoneId !== undefined && updates.milestoneId !== t.milestoneId;
+      const isRoleChanged = updates.role !== undefined && updates.role !== t.role;
+
+      if (!updates.code && (isBecomingSubtask || isDetachingSubtask || isMilestoneChanged || isRoleChanged || !t.code)) {
+        const effectiveMilestoneId = updates.milestoneId !== undefined ? updates.milestoneId : t.milestoneId;
+        const effectiveRole = updates.role || t.role;
+        const effectiveIsSubtask = isBecomingSubtask
+          ? true
+          : isDetachingSubtask
+          ? false
+          : Boolean(updates.isSubtask !== undefined ? updates.isSubtask : t.isSubtask);
+        const effectiveParentId = isBecomingSubtask
+          ? updates.subtaskParentId
+          : isDetachingSubtask
+          ? undefined
+          : updates.subtaskParentId !== undefined
+          ? updates.subtaskParentId
+          : t.subtaskParentId;
+
+        nextCode = generateNextTaskCode({
+          milestoneId: effectiveMilestoneId,
+          role: effectiveRole,
+          isSubtask: effectiveIsSubtask,
+          subtaskParentId: effectiveParentId,
+          existingTasks: tasks.filter((item) => item.id !== t.id),
+          milestones,
+        });
+        updates.code = nextCode;
+      }
+
       if (options?.skipLog) {
         targetTaskUpdated = {
           ...t,
           ...updates,
+          code: nextCode,
           updatedAt: nowIso,
           updatedBy: updaterDisplay,
         };
@@ -2036,6 +2123,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const changes: string[] = [];
+      if (nextCode && nextCode !== t.code) {
+        changes.push(`Mã task: "${t.code || 'Chưa có'}" ➔ "${nextCode}"`);
+      }
       if (updates.status && updates.status !== t.status) {
         changes.push(`Trạng thái: "${t.status}" ➔ "${updates.status}"`);
       }
@@ -2135,6 +2225,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         parentsUpdated.push(res.parentTaskUpdated);
       }
     });
+
+    // Propagate parent code change to child subtasks
+    if (targetTaskUpdated && currentTaskBeforeUpdate?.code && (targetTaskUpdated as Task).code !== currentTaskBeforeUpdate.code) {
+      const newParentCode = (targetTaskUpdated as Task).code;
+      if (newParentCode) {
+        const baseParentCode = newParentCode.split('.')[0];
+        const childrenToSync: Task[] = [];
+        updated = updated.map((item) => {
+          if (item.subtaskParentId === id) {
+            const parsed = parseTaskCode(item.code);
+            const subIdx = parsed?.subIndex || 1;
+            const newChildCode = `${baseParentCode}.${String(subIdx).padStart(2, '0')}`;
+            if (item.code !== newChildCode) {
+              const childUpdated: Task = {
+                ...item,
+                code: newChildCode,
+                updatedAt: nowIso,
+                updatedBy: updaterDisplay,
+              };
+              childrenToSync.push(childUpdated);
+              return childUpdated;
+            }
+          }
+          return item;
+        });
+        childrenToSync.forEach((c) => saveTaskToFirebase(c).catch(console.error));
+      }
+    }
 
     setTasks(updated);
     saveLocalTasksCache(updated);
@@ -2286,9 +2404,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? tasks.filter((t) => t.milestoneId === taskToClone.milestoneId)
       : [];
 
+    const newCode = generateNextTaskCode({
+      milestoneId: taskToClone.milestoneId,
+      role: taskToClone.role,
+      isSubtask: Boolean(taskToClone.isSubtask || taskToClone.subtaskParentId),
+      subtaskParentId: taskToClone.subtaskParentId,
+      existingTasks: tasks,
+      milestones,
+    });
+
     const newTask: Task = {
       ...taskToClone,
       id: `tsk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      code: newCode,
       title: `${taskToClone.title} (Copy)`,
       orderInMilestone: milestoneTasks.length + 1,
       status: 'To do',
@@ -2319,7 +2447,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteTask = (id: string) => {
     const taskToDelete = tasks.find((t) => t.id === id);
-    let updated = tasks.filter((t) => t.id !== id);
+    if (!taskToDelete) return;
+
+    // Rule 3: Detach & Promote subtasks when deleting a parent task
+    const promotedSubtasks = promoteSubtasksToStandalone(id, tasks, milestones, {
+      name: authSession?.name || 'Admin',
+      account: authSession?.account || 'admin',
+      role: authSession?.role || 'Admin',
+    });
+
+    const promotedMap = new Map(promotedSubtasks.map((p) => [p.id, p]));
+    let updated = tasks
+      .filter((t) => t.id !== id)
+      .map((t) => promotedMap.get(t.id) || t);
+
     let parentToSync: Task | null = null;
     if (taskToDelete?.subtaskParentId) {
       const res = syncParentTaskMetricsInList(updated, taskToDelete.subtaskParentId, simulatedTime);
@@ -2332,6 +2473,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (parentToSync) {
       saveTaskToFirebase(parentToSync).catch(console.error);
     }
+    promotedSubtasks.forEach((p) => saveTaskToFirebase(p).catch(console.error));
   };
 
   const deleteTasks = (ids: string[]) => {
@@ -2343,7 +2485,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         parentsToSync.add(t.subtaskParentId);
       }
     });
-    let updated = tasks.filter((t) => !idSet.has(t.id));
+
+    // Rule 3: Detach & Promote subtasks for all deleted parents
+    let promotedSubtasksTotal: Task[] = [];
+    ids.forEach((pId) => {
+      const promoted = promoteSubtasksToStandalone(pId, tasks, milestones, {
+        name: authSession?.name || 'Admin',
+        account: authSession?.account || 'admin',
+        role: authSession?.role || 'Admin',
+      });
+      if (promoted.length > 0) {
+        promotedSubtasksTotal.push(...promoted);
+      }
+    });
+
+    const promotedMap = new Map(promotedSubtasksTotal.map((p) => [p.id, p]));
+    let updated = tasks
+      .filter((t) => !idSet.has(t.id))
+      .map((t) => promotedMap.get(t.id) || t);
+
     const parentsUpdated: Task[] = [];
     parentsToSync.forEach((parentId) => {
       if (!idSet.has(parentId)) {
@@ -2356,6 +2516,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveLocalTasksCache(updated);
     deleteMultipleTasksFromFirebase(ids, authSession?.account).catch(console.error);
     parentsUpdated.forEach((p) => saveTaskToFirebase(p).catch(console.error));
+    promotedSubtasksTotal.forEach((p) => saveTaskToFirebase(p).catch(console.error));
   };
 
   const reorderTasksInMilestone = (milestoneId: string, orderedTaskIds: string[]) => {

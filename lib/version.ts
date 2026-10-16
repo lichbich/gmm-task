@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.9.9';
+export const APP_VERSION = '2.10.0';
 export const APP_RELEASE_NOTE =
-  'Khắc phục lỗi cuộn trang và tích hợp phần Nhật ký Activity Log cho Modal Task';
+  'Ra mắt Hệ thống Mã Task Phân Cấp (Hierarchical Task Code) chuẩn Enterprise [SCOPE]-[ROLE]-[NUM][.SUB], bảo vệ công sức khi xóa task cha và tự động hóa mã khi chuyển đổi vị trí';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 

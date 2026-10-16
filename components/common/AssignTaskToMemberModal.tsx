@@ -3,6 +3,8 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { Task, User, getUserRoleColorClass, getUserRoleInSpec } from '../../types/task';
+import { useApp } from '../../context/AppContext';
+import { getEffectiveTaskCode } from '../../lib/taskCodeHelper';
 import { useModalAnimation } from '../../hooks/useModalAnimation';
 import { UserAvatar } from './UserAvatar';
 import {
@@ -46,6 +48,7 @@ export const AssignTaskToMemberModal: React.FC<AssignTaskToMemberModalProps> = (
   onCreateNewTask,
 }) => {
   const [mounted, setMounted] = React.useState(false);
+  const { tasks, milestones } = useApp();
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } =
     useModalAnimation(isOpen, onClose);
 
@@ -170,10 +173,6 @@ export const AssignTaskToMemberModal: React.FC<AssignTaskToMemberModalProps> = (
                             Tuần {t.weekNumber <= 53 ? t.weekNumber + 55 : t.weekNumber}
                           </span>
                         ) : null}
-                        <span className="text-slate-300 dark:text-slate-600">•</span>
-                        <span className="font-mono text-[10px] text-slate-400">
-                          #{t.id.replace('tsk-', '')}
-                        </span>
                       </div>
                     </div>
 

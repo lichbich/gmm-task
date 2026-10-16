@@ -292,12 +292,14 @@ export interface TaskActivityLog {
     | 'ASSIGNEE_CHANGE'
     | 'DESC_UPDATE'
     | 'NOTE_ADD'
+    | 'TASK_CODE_CHANGE'
     | 'GENERAL_UPDATE';
   summary: string; // Tóm tắt nội dung thay đổi
 }
 
 export interface Task {
   id: string;
+  code?: string; // Mã phân cấp trực quan: [SCOPE]-[ROLE]-[NUMBER][.SUB] (VD: MS01-FE-015, MS01-FE-015.01, ADH-BE-008)
   title: string;
   description?: string; // Chi tiết task mô tả bởi Leader
   createdBy?: string; // Người tạo đầu việc (e.g. "QuynhNV (Leader)")

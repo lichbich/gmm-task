@@ -61,6 +61,16 @@ function MainApp() {
   const { authSession, tasks, weeklyArchives } = useApp();
   const [activeMainSection, setActiveMainSection] = useState<MainSectionType>(getInitialMainSection);
   const [activeTaskTab, setActiveTaskTab] = useState<string>(getInitialTaskTab);
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set([getInitialTaskTab()]));
+
+  useEffect(() => {
+    setVisitedTabs((prev) => {
+      if (prev.has(activeTaskTab)) return prev;
+      const next = new Set(prev);
+      next.add(activeTaskTab);
+      return next;
+    });
+  }, [activeTaskTab]);
 
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
@@ -300,26 +310,44 @@ function MainApp() {
           <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-20 sm:pb-24 md:pb-8">
             {/* MAIN SECTION 1: TASK MANAGEMENT */}
             {activeMainSection === 'tasks' && (
-              <div key={activeTaskTab} className="animate-in fade-in duration-200">
-                {activeTaskTab === 'schedule' && (
-                  <WorkScheduleTable onOpenTaskModal={handleOpenTaskModal} />
+              <div className="animate-in fade-in duration-200">
+                {visitedTabs.has('schedule') && (
+                  <div className={activeTaskTab === 'schedule' ? 'block' : 'hidden'}>
+                    <WorkScheduleTable onOpenTaskModal={handleOpenTaskModal} />
+                  </div>
                 )}
-                {activeTaskTab === 'milestones' && <MilestonesView />}
-                {activeTaskTab === 'tickets' && (
-                  <TicketsView
-                    initialSelectedTicketId={selectedTicketIdForView}
-                    onClearInitialTicketId={() => setSelectedTicketIdForView(null)}
-                  />
+                {visitedTabs.has('milestones') && (
+                  <div className={activeTaskTab === 'milestones' ? 'block' : 'hidden'}>
+                    <MilestonesView />
+                  </div>
                 )}
-                {activeTaskTab === 'nextweek' && (
-                  <NextWeekDefineView onOpenTaskModal={handleOpenTaskModal} />
+                {visitedTabs.has('tickets') && (
+                  <div className={activeTaskTab === 'tickets' ? 'block' : 'hidden'}>
+                    <TicketsView
+                      initialSelectedTicketId={selectedTicketIdForView}
+                      onClearInitialTicketId={() => setSelectedTicketIdForView(null)}
+                    />
+                  </div>
                 )}
-                {activeTaskTab === 'kanban' && (
-                  <KanbanBoard onOpenTaskModal={handleOpenTaskModal} />
+                {visitedTabs.has('nextweek') && (
+                  <div className={activeTaskTab === 'nextweek' ? 'block' : 'hidden'}>
+                    <NextWeekDefineView onOpenTaskModal={handleOpenTaskModal} />
+                  </div>
                 )}
-                {activeTaskTab === 'awards' && <AwardLeaderboard />}
-                {activeTaskTab === 'history' && (
-                  <WorkHistoryView onOpenTaskModal={handleOpenTaskModal} />
+                {visitedTabs.has('kanban') && (
+                  <div className={activeTaskTab === 'kanban' ? 'block' : 'hidden'}>
+                    <KanbanBoard onOpenTaskModal={handleOpenTaskModal} />
+                  </div>
+                )}
+                {visitedTabs.has('awards') && (
+                  <div className={activeTaskTab === 'awards' ? 'block' : 'hidden'}>
+                    <AwardLeaderboard />
+                  </div>
+                )}
+                {visitedTabs.has('history') && (
+                  <div className={activeTaskTab === 'history' ? 'block' : 'hidden'}>
+                    <WorkHistoryView onOpenTaskModal={handleOpenTaskModal} />
+                  </div>
                 )}
               </div>
             )}

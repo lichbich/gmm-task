@@ -11,6 +11,7 @@ import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
 import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
+import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import {
   History,
   FolderArchive,
@@ -556,8 +557,10 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {tasksByRole.map(([roleCode, roleTasks]) => {
-                        const tasksByAccountMap = new Map<string, Task[]>();
+                      {(() => {
+                        let runningStt = 0;
+                        return tasksByRole.map(([roleCode, roleTasks]) => {
+                          const tasksByAccountMap = new Map<string, Task[]>();
                         roleTasks.forEach((t) => {
                           const primaryAcc = (t.assigneeAccount || '').trim();
 
@@ -679,6 +682,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                   </tr>
                                 )}
                                 {[...accTasks].sort(sortByPriority).map((t) => {
+                                  runningStt++;
+                                  const displayIdx = runningStt;
                                   const milestone = milestones.find((m) => m.id === t.milestoneId);
                                   const unreadNotes = hasUnreadNote(t);
                                   const effectiveEffort = t.completionPercentage === 0 ? 0 : getMemberTaskEffort(t, acc || t.assigneeAccount);
@@ -691,8 +696,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                       key={`${t.id}-${currentAcc}`}
                                       className="hover:bg-slate-50/80 transition-colors group"
                                     >
-                                      <td className="py-3 px-4 text-center text-slate-400 font-mono text-[11px]">
-                                        {t.id.replace('tsk-', '')}
+                                      <td className="py-3 px-4 text-center text-slate-400 font-mono text-[11px] font-medium">
+                                        {displayIdx}
                                       </td>
 
                                       <td className="py-3 px-4">
@@ -881,14 +886,17 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                             ))}
                           </React.Fragment>
                         );
-                      })}
+                      });
+                    })()}
                     </tbody>
                   </table>
                 </div>
 
                 {/* MOBILE VIEW: History Cards */}
                 <div className="md:hidden space-y-3 p-3">
-                  {tasksByRole.map(([roleCode, roleTasks]) => {
+                  {(() => {
+                    let mobileRunningStt = 0;
+                    return tasksByRole.map(([roleCode, roleTasks]) => {
                     const tasksByAccountMap = new Map<string, Task[]>();
                     roleTasks.forEach((t) => {
                       const primaryAcc = (t.assigneeAccount || '').trim();
@@ -994,6 +1002,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                           {accountGroups.map(([acc, accTasks]) => (
                             <div key={`mobile-acc-${roleCode}-${acc || 'unassigned'}`} className="space-y-2">
                               {[...accTasks].sort(sortByPriority).map((t) => {
+                                mobileRunningStt++;
                                 const milestone = milestones.find((m) => m.id === t.milestoneId);
                                 const unreadNotes = hasUnreadNote(t);
                                 const currentAcc = acc || t.assigneeAccount;
@@ -1012,8 +1021,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                                   >
                                     <div className="flex items-center justify-between gap-1.5 flex-wrap">
                                       <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="text-[10px] font-mono text-slate-400 font-bold">
-                                          #{t.id.replace('tsk-', '')}
+                                        <span className="text-[10px] font-mono text-slate-400 font-bold bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                                          #{mobileRunningStt}
                                         </span>
                                         {(() => {
                                           const linkedTicket = getLinkedTicket(t);
@@ -1120,7 +1129,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                         </div>
                       </div>
                     );
-                  })}
+                  });
+                })()}
                 </div>
               </>
             )}

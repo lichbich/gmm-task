@@ -24,6 +24,7 @@ import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
 import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
+import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import {
   Search,
   Plus,
@@ -195,60 +196,126 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     [currentUser]
   );
 
-  // Compute unassigned members and unassigned tasks for a role in selectedWeek & selectedYear
-  const getRoleUnassignedData = useCallback(
-    (roleCode: string) => {
-      // Users belonging to this role (strictly exclude Admins and disabled accounts)
+  // Pre-indexed lookup maps for O(1) instantaneous access across all rows and cards
+  const subtasksByParentIdMap = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    tasks.forEach((t) => {
+      if (t.subtaskParentId) {
+        const list = map.get(t.subtaskParentId) || [];
+        list.push(t);
+        map.set(t.subtaskParentId, list);
+      }
+    });
+    return map;
+  }, [tasks]);
+
+  const parentMetricsMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof calculateParentMetrics>>();
+    tasks.forEach((t) => {
+      const subtasks = subtasksByParentIdMap.get(t.id);
+      if (subtasks && subtasks.length > 0) {
+        map.set(t.id, calculateParentMetrics(t, subtasks));
+      }
+    });
+    return map;
+  }, [tasks, subtasksByParentIdMap]);
+
+  const userByAccountMap = useMemo(() => {
+    const map = new Map<string, User>();
+    users.forEach((u) => {
+      if (u.account) {
+        map.set(u.account.trim().toLowerCase(), u);
+      }
+    });
+    return map;
+  }, [users]);
+
+  const milestoneByIdMap = useMemo(() => {
+    const map = new Map<string, Milestone>();
+    milestones.forEach((m) => {
+      map.set(m.id, m);
+    });
+    return map;
+  }, [milestones]);
+
+  const ticketLookup = useMemo(() => {
+    const byId = new Map<string, Ticket>();
+    const byTaskId = new Map<string, Ticket>();
+    tickets.forEach((tk) => {
+      byId.set(tk.id, tk);
+      if (tk.createdTaskId) byTaskId.set(tk.createdTaskId, tk);
+    });
+    return { byId, byTaskId };
+  }, [tickets]);
+
+  const accumulatedEffortMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof calculateTaskAccumulatedEffort>>();
+    tasks.forEach((t) => {
+      map.set(t.id, calculateTaskAccumulatedEffort(t, tasks, weeklyArchives));
+    });
+    return map;
+  }, [tasks, weeklyArchives]);
+
+  // Precompute unassigned members and unassigned tasks for all roles in selectedWeek & selectedYear
+  const roleUnassignedDataMap = useMemo(() => {
+    const map = new Map<string, { unassignedMembers: User[]; unassignedTasks: Task[] }>();
+    const weekTasks = tasks.filter(
+      (t) => (t.weekNumber || selectedWeek) === selectedWeek && (t.year || selectedYear) === selectedYear
+    );
+    const busyAccountsSet = new Set<string>();
+    weekTasks.forEach((t) => {
+      if (t.assigneeAccount) {
+        busyAccountsSet.add(t.assigneeAccount.trim().toLowerCase());
+      }
+      if (t.supporterAccounts) {
+        t.supporterAccounts.forEach((s) => busyAccountsSet.add(s.trim().toLowerCase()));
+      }
+    });
+
+    roles.forEach((r) => {
+      const roleCode = r.code;
       const roleMembers = users.filter((u) => u.role !== 'Admin' && isUserInRoleGroup(u, roleCode));
+      const unassignedMembers = roleMembers.filter((u) => !busyAccountsSet.has(u.account.trim().toLowerCase()));
 
-      // Tasks in the selected week & year
-      const weekTasks = tasks.filter(
-        (t) =>
-          (t.weekNumber || selectedWeek) === selectedWeek && (t.year || selectedYear) === selectedYear
-      );
-
-      // Filter members who currently have 0 tasks assigned (as main assignee or supporter) in this week
-      const unassignedMembers = roleMembers.filter((u) => {
-        const uAcc = u.account.trim().toLowerCase();
-        const hasAnyTask = weekTasks.some((t) => {
-          const isAssignee = Boolean(t.assigneeAccount && t.assigneeAccount.trim().toLowerCase() === uAcc);
-          const isSupporter = Boolean(t.supporterAccounts && t.supporterAccounts.some((s) => s.trim().toLowerCase() === uAcc));
-          return isAssignee || isSupporter;
-        });
-        return !hasAnyTask;
-      });
-
-      // Unassigned tasks for this role across Backlog pool and current/past weeks
-      const unassignedTasksInRole = tasks.filter((t) => {
+      const unassignedTasks = tasks.filter((t) => {
         const isRoleMatch = isSpecializationMatchingRole(t.role, roleCode);
         const isUnassigned = !t.assigneeAccount || t.assigneeAccount.trim() === '';
         if (!isRoleMatch || !isUnassigned) return false;
-        // Available if in Backlog (no week) OR created for current/past week
         return !t.weekNumber || t.weekNumber <= selectedWeek;
       });
 
-      return {
-        unassignedMembers,
-        unassignedTasks: unassignedTasksInRole,
-      };
+      map.set(roleCode, { unassignedMembers, unassignedTasks });
+    });
+
+    return map;
+  }, [roles, users, tasks, selectedWeek, selectedYear, isUserInRoleGroup]);
+
+  const getRoleUnassignedData = useCallback(
+    (roleCode: string) => {
+      return roleUnassignedDataMap.get(roleCode) || { unassignedMembers: [], unassignedTasks: [] };
     },
-    [users, tasks, selectedWeek, selectedYear, isUserInRoleGroup]
+    [roleUnassignedDataMap]
   );
 
   const getLinkedTicket = useCallback(
     (t: Task): Ticket | undefined => {
       if (t.ticketId) {
-        const found = tickets.find((tk) => tk.id === t.ticketId);
+        const found = ticketLookup.byId.get(t.ticketId);
         if (found) return found;
       }
-      return tickets.find(
-        (tk) =>
-          (tk.createdTaskId && tk.createdTaskId === t.id) ||
-          (tk.code && t.title && (t.title.includes(`[${tk.code}]`) || t.title.includes(tk.code))) ||
-          (t.ticketId && tk.id === t.ticketId)
-      );
+      const foundByTaskId = ticketLookup.byTaskId.get(t.id);
+      if (foundByTaskId) return foundByTaskId;
+
+      if (t.title && t.title.includes('[')) {
+        return tickets.find(
+          (tk) =>
+            (tk.code && (t.title.includes(`[${tk.code}]`) || t.title.includes(tk.code))) ||
+            (t.ticketId && tk.id === t.ticketId)
+        );
+      }
+      return undefined;
     },
-    [tickets]
+    [tickets, ticketLookup]
   );
 
   const handleTaskClick = (t: Task) => {
@@ -705,6 +772,23 @@ const getRoleOrderRank = (roleCode?: string): number => {
   const isProgrammaticScrollRef = useRef<boolean>(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Progressive rendering state: initial 2 role groups or 25 my-tasks for instant initial mount
+  const [visibleRoleCount, setVisibleRoleCount] = useState<number>(2);
+  const [visibleMyTasksCount, setVisibleMyTasksCount] = useState<number>(25);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Responsive device rendering detection to prevent double DOM mount (Desktop table + Mobile cards)
+  const [deviceType, setDeviceType] = useState<'desktop' | 'mobile' | 'all'>('all');
+
+  useEffect(() => {
+    const updateDevice = () => {
+      setDeviceType(window.innerWidth >= 768 ? 'desktop' : 'mobile');
+    };
+    updateDevice();
+    window.addEventListener('resize', updateDevice);
+    return () => window.removeEventListener('resize', updateDevice);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (scrollTimeoutRef.current) {
@@ -761,32 +845,35 @@ const getRoleOrderRank = (roleCode?: string): number => {
   }, [subTab, groupedTasksByRole]);
 
   const scrollToRole = useCallback((roleCode: string) => {
-    const isDesktop = window.innerWidth >= 768;
-    const id = isDesktop ? `role-section-${roleCode}` : `mobile-role-section-${roleCode}`;
-    const el = document.getElementById(id);
-    if (el) {
-      const topOffset = isDesktop ? 65 : 55;
-      const elementPosition = el.getBoundingClientRect().top + window.scrollY;
-      const offsetPosition = Math.max(0, elementPosition - topOffset);
+    setVisibleRoleCount(9999);
+    setTimeout(() => {
+      const isDesktop = window.innerWidth >= 768;
+      const id = isDesktop ? `role-section-${roleCode}` : `mobile-role-section-${roleCode}`;
+      const el = document.getElementById(id);
+      if (el) {
+        const topOffset = isDesktop ? 65 : 55;
+        const elementPosition = el.getBoundingClientRect().top + window.scrollY;
+        const offsetPosition = Math.max(0, elementPosition - topOffset);
 
-      // Lock scroll spy updates during smooth scroll
-      isProgrammaticScrollRef.current = true;
-      setActiveRoleInView(roleCode);
+        // Lock scroll spy updates during smooth scroll
+        isProgrammaticScrollRef.current = true;
+        setActiveRoleInView(roleCode);
 
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: 'smooth',
+        });
+
+        // Release lock once smooth scrolling completes
+        scrollTimeoutRef.current = setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+        }, 650);
       }
-
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth',
-      });
-
-      // Release lock once smooth scrolling completes
-      scrollTimeoutRef.current = setTimeout(() => {
-        isProgrammaticScrollRef.current = false;
-      }, 650);
-    }
+    }, 40);
   }, []);
 
   const totalEstimatedEffort =
@@ -815,6 +902,274 @@ const getRoleOrderRank = (roleCode?: string): number => {
         return acc + (t.actualEffort || 0);
       }, 0) * 100
     ) / 100;
+
+  // Single-source precomputed data for Desktop Table, Mobile Cards, and STT numbering
+  const preparedScheduleData = useMemo(() => {
+    const map = new Map<string, number>();
+    let count = 0;
+
+    if (subTab === 'ALL_TASKS') {
+      const preparedGroups = groupedTasksByRole.map((group) => {
+        const cfg = getRoleConfig(group.role);
+        const groupTotalEst =
+          Math.round(group.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0) * 100) / 100;
+        const groupTotalActual =
+          Math.round(group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0) * 100) / 100;
+        const { unassignedMembers, unassignedTasks } = getRoleUnassignedData(group.role);
+
+        const tasksByAccountMap = new Map<string, Task[]>();
+        group.tasks.forEach((t) => {
+          const primaryAcc = (t.assigneeAccount || '').trim();
+
+          // 1. Primary assignee
+          if (primaryAcc && primaryAcc.toLowerCase() !== 'unassigned') {
+            const primaryUser = userByAccountMap.get(primaryAcc.toLowerCase());
+            const primaryRoles =
+              primaryUser?.specializations && primaryUser.specializations.length > 0
+                ? primaryUser.specializations
+                : primaryUser?.role
+                ? [primaryUser.role]
+                : [t.role];
+            const isPrimaryInThisRole =
+              primaryRoles.some((r) => isSpecializationMatchingRole(r, group.role)) ||
+              isSpecializationMatchingRole(t.role, group.role);
+
+            if (isPrimaryInThisRole) {
+              const list = tasksByAccountMap.get(primaryAcc) || [];
+              if (!list.some((item) => item.id === t.id)) {
+                list.push(t);
+                tasksByAccountMap.set(primaryAcc, list);
+              }
+            }
+          }
+
+          // 2. Collab members who belong to this role
+          if (t.supporterAccounts && t.supporterAccounts.length > 0) {
+            t.supporterAccounts.forEach((supAcc) => {
+              const cleanSupAcc = supAcc.trim();
+              if (primaryAcc && cleanSupAcc.toLowerCase() === primaryAcc.toLowerCase()) return;
+              const supUser = userByAccountMap.get(cleanSupAcc.toLowerCase());
+              const supRoles =
+                supUser?.specializations && supUser.specializations.length > 0
+                  ? supUser.specializations
+                  : supUser?.role
+                  ? [supUser.role]
+                  : [t.role];
+
+              const isMemberInThisRole = supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
+              if (
+                isMemberInThisRole ||
+                (!supUser?.specializations?.length && isSpecializationMatchingRole(t.role, group.role))
+              ) {
+                const targetAcc = supUser?.account || cleanSupAcc;
+                const list = tasksByAccountMap.get(targetAcc) || [];
+                if (!list.some((item) => item.id === t.id)) {
+                  list.push(t);
+                  tasksByAccountMap.set(targetAcc, list);
+                }
+              }
+            });
+          }
+
+          // 3. Fallback: If task has no primary assignee and no supporters matched this group, but t.role matches group.role
+          if (!primaryAcc || primaryAcc.toLowerCase() === 'unassigned') {
+            const hasAnyMatchedSupporter =
+              t.supporterAccounts &&
+              t.supporterAccounts.some((supAcc) => {
+                const supUser = userByAccountMap.get(supAcc.trim().toLowerCase());
+                const supRoles =
+                  supUser?.specializations && supUser.specializations.length > 0
+                    ? supUser.specializations
+                    : [t.role];
+                return supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
+              });
+            if (!hasAnyMatchedSupporter && isSpecializationMatchingRole(t.role, group.role)) {
+              const unassignedKey = '';
+              const list = tasksByAccountMap.get(unassignedKey) || [];
+              if (!list.some((item) => item.id === t.id)) {
+                list.push(t);
+                tasksByAccountMap.set(unassignedKey, list);
+              }
+            }
+          }
+        });
+
+        const rawAccountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
+          if (!accA) return 1;
+          if (!accB) return -1;
+          const userA = userByAccountMap.get(accA.toLowerCase());
+          const userB = userByAccountMap.get(accB.toLowerCase());
+
+          const rankA = getUserLevelRank(userA?.role);
+          const rankB = getUserLevelRank(userB?.role);
+
+          if (rankA !== rankB) {
+            return rankA - rankB;
+          }
+
+          return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
+        });
+
+        const accountGroups = rawAccountGroups.map(([acc, accTasks]) => {
+          const sortedAccTasks = [...accTasks].sort(sortByPriority);
+          const rootAccTasks = sortedAccTasks.filter(
+            (t) => !t.subtaskParentId || !sortedAccTasks.some((p) => p.id === t.subtaskParentId)
+          );
+          const visibleSubtasksMap = new Map<string, Task[]>();
+          rootAccTasks.forEach((t) => {
+            const taskSubtasks = subtasksByParentIdMap.get(t.id) || [];
+            const visibleSubtasks = acc
+              ? taskSubtasks.filter((st) => accTasks.some((at) => at.id === st.id))
+              : taskSubtasks;
+            visibleSubtasksMap.set(t.id, visibleSubtasks);
+
+            if (!map.has(t.id)) {
+              count++;
+              map.set(t.id, count);
+            }
+          });
+
+          const accUser = acc ? userByAccountMap.get(acc.toLowerCase()) : undefined;
+          const accRole = accUser ? getUserRoleInSpec(accUser, group.role) : 'Member';
+
+          return {
+            acc,
+            accUser,
+            accRole,
+            accTasks: sortedAccTasks,
+            rootAccTasks,
+            visibleSubtasksMap,
+          };
+        });
+
+        return {
+          role: group.role,
+          cfg,
+          groupTotalEst,
+          groupTotalActual,
+          unassignedMembers,
+          unassignedTasks,
+          accountGroups,
+        };
+      });
+
+      return {
+        taskSttMap: map,
+        roleGroups: preparedGroups,
+        myTasks: null,
+      };
+    } else {
+      // MY_TASKS
+      const rootFilteredTasks = filteredTasks.filter(
+        (t) => !t.subtaskParentId || !filteredTasks.some((p) => p.id === t.subtaskParentId)
+      );
+      const visibleSubtasksMap = new Map<string, Task[]>();
+      rootFilteredTasks.forEach((t) => {
+        count++;
+        map.set(t.id, count);
+        const taskSubtasks = subtasksByParentIdMap.get(t.id) || [];
+        const visibleSubtasks = taskSubtasks.filter((st) => filteredTasks.some((ft) => ft.id === st.id));
+        visibleSubtasksMap.set(t.id, visibleSubtasks);
+      });
+
+      return {
+        taskSttMap: map,
+        roleGroups: [],
+        myTasks: {
+          rootFilteredTasks,
+          visibleSubtasksMap,
+        },
+      };
+    }
+  }, [
+    subTab,
+    groupedTasksByRole,
+    filteredTasks,
+    userByAccountMap,
+    getRoleUnassignedData,
+    subtasksByParentIdMap,
+  ]);
+
+  const taskSttMap = preparedScheduleData.taskSttMap;
+
+  // Check if any filter or search is active
+  const isFilterActive = useMemo(() => {
+    return (
+      searchQuery.trim() !== '' ||
+      selectedRole !== 'ALL' ||
+      selectedAccount !== 'ALL' ||
+      selectedMilestone !== 'ALL' ||
+      selectedStatus !== 'ALL'
+    );
+  }, [searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus]);
+
+  // Reset progressive counts when subTab, week, or year changes
+  useEffect(() => {
+    setVisibleRoleCount(2);
+    setVisibleMyTasksCount(25);
+  }, [subTab, selectedWeek, selectedYear]);
+
+  // Displayed groups for progressive rendering (initial 2 groups, loads next 2 on scroll)
+  const displayedRoleGroups = useMemo(() => {
+    if (isFilterActive || visibleRoleCount >= preparedScheduleData.roleGroups.length) {
+      return preparedScheduleData.roleGroups;
+    }
+    return preparedScheduleData.roleGroups.slice(0, visibleRoleCount);
+  }, [preparedScheduleData.roleGroups, visibleRoleCount, isFilterActive]);
+
+  // Displayed root tasks for MY_TASKS progressive rendering (initial 25 tasks, loads next 25 on scroll)
+  const displayedMyTasks = useMemo(() => {
+    const rootTasks = preparedScheduleData.myTasks?.rootFilteredTasks || [];
+    if (isFilterActive || visibleMyTasksCount >= rootTasks.length) {
+      return rootTasks;
+    }
+    return rootTasks.slice(0, visibleMyTasksCount);
+  }, [preparedScheduleData.myTasks?.rootFilteredTasks, visibleMyTasksCount, isFilterActive]);
+
+  const hasMoreItems = useMemo(() => {
+    if (isFilterActive) return false;
+    if (subTab === 'ALL_TASKS') {
+      return visibleRoleCount < preparedScheduleData.roleGroups.length;
+    }
+    return visibleMyTasksCount < (preparedScheduleData.myTasks?.rootFilteredTasks.length || 0);
+  }, [
+    isFilterActive,
+    subTab,
+    visibleRoleCount,
+    preparedScheduleData.roleGroups.length,
+    visibleMyTasksCount,
+    preparedScheduleData.myTasks?.rootFilteredTasks.length,
+  ]);
+
+  // IntersectionObserver to load next batch seamlessly 400px before user reaches the bottom
+  useEffect(() => {
+    if (!hasMoreItems) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          if (subTab === 'ALL_TASKS') {
+            setVisibleRoleCount((prev) => Math.min(prev + 2, preparedScheduleData.roleGroups.length));
+          } else if (subTab === 'MY_TASKS') {
+            setVisibleMyTasksCount((prev) =>
+              Math.min(prev + 25, preparedScheduleData.myTasks?.rootFilteredTasks.length || 0)
+            );
+          }
+        }
+      },
+      { rootMargin: '400px' }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [
+    hasMoreItems,
+    subTab,
+    preparedScheduleData.roleGroups.length,
+    preparedScheduleData.myTasks?.rootFilteredTasks.length,
+  ]);
 
   const getStatusBadge = (status: TaskStatus) => {
     switch (status) {
@@ -870,17 +1225,17 @@ const getRoleOrderRank = (roleCode?: string): number => {
     const nowTime = new Date(simulatedTime).getTime();
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
-    const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+    const taskSubtasks = subtasksByParentIdMap.get(t.id) || [];
     const hasSub = taskSubtasks.length > 0;
-    const isParent = isParentTask(t, tasks);
-    const isSub = isSubtask(t);
-    const parentMetrics = hasSub ? calculateParentMetrics(t, taskSubtasks) : null;
+    const isParent = hasSub || Boolean(t.isParentTask);
+    const isSub = Boolean(t.isSubtask || t.subtaskParentId);
+    const parentMetrics = parentMetricsMap.get(t.id) || null;
     const isCollapsed = collapsedParentIds.has(t.id);
 
     const effStatus = (parentMetrics && !t.isManualOverride)
       ? parentMetrics.status
       : getEffectiveTaskStatus(t);
-    const accEffort = calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
+    const accEffort = accumulatedEffortMap.get(t.id) || calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
     const displayEst = (parentMetrics && !t.isManualOverride)
       ? parentMetrics.totalEstimatedEffort
       : (t.estimatedEffort ?? 0);
@@ -1003,7 +1358,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {(() => {
-                const milestone = milestones.find((m) => m.id === t.milestoneId);
+                const milestone = t.milestoneId ? milestoneByIdMap.get(t.milestoneId) : undefined;
                 return milestone ? (
                   <span
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/90 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] shadow-2xs"
@@ -1119,7 +1474,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 : (t.supporterAccounts || []);
 
               if (currentAcc) {
-                const userObj = users.find((u) => u.account.toLowerCase() === currentAcc.toLowerCase());
+                const userObj = userByAccountMap.get(currentAcc.toLowerCase());
                 const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
                 return (
                   <div className="flex flex-col gap-1">
@@ -1354,17 +1709,17 @@ const getRoleOrderRank = (roleCode?: string): number => {
     const nowTime = new Date(simulatedTime).getTime();
     const isReportWindowOpen = nowTime >= sundayNoon.getTime();
 
-    const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+    const taskSubtasks = subtasksByParentIdMap.get(t.id) || [];
     const hasSub = taskSubtasks.length > 0;
-    const isParent = isParentTask(t, tasks);
-    const isSub = isSubtask(t);
-    const parentMetrics = hasSub ? calculateParentMetrics(t, taskSubtasks) : null;
+    const isParent = hasSub || Boolean(t.isParentTask);
+    const isSub = Boolean(t.isSubtask || t.subtaskParentId);
+    const parentMetrics = parentMetricsMap.get(t.id) || null;
     const isCollapsed = collapsedParentIds.has(t.id);
 
     const effStatus = (parentMetrics && !t.isManualOverride)
       ? parentMetrics.status
       : getEffectiveTaskStatus(t);
-    const accEffort = calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
+    const accEffort = accumulatedEffortMap.get(t.id) || calculateTaskAccumulatedEffort(t, tasks, weeklyArchives);
     const displayEst = (parentMetrics && !t.isManualOverride)
       ? parentMetrics.totalEstimatedEffort
       : (t.estimatedEffort ?? 0);
@@ -1386,7 +1741,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
     const isDueToday = hasEndDate && !isTaskDone && t.endDate! === todayStr;
 
     const unread = hasUnreadNote(t);
-    const milestone = milestones.find((m) => m.id === t.milestoneId);
+    const milestone = t.milestoneId ? milestoneByIdMap.get(t.milestoneId) : undefined;
     const linkedTicket = getLinkedTicket(t);
     const isTicketTask = Boolean(linkedTicket || t.ticketId || (t.title && t.title.startsWith('[REQ-')));
 
@@ -1506,7 +1861,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 {(() => {
                   const currentAcc = t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
                   if (currentAcc) {
-                    const userObj = users.find((u) => u.account.toLowerCase() === currentAcc.toLowerCase());
+                    const userObj = userByAccountMap.get(currentAcc.toLowerCase());
                     const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
                     return (
                       <>
@@ -2023,64 +2378,63 @@ const getRoleOrderRank = (roleCode?: string): number => {
           {/* Task List Container (Observed by tableContainerRef for Floating Bar detection) */}
           <div ref={tableContainerRef} className="space-y-4">
             {/* DESKTOP VIEW: Table Grid */}
-            <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider">
-                    <tr>
-                      <th className="py-3.5 px-4 w-12 text-center">STT</th>
-                      <th className="py-3.5 px-4 min-w-[280px]">Task Name (Bấm xem chi tiết)</th>
-                      <th className="py-3.5 px-3 w-24">Role</th>
-                      <th className="py-3.5 px-3 w-24 text-center">Effort (h)</th>
-                      <th className="py-3.5 px-3 w-28 text-center">Status</th>
-                      <th className="py-3.5 px-3 w-36">Account</th>
-                      <th className="py-3.5 px-3 w-36">Tiến độ (%)</th>
-                      <th className="py-3.5 px-3 w-36 text-center">End Date</th>
-                      <th className="py-3.5 px-4 min-w-[130px] w-36 text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-
-                  {filteredTasks.length === 0 ? (
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+            {(deviceType === 'desktop' || deviceType === 'all') && (
+              <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider">
                       <tr>
-                        <td colSpan={9} className="py-12 text-center text-slate-400">
-                          {subTab === 'MY_TASKS'
-                            ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
-                            : 'Không tìm thấy đầu việc nào phù hợp.'}
-                        </td>
+                        <th className="py-3.5 px-4 w-12 text-center">STT</th>
+                        <th className="py-3.5 px-4 min-w-[280px]">Task Name (Bấm xem chi tiết)</th>
+                        <th className="py-3.5 px-3 w-24">Role</th>
+                        <th className="py-3.5 px-3 w-24 text-center">Effort (h)</th>
+                        <th className="py-3.5 px-3 w-28 text-center">Status</th>
+                        <th className="py-3.5 px-3 w-36">Account</th>
+                        <th className="py-3.5 px-3 w-36">Tiến độ (%)</th>
+                        <th className="py-3.5 px-3 w-36 text-center">End Date</th>
+                        <th className="py-3.5 px-4 min-w-[130px] w-36 text-right">Thao tác</th>
                       </tr>
-                    </tbody>
-                  ) : subTab === 'ALL_TASKS' ? (
-                    groupedTasksByRole.map((group) => {
-                      const cfg = getRoleConfig(group.role);
-                      const groupTotalEst = group.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0);
-                      const groupTotalActual = group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0);
+                    </thead>
 
-                      return (
-                        <tbody key={`role-group-${group.role}`} className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                          {/* Role Section Header */}
-                          <tr id={`role-section-${group.role}`} className="scroll-mt-20 select-none">
-                            <td colSpan={9} className={`py-2.5 px-4 ${cfg.bg} border-y ${cfg.border} shadow-2xs`}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2.5">
-                                <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${cfg.badgeBg}`}>
-                                  {group.role}
-                                </span>
-                                <span className={`text-xs font-bold ${cfg.text} tracking-tight`}>
-                                  {cfg.label}
-                                </span>
-                                <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-white/90 dark:bg-slate-800/90 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
-                                  {group.tasks.length} đầu việc
-                                </span>
-                                {(() => {
-                                  const { unassignedMembers, unassignedTasks } = getRoleUnassignedData(group.role);
-                                  if (unassignedMembers.length === 0) return null;
-                                  return (
+                    {filteredTasks.length === 0 ? (
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                        <tr>
+                          <td colSpan={9} className="py-12 text-center text-slate-400">
+                            {subTab === 'MY_TASKS'
+                              ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
+                              : 'Không tìm thấy đầu việc nào phù hợp.'}
+                          </td>
+                        </tr>
+                      </tbody>
+                    ) : subTab === 'ALL_TASKS' ? (
+                      displayedRoleGroups.map((group) => {
+                        const cfg = group.cfg;
+                        const groupTotalEst = group.groupTotalEst;
+                        const groupTotalActual = group.groupTotalActual;
+                        const totalRoleTaskCount = group.accountGroups.reduce((acc, ag) => acc + ag.accTasks.length, 0);
+
+                        return (
+                          <tbody key={`role-group-${group.role}`} className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                            {/* Role Section Header */}
+                            <tr id={`role-section-${group.role}`} className="scroll-mt-20 select-none">
+                              <td colSpan={9} className={`py-2.5 px-4 ${cfg.bg} border-y ${cfg.border} shadow-2xs`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                  <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border ${cfg.badgeBg}`}>
+                                    {group.role}
+                                  </span>
+                                  <span className={`text-xs font-bold ${cfg.text} tracking-tight`}>
+                                    {cfg.label}
+                                  </span>
+                                  <span className="text-[10px] text-slate-600 dark:text-slate-300 font-semibold bg-white/90 dark:bg-slate-800/90 px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-700">
+                                    {totalRoleTaskCount} đầu việc
+                                  </span>
+                                  {group.unassignedMembers.length > 0 && (
                                     <RoleUnassignedMembersTag
                                       roleCode={group.role}
                                       roleLabel={cfg.label}
-                                      unassignedUsers={unassignedMembers}
-                                      unassignedTasksCount={unassignedTasks.length}
+                                      unassignedUsers={group.unassignedMembers}
+                                      unassignedTasksCount={group.unassignedTasks.length}
                                       selectedWeek={selectedWeek}
                                       selectedYear={selectedYear}
                                       canManage={canManageRoleGroup(group.role)}
@@ -2089,347 +2443,137 @@ const getRoleOrderRank = (roleCode?: string): number => {
                                           user: targetUser,
                                           roleCode: group.role,
                                           roleLabel: cfg.label,
-                                          unassignedTasks,
+                                          unassignedTasks: group.unassignedTasks,
                                         });
                                       }}
                                     />
-                                  );
-                                })()}
-                              </div>
+                                  )}
+                                </div>
 
-                              <div className="flex items-center gap-3 text-xs">
-                                <span className="text-slate-600 dark:text-slate-400 text-[11px]">
-                                  Tổng Effort:{' '}
-                                  <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
-                                    {group.tasks.some((item) => !!item.lastSubmittedAt)
-                                      ? groupTotalActual
-                                      : groupTotalEst}
-                                    h
-                                  </strong>
-                                  {group.tasks.some((item) => !!item.lastSubmittedAt) &&
-                                    groupTotalActual !== groupTotalEst && (
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="text-slate-600 dark:text-slate-400 text-[11px]">
+                                    Tổng Effort:{' '}
+                                    <strong className="text-indigo-600 dark:text-indigo-400 font-mono font-bold">
+                                      {groupTotalActual > 0 ? groupTotalActual : groupTotalEst}h
+                                    </strong>
+                                    {groupTotalActual > 0 && groupTotalActual !== groupTotalEst && (
                                       <span className="text-slate-400 dark:text-slate-400 font-mono ml-1">
                                         (est: {groupTotalEst}h)
                                       </span>
                                     )}
-                                </span>
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                          </tr>
 
-                        {/* Group Tasks by Account */}
-                        {(() => {
-                          const tasksByAccountMap = new Map<string, Task[]>();
-                          group.tasks.forEach((t) => {
-                            const primaryAcc = (t.assigneeAccount || '').trim();
-
-                            // 1. Primary assignee
-                            if (primaryAcc && primaryAcc.toLowerCase() !== 'unassigned') {
-                              const primaryUser = users.find((u) => u.account.trim().toLowerCase() === primaryAcc.toLowerCase());
-                              const primaryRoles =
-                                primaryUser?.specializations && primaryUser.specializations.length > 0
-                                  ? primaryUser.specializations
-                                  : [t.role];
-                              const isPrimaryInThisRole =
-                                primaryRoles.some((r) => isSpecializationMatchingRole(r, group.role)) ||
-                                isSpecializationMatchingRole(t.role, group.role);
-
-                              if (isPrimaryInThisRole) {
-                                const list = tasksByAccountMap.get(primaryAcc) || [];
-                                if (!list.some((item) => item.id === t.id)) {
-                                  list.push(t);
-                                  tasksByAccountMap.set(primaryAcc, list);
-                                }
-                              }
-                            }
-
-                            // 2. Collab members who belong to this role
-                            if (t.supporterAccounts && t.supporterAccounts.length > 0) {
-                              t.supporterAccounts.forEach((supAcc) => {
-                                const cleanSupAcc = supAcc.trim();
-                                if (primaryAcc && cleanSupAcc.toLowerCase() === primaryAcc.toLowerCase()) return;
-                                const supUser = users.find((u) => u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
-                                const supRoles =
-                                  supUser?.specializations && supUser.specializations.length > 0
-                                    ? supUser.specializations
-                                    : supUser?.role
-                                    ? [supUser.role]
-                                    : [t.role];
-
-                                const isMemberInThisRole = supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
-                                if (
-                                  isMemberInThisRole ||
-                                  (!supUser?.specializations?.length && isSpecializationMatchingRole(t.role, group.role))
-                                ) {
-                                  const targetAcc = supUser?.account || cleanSupAcc;
-                                  const list = tasksByAccountMap.get(targetAcc) || [];
-                                  if (!list.some((item) => item.id === t.id)) {
-                                    list.push(t);
-                                    tasksByAccountMap.set(targetAcc, list);
-                                  }
-                                }
-                              });
-                            }
-
-                            // 3. Fallback: If task has no primary assignee and no supporters matched this group, but t.role matches group.role
-                            if (!primaryAcc || primaryAcc.toLowerCase() === 'unassigned') {
-                              const hasAnyMatchedSupporter =
-                                t.supporterAccounts &&
-                                t.supporterAccounts.some((supAcc) => {
-                                  const supUser = users.find((u) => u.account.trim().toLowerCase() === supAcc.trim().toLowerCase());
-                                  const supRoles =
-                                    supUser?.specializations && supUser.specializations.length > 0
-                                      ? supUser.specializations
-                                      : [t.role];
-                                  return supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
-                                });
-                              if (!hasAnyMatchedSupporter && isSpecializationMatchingRole(t.role, group.role)) {
-                                const unassignedKey = '';
-                                const list = tasksByAccountMap.get(unassignedKey) || [];
-                                if (!list.some((item) => item.id === t.id)) {
-                                  list.push(t);
-                                  tasksByAccountMap.set(unassignedKey, list);
-                                }
-                              }
-                            }
-                          });
-
-                          const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
-                            if (!accA) return 1;
-                            if (!accB) return -1;
-                            const userA = users.find((u) => u.account.trim().toLowerCase() === accA.toLowerCase());
-                            const userB = users.find((u) => u.account.trim().toLowerCase() === accB.toLowerCase());
-
-                            const rankA = getUserLevelRank(userA?.role);
-                            const rankB = getUserLevelRank(userB?.role);
-
-                            if (rankA !== rankB) {
-                              return rankA - rankB;
-                            }
-
-                            return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
-                          });
-
-                          return accountGroups.map(([acc, accTasks], accIdx) => (
-                            <React.Fragment key={`acc-group-${group.role}-${acc || 'unassigned'}`}>
+                          {/* Group Tasks by Account */}
+                          {group.accountGroups.map((accGroup, accIdx) => (
+                            <React.Fragment key={`acc-group-${group.role}-${accGroup.acc || 'unassigned'}`}>
                               {accIdx > 0 && (
                                 <tr className="h-4 bg-slate-50/60 dark:bg-slate-900/90 border-y border-slate-100/80 dark:border-slate-800 select-none">
                                   <td colSpan={9} className="h-4 p-0 border-0 bg-slate-50/60 dark:bg-slate-900/90"></td>
                                 </tr>
                               )}
-                              {(() => {
-                                const sortedAccTasks = [...accTasks].sort(sortByPriority);
-                                const rootAccTasks = sortedAccTasks.filter(
-                                  (t) => !t.subtaskParentId || !sortedAccTasks.some((p) => p.id === t.subtaskParentId)
+                              {accGroup.rootAccTasks.map((t) => {
+                                const displayIdx = taskSttMap.get(t.id) || 1;
+                                const visibleSubtasks = accGroup.visibleSubtasksMap.get(t.id) || [];
+                                const isCollapsed = collapsedParentIds.has(t.id);
+                                return (
+                                  <React.Fragment key={t.id}>
+                                    {renderTaskRow(t, displayIdx, accGroup.acc || undefined, false, visibleSubtasks.length > 0)}
+                                    {!isCollapsed &&
+                                      visibleSubtasks.map((st) =>
+                                        renderTaskRow(st, displayIdx, accGroup.acc || undefined, true)
+                                      )}
+                                  </React.Fragment>
                                 );
-                                return rootAccTasks.map((t) => {
-                                  const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                                  const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                                  const taskSubtasks = getSubtasksOfParent(t.id, tasks);
-                                  const visibleSubtasks = acc
-                                    ? taskSubtasks.filter((st) => accTasks.some((at) => at.id === st.id))
-                                    : taskSubtasks;
-                                  const isCollapsed = collapsedParentIds.has(t.id);
-                                  return (
-                                    <React.Fragment key={t.id}>
-                                      {renderTaskRow(t, displayIdx, acc || undefined, false, visibleSubtasks.length > 0)}
-                                      {!isCollapsed &&
-                                        visibleSubtasks.map((st) =>
-                                          renderTaskRow(st, displayIdx, acc || undefined, true)
-                                        )}
-                                    </React.Fragment>
-                                  );
-                                });
-                              })()}
+                              })}
                             </React.Fragment>
-                          ));
-                        })()}
-                      </tbody>
-                    );
-                  })
-                ) : (
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                    {(() => {
-                      const rootFilteredTasks = filteredTasks.filter(
-                        (t) => !t.subtaskParentId || !filteredTasks.some((p) => p.id === t.subtaskParentId)
+                          ))}
+                        </tbody>
                       );
-                      return rootFilteredTasks.map((t, idx) => {
-                        const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                        const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
-                        const taskSubtasks = getSubtasksOfParent(t.id, tasks);
-                        const visibleSubtasks = subTab === 'MY_TASKS'
-                          ? taskSubtasks.filter((st) => filteredTasks.some((ft) => ft.id === st.id))
-                          : taskSubtasks;
+                    })
+                  ) : (
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                      {displayedMyTasks.map((t, idx) => {
+                        const displayIdx = taskSttMap.get(t.id) || (idx + 1);
+                        const visibleSubtasks = preparedScheduleData.myTasks?.visibleSubtasksMap.get(t.id) || [];
                         const isCollapsed = collapsedParentIds.has(t.id);
                         return (
                           <React.Fragment key={t.id}>
-                            {renderTaskRow(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, false, visibleSubtasks.length > 0)}
+                            {renderTaskRow(t, displayIdx, currentUser?.account, false, visibleSubtasks.length > 0)}
                             {!isCollapsed &&
                               visibleSubtasks.map((st) =>
-                                renderTaskRow(st, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, true)
+                                renderTaskRow(st, displayIdx, currentUser?.account, true)
                               )}
                           </React.Fragment>
                         );
-                      });
-                    })()}
-                  </tbody>
-                )}
+                      })}
+                    </tbody>
+                  )}
 
-                {/* Table Footer Totals */}
-                <tfoot>
-                  <tr className="bg-slate-50 border-t border-slate-200 text-slate-700 font-semibold">
-                    <td colSpan={3} className="py-3 px-4 text-right uppercase text-[10px] tracking-wider text-slate-500">
-                      Tổng Cộng ({filteredTasks.length} task):
-                    </td>
-                    <td className="py-3 px-3 text-center font-mono text-indigo-600 font-bold">
-                      {filteredTasks.some((t) => !!t.lastSubmittedAt)
-                        ? `${totalActualEffort}h`
-                        : `${totalEstimatedEffort}h`}
-                      {filteredTasks.some((t) => !!t.lastSubmittedAt) &&
-                        totalActualEffort !== totalEstimatedEffort && (
-                          <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
-                            (est: {totalEstimatedEffort}h)
-                          </span>
-                        )}
-                    </td>
-                    <td colSpan={5}></td>
-                  </tr>
-                </tfoot>
-              </table>
+                  {/* Table Footer Totals */}
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t border-slate-200 text-slate-700 font-semibold">
+                      <td colSpan={3} className="py-3 px-4 text-right uppercase text-[10px] tracking-wider text-slate-500">
+                        Tổng Cộng ({filteredTasks.length} task):
+                      </td>
+                      <td className="py-3 px-3 text-center font-mono text-indigo-600 font-bold">
+                        {filteredTasks.some((t) => !!t.lastSubmittedAt)
+                          ? `${totalActualEffort}h`
+                          : `${totalEstimatedEffort}h`}
+                        {filteredTasks.some((t) => !!t.lastSubmittedAt) &&
+                          totalActualEffort !== totalEstimatedEffort && (
+                            <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
+                              (est: {totalEstimatedEffort}h)
+                            </span>
+                          )}
+                      </td>
+                      <td colSpan={5}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
-          </div>
+            )}
 
           {/* MOBILE VIEW: Card List */}
-          <div className="md:hidden space-y-3">
-            {filteredTasks.length === 0 ? (
-              <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-400 text-xs">
-                {subTab === 'MY_TASKS'
-                  ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
-                  : 'Không tìm thấy đầu việc nào phù hợp.'}
-              </div>
-            ) : subTab === 'ALL_TASKS' ? (
-              groupedTasksByRole.map((group) => {
-                const cfg = getRoleConfig(group.role);
-                const groupTotalEst =
-                  Math.round(group.tasks.reduce((sum, item) => sum + (item.estimatedEffort || 0), 0) * 100) / 100;
-                const groupTotalActual =
-                  Math.round(group.tasks.reduce((sum, item) => sum + (item.actualEffort || 0), 0) * 100) / 100;
+          {(deviceType === 'mobile' || deviceType === 'all') && (
+            <div className="md:hidden space-y-3">
+              {filteredTasks.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-400 text-xs">
+                  {subTab === 'MY_TASKS'
+                    ? 'Bạn chưa được phân công đầu việc nào phù hợp với bộ lọc.'
+                    : 'Không tìm thấy đầu việc nào phù hợp.'}
+                </div>
+              ) : subTab === 'ALL_TASKS' ? (
+                displayedRoleGroups.map((group) => {
+                  const cfg = group.cfg;
+                  const groupTotalEst = group.groupTotalEst;
+                  const groupTotalActual = group.groupTotalActual;
+                  const totalRoleTaskCount = group.accountGroups.reduce((acc, ag) => acc + ag.accTasks.length, 0);
 
-                const tasksByAccountMap = new Map<string, Task[]>();
-                group.tasks.forEach((t) => {
-                  const primaryAcc = (t.assigneeAccount || '').trim();
-
-                  // 1. Primary assignee
-                  if (primaryAcc && primaryAcc.toLowerCase() !== 'unassigned') {
-                    const primaryUser = users.find((u) => u.account.trim().toLowerCase() === primaryAcc.toLowerCase());
-                    const primaryRoles =
-                      primaryUser?.specializations && primaryUser.specializations.length > 0
-                        ? primaryUser.specializations
-                        : [t.role];
-                    const isPrimaryInThisRole =
-                      primaryRoles.some((r) => isSpecializationMatchingRole(r, group.role)) ||
-                      isSpecializationMatchingRole(t.role, group.role);
-
-                    if (isPrimaryInThisRole) {
-                      const list = tasksByAccountMap.get(primaryAcc) || [];
-                      if (!list.some((item) => item.id === t.id)) {
-                        list.push(t);
-                        tasksByAccountMap.set(primaryAcc, list);
-                      }
-                    }
-                  }
-
-                  // 2. Collab members who belong to this role
-                  if (t.supporterAccounts && t.supporterAccounts.length > 0) {
-                    t.supporterAccounts.forEach((supAcc) => {
-                      const cleanSupAcc = supAcc.trim();
-                      if (primaryAcc && cleanSupAcc.toLowerCase() === primaryAcc.toLowerCase()) return;
-                      const supUser = users.find((u) => u.account.trim().toLowerCase() === cleanSupAcc.toLowerCase());
-                      const supRoles =
-                        supUser?.specializations && supUser.specializations.length > 0
-                          ? supUser.specializations
-                          : supUser?.role
-                          ? [supUser.role]
-                          : [t.role];
-
-                      const isMemberInThisRole = supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
-                      if (
-                        isMemberInThisRole ||
-                        (!supUser?.specializations?.length && isSpecializationMatchingRole(t.role, group.role))
-                      ) {
-                        const targetAcc = supUser?.account || cleanSupAcc;
-                        const list = tasksByAccountMap.get(targetAcc) || [];
-                        if (!list.some((item) => item.id === t.id)) {
-                          list.push(t);
-                          tasksByAccountMap.set(targetAcc, list);
-                        }
-                      }
-                    });
-                  }
-
-                  // 3. Fallback: If task has no primary assignee and no supporters matched this group, but t.role matches group.role
-                  if (!primaryAcc || primaryAcc.toLowerCase() === 'unassigned') {
-                    const hasAnyMatchedSupporter =
-                      t.supporterAccounts &&
-                      t.supporterAccounts.some((supAcc) => {
-                        const supUser = users.find((u) => u.account.trim().toLowerCase() === supAcc.trim().toLowerCase());
-                        const supRoles =
-                          supUser?.specializations && supUser.specializations.length > 0
-                            ? supUser.specializations
-                            : [t.role];
-                        return supRoles.some((r) => isSpecializationMatchingRole(r, group.role));
-                      });
-                    if (!hasAnyMatchedSupporter && isSpecializationMatchingRole(t.role, group.role)) {
-                      const unassignedKey = '';
-                      const list = tasksByAccountMap.get(unassignedKey) || [];
-                      if (!list.some((item) => item.id === t.id)) {
-                        list.push(t);
-                        tasksByAccountMap.set(unassignedKey, list);
-                      }
-                    }
-                  }
-                });
-
-                const accountGroups = Array.from(tasksByAccountMap.entries()).sort(([accA], [accB]) => {
-                  if (!accA) return 1;
-                  if (!accB) return -1;
-                  const userA = users.find((u) => u.account.trim().toLowerCase() === accA.toLowerCase());
-                  const userB = users.find((u) => u.account.trim().toLowerCase() === accB.toLowerCase());
-
-                  const rankA = getUserLevelRank(userA?.role);
-                  const rankB = getUserLevelRank(userB?.role);
-
-                  if (rankA !== rankB) {
-                    return rankA - rankB;
-                  }
-
-                  return accA.localeCompare(accB, undefined, { sensitivity: 'base' });
-                });
-
-                return (
-                  <div key={`mobile-role-${group.role}`} className="space-y-2.5">
-                    {/* Mobile Role Group Header */}
-                    <div
-                      id={`mobile-role-section-${group.role}`}
-                      className={`scroll-mt-16 ${cfg.bg} border ${cfg.border} p-2.5 sm:p-3 rounded-2xl flex items-center justify-between shadow-2xs gap-2 flex-wrap`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${cfg.badgeBg}`}>
-                          {group.role}
-                        </span>
-                        <span className={`text-xs font-bold ${cfg.text} truncate`}>
-                          {cfg.mobileLabel}
-                        </span>
-                        {(() => {
-                          const { unassignedMembers, unassignedTasks } = getRoleUnassignedData(group.role);
-                          if (unassignedMembers.length === 0) return null;
-                          return (
+                  return (
+                    <div key={`mobile-role-${group.role}`} className="space-y-2.5">
+                      {/* Mobile Role Group Header */}
+                      <div
+                        id={`mobile-role-section-${group.role}`}
+                        className={`scroll-mt-16 ${cfg.bg} border ${cfg.border} p-2.5 sm:p-3 rounded-2xl flex items-center justify-between shadow-2xs gap-2 flex-wrap`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${cfg.badgeBg}`}>
+                            {group.role}
+                          </span>
+                          <span className={`text-xs font-bold ${cfg.text} truncate`}>
+                            {cfg.mobileLabel}
+                          </span>
+                          {group.unassignedMembers.length > 0 && (
                             <RoleUnassignedMembersTag
                               roleCode={group.role}
                               roleLabel={cfg.mobileLabel}
-                              unassignedUsers={unassignedMembers}
-                              unassignedTasksCount={unassignedTasks.length}
+                              unassignedUsers={group.unassignedMembers}
+                              unassignedTasksCount={group.unassignedTasks.length}
                               selectedWeek={selectedWeek}
                               selectedYear={selectedYear}
                               canManage={canManageRoleGroup(group.role)}
@@ -2438,129 +2582,124 @@ const getRoleOrderRank = (roleCode?: string): number => {
                                   user: targetUser,
                                   roleCode: group.role,
                                   roleLabel: cfg.label,
-                                  unassignedTasks,
+                                  unassignedTasks: group.unassignedTasks,
                                 });
                               }}
                             />
-                          );
-                        })()}
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[11px] shrink-0">
-                        <span className="bg-white/90 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap">
-                          {group.tasks.length} task
-                        </span>
-                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
-                          {group.tasks.some((item) => !!item.lastSubmittedAt) ? groupTotalActual : groupTotalEst}h
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Account Subgroups / Task Cards */}
-                    <div className="space-y-2.5">
-                      {accountGroups.map(([acc, accTasks]) => (
-                        <div key={`mobile-acc-${group.role}-${acc || 'unassigned'}`} className="space-y-2">
-                          {accountGroups.length > 1 && (
-                            <div className="flex items-center gap-2 pt-1">
-                              {(() => {
-                                if (!acc) {
-                                  return (
-                                    <span className="text-[11px] font-bold bg-amber-50 dark:bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300">
-                                      👤 Chưa giao ({accTasks.length})
-                                    </span>
-                                  );
-                                }
-                                const accUser = users.find((u) => u.account.trim().toLowerCase() === acc.toLowerCase());
-                                const accRole = accUser ? getUserRoleInSpec(accUser, group.role) : 'Member';
-                                return (
-                                  <span className={`text-[11px] font-bold bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 ${getUserRoleColorClass(accRole)}`}>
-                                    👤 {acc} ({accTasks.length})
-                                  </span>
-                                );
-                              })()}
-                              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-                            </div>
                           )}
-                          {(() => {
-                            const sortedAccTasks = [...accTasks].sort(sortByPriority);
-                            const rootAccTasks = sortedAccTasks.filter(
-                              (t) => !t.subtaskParentId || !sortedAccTasks.some((p) => p.id === t.subtaskParentId)
-                            );
-                            return rootAccTasks.map((t) => {
-                              const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                              const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
-                              const taskSubtasks = getSubtasksOfParent(t.id, tasks);
-                              const visibleSubtasks = acc
-                                ? taskSubtasks.filter((st) => accTasks.some((at) => at.id === st.id))
-                                : taskSubtasks;
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] shrink-0">
+                          <span className="bg-white/90 dark:bg-slate-800 px-2.5 py-0.5 rounded-full font-semibold text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 whitespace-nowrap">
+                            {totalRoleTaskCount} task
+                          </span>
+                          <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                            {groupTotalActual > 0 ? groupTotalActual : groupTotalEst}h
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Account Subgroups / Task Cards */}
+                      <div className="space-y-2.5">
+                        {group.accountGroups.map((accGroup) => (
+                          <div key={`mobile-acc-${group.role}-${accGroup.acc || 'unassigned'}`} className="space-y-2">
+                            {group.accountGroups.length > 1 && (
+                              <div className="flex items-center gap-2 pt-1">
+                                {!accGroup.acc ? (
+                                  <span className="text-[11px] font-bold bg-amber-50 dark:bg-amber-950/60 px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300">
+                                    👤 Chưa giao ({accGroup.accTasks.length})
+                                  </span>
+                                ) : (
+                                  <span className={`text-[11px] font-bold bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700 ${getUserRoleColorClass(accGroup.accRole)}`}>
+                                    👤 {accGroup.acc} ({accGroup.accTasks.length})
+                                  </span>
+                                )}
+                                <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+                              </div>
+                            )}
+                            {accGroup.rootAccTasks.map((t) => {
+                              const displayIdx = taskSttMap.get(t.id) || 1;
+                              const visibleSubtasks = accGroup.visibleSubtasksMap.get(t.id) || [];
                               const isCollapsed = collapsedParentIds.has(t.id);
                               return (
                                 <React.Fragment key={t.id}>
-                                  {renderMobileTaskCard(t, displayIdx, acc || undefined, false, visibleSubtasks.length > 0)}
+                                  {renderMobileTaskCard(t, displayIdx, accGroup.acc || undefined, false, visibleSubtasks.length > 0)}
                                   {!isCollapsed && visibleSubtasks.length > 0 && (
                                     <div className="pl-3 border-l-2 border-indigo-200 dark:border-indigo-800 space-y-2 mt-1">
                                       {visibleSubtasks.map((st) =>
-                                        renderMobileTaskCard(st, displayIdx, acc || undefined, true)
+                                        renderMobileTaskCard(st, displayIdx, accGroup.acc || undefined, true)
                                       )}
                                     </div>
                                   )}
                                 </React.Fragment>
                               );
-                            });
-                          })()}
-                        </div>
-                      ))}
+                            })}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
-            ) : (
-              (() => {
-                const rootFilteredTasks = filteredTasks.filter(
-                  (t) => !t.subtaskParentId || !filteredTasks.some((p) => p.id === t.subtaskParentId)
-                );
-                return rootFilteredTasks.map((t, idx) => {
-                  const taskIdx = tasks.findIndex((item) => item.id === t.id);
-                  const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
-                  const taskSubtasks = getSubtasksOfParent(t.id, tasks);
-                  const visibleSubtasks = subTab === 'MY_TASKS'
-                    ? taskSubtasks.filter((st) => filteredTasks.some((ft) => ft.id === st.id))
-                    : taskSubtasks;
+                  );
+                })
+              ) : (
+                displayedMyTasks.map((t, idx) => {
+                  const displayIdx = taskSttMap.get(t.id) || (idx + 1);
+                  const visibleSubtasks = preparedScheduleData.myTasks?.visibleSubtasksMap.get(t.id) || [];
                   const isCollapsed = collapsedParentIds.has(t.id);
                   return (
                     <React.Fragment key={t.id}>
-                      {renderMobileTaskCard(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, false, visibleSubtasks.length > 0)}
+                      {renderMobileTaskCard(t, displayIdx, currentUser?.account, false, visibleSubtasks.length > 0)}
                       {!isCollapsed && visibleSubtasks.length > 0 && (
                         <div className="pl-3 border-l-2 border-indigo-200 dark:border-indigo-800 space-y-2 mt-1">
                           {visibleSubtasks.map((st) =>
-                            renderMobileTaskCard(st, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, true)
+                            renderMobileTaskCard(st, displayIdx, currentUser?.account, true)
                           )}
                         </div>
                       )}
                     </React.Fragment>
                   );
-                });
-              })()
-            )}
+                })
+              )}
 
-            {/* Mobile Summary Card */}
-            {filteredTasks.length > 0 && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
-                  Tổng cộng ({filteredTasks.length} task):
-                </span>
-                <div className="text-right">
-                  <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-sm">
-                    {filteredTasks.some((t) => !!t.lastSubmittedAt) ? `${totalActualEffort}h` : `${totalEstimatedEffort}h`}
+              {/* Mobile Summary Card */}
+              {filteredTasks.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                    Tổng cộng ({filteredTasks.length} task):
                   </span>
-                  {filteredTasks.some((t) => !!t.lastSubmittedAt) && totalActualEffort !== totalEstimatedEffort && (
-                    <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
-                      (est: {totalEstimatedEffort}h)
+                  <div className="text-right">
+                    <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-sm">
+                      {filteredTasks.some((t) => !!t.lastSubmittedAt) ? `${totalActualEffort}h` : `${totalEstimatedEffort}h`}
                     </span>
-                  )}
+                    {filteredTasks.some((t) => !!t.lastSubmittedAt) && totalActualEffort !== totalEstimatedEffort && (
+                      <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
+                        (est: {totalEstimatedEffort}h)
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
+
+          {/* Progressive Loading Sentinel Indicator */}
+          {hasMoreItems && (
+            <div
+              ref={sentinelRef}
+              className="w-full py-4 flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400 select-none animate-pulse"
+            >
+              <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <span>Đang hiển thị thêm công việc...</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setVisibleRoleCount(preparedScheduleData.roleGroups.length);
+                  setVisibleMyTasksCount(preparedScheduleData.myTasks?.rootFilteredTasks.length || 9999);
+                }}
+                className="ml-2 text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-800 font-semibold cursor-pointer"
+              >
+                (Tải tất cả ngay)
+              </button>
+            </div>
+          )}
           </div>
         </>
       )}

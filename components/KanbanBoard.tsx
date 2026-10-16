@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, TaskStatus, Ticket, getEffectiveTaskStatus, getUserRoleColorClass, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
+import { Task, TaskStatus, Ticket, User, Milestone, getEffectiveTaskStatus, getUserRoleColorClass, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM } from '../types/task';
 import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
@@ -11,6 +11,7 @@ import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
 import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import {
   AlertTriangle,
   Award,
@@ -158,6 +159,42 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
     return award?.isTopEffort || false;
   };
 
+  const usersByAccountMap = React.useMemo(() => {
+    const map = new Map<string, User>();
+    users.forEach((u) => {
+      if (u.account) {
+        map.set(u.account.trim().toLowerCase(), u);
+      }
+    });
+    return map;
+  }, [users]);
+
+  const milestoneByIdMap = React.useMemo(() => {
+    const map = new Map<string, Milestone>();
+    milestones.forEach((m) => {
+      map.set(m.id, m);
+    });
+    return map;
+  }, [milestones]);
+
+  const tasksByStatus = React.useMemo(() => {
+    const result: Record<TaskStatus, Task[]> = {
+      'To do': [],
+      'In Progress': [],
+      'Done': [],
+    };
+    currentWeekTasks.forEach((t) => {
+      const status = getEffectiveTaskStatus(t);
+      if (result[status]) {
+        result[status].push(t);
+      }
+    });
+    result['To do'].sort(sortByPriority);
+    result['In Progress'].sort(sortByPriority);
+    result['Done'].sort(sortByPriority);
+    return result;
+  }, [currentWeekTasks]);
+
   const canMoveTask = (t: Task) => {
     if (
       currentUser?.role === 'Leader' ||
@@ -244,7 +281,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
     const isAssignedToMe = canReportTask(t);
     const canMove = canMoveTask(t);
     const isBeingDragged = draggedTaskId === t.id;
-    const milestone = milestones.find((m) => m.id === t.milestoneId);
+    const milestone = t.milestoneId ? milestoneByIdMap.get(t.milestoneId) : undefined;
 
     return (
       <div
@@ -403,7 +440,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
             {/* Assignee & Effort */}
             <div className="flex items-center gap-2 min-w-0">
               {t.assigneeAccount ? (() => {
-                const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount!.toLowerCase());
+                const assigneeUser = usersByAccountMap.get(t.assigneeAccount!.toLowerCase());
                 return (
                   <div className="flex items-center gap-1.5 min-w-0" title={`Giao cho @${t.assigneeAccount}`}>
                     <UserAvatar
@@ -535,7 +572,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
       <div className="md:hidden space-y-3">
         <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 gap-1">
           {columns.map((col) => {
-            const count = currentWeekTasks.filter((t) => getEffectiveTaskStatus(t) === col.status).length;
+            const count = tasksByStatus[col.status]?.length || 0;
             const isActive = mobileActiveStatus === col.status;
             return (
               <button
@@ -560,7 +597,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
 
         {/* Mobile Active Column Cards */}
         {(() => {
-          const colTasks = [...currentWeekTasks.filter((t) => getEffectiveTaskStatus(t) === mobileActiveStatus)].sort(sortByPriority);
+          const colTasks = tasksByStatus[mobileActiveStatus] || [];
           if (colTasks.length === 0) {
             return (
               <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-1.5">
@@ -580,7 +617,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
       {/* DESKTOP VIEW: 3-Column Kanban Grid */}
       <div className="hidden md:grid grid-cols-3 gap-5 items-stretch h-[calc(100vh-210px)] min-h-[640px] max-h-[900px]">
         {columns.map((col) => {
-          const colTasks = [...currentWeekTasks.filter((t) => getEffectiveTaskStatus(t) === col.status)].sort(sortByPriority);
+          const colTasks = tasksByStatus[col.status] || [];
           const isOver = dragOverColumn === col.status;
           const activeTask = tasks.find((t) => t.id === draggedTaskIdRef.current);
           const isTargetDifferent = activeTask && activeTask.status !== col.status;

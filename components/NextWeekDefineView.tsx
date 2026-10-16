@@ -11,6 +11,7 @@ import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
 import { getWeekDateRangeStr } from './WorkHistoryView';
+import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import {
   ClipboardList,
   CalendarPlus,
@@ -648,7 +649,6 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                         {t.role}
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">#{t.id.replace('tsk-', '')}</span>
                     </div>
 
                     <h4 className="text-xs font-bold text-slate-800 leading-snug">
@@ -1073,7 +1073,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {nextWeekTasksByRole.map(([roleCode, roleTasks]) => {
+                  {(() => {
+                    let runningStt = 0;
+                    return nextWeekTasksByRole.map(([roleCode, roleTasks]) => {
                     // Group tasks by Account within this role
                     const tasksByAccountMap = new Map<string, Task[]>();
                     roleTasks.forEach((t) => {
@@ -1168,8 +1170,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
                                 return (
                                   <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                                    <td className="py-3 px-4 text-center text-slate-400 font-mono text-[11px]">
-                                      {t.id.replace('tsk-', '')}
+                                    <td className="py-3 px-4 text-center text-slate-400 font-mono text-[11px] font-medium">
+                                      {++runningStt}
                                     </td>
 
                                     <td className="py-3 px-4">
@@ -1300,14 +1302,17 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                         })}
                       </React.Fragment>
                     );
-                  })}
+                  });
+                })()}
                 </tbody>
               </table>
             </div>
 
             {/* MOBILE CARD VIEW */}
             <div className="md:hidden p-3 space-y-4">
-              {nextWeekTasksByRole.map(([roleCode, roleTasks]) => {
+              {(() => {
+                let mobileRunningStt = 0;
+                return nextWeekTasksByRole.map(([roleCode, roleTasks]) => {
                 const tasksByAccountMap = new Map<string, Task[]>();
                 roleTasks.forEach((t) => {
                   const acc = t.assigneeAccount || 'Unassigned';
@@ -1386,8 +1391,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                     className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5 shadow-2xs cursor-pointer"
                                   >
                                     <div className="flex items-center justify-between gap-2">
-                                      <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                        #{t.id.replace('tsk-', '')}
+                                      <span className="text-[10px] font-mono text-slate-400 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
+                                        #{++mobileRunningStt}
                                       </span>
                                       {(() => {
                                         const linkedTicket = getLinkedTicket(t);
@@ -1486,7 +1491,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                     </div>
                   </div>
                 );
-              })}
+              });
+            })()}
             </div>
           </>
         )}

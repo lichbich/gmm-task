@@ -80,6 +80,7 @@ import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
+import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -138,6 +139,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Keep task updated in real-time with context
   const task = tasks.find((t) => t.id === taskProp?.id) || taskProp;
 
+  const effectiveTaskCode = useMemo(() => {
+    return getEffectiveTaskCode(task, tasks, milestones);
+  }, [task, tasks, milestones]);
+
+  // Silently heal / persist code if task was lacking one or outdated
+  useEffect(() => {
+    if (isOpen && task && effectiveTaskCode && (!task.code || task.code !== effectiveTaskCode)) {
+      updateTask(task.id, { code: effectiveTaskCode }, { skipLog: true });
+    }
+  }, [isOpen, task?.id, task?.code, effectiveTaskCode]);
+
   // Calculate total accumulated effort across all weeks
   const accumulatedEffort = useMemo(() => {
     return calculateTaskAccumulatedEffort(task, tasks, weeklyArchives);
@@ -169,6 +181,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const descFileInputRef = useRef<HTMLInputElement>(null);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; alt?: string } | null>(null);
   const [copiedImageUrl, setCopiedImageUrl] = useState<string | null>(null);
+  const [copiedTaskCode, setCopiedTaskCode] = useState(false);
 
   const forceCloseRef = useRef<() => void>(() => {});
 
@@ -718,7 +731,23 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 {effectiveDisplayStatus}
               </span>
 
-              <span className="text-xs text-slate-400 font-mono">#{task.id.replace('tsk-', '')}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(effectiveTaskCode);
+                  setCopiedTaskCode(true);
+                  setTimeout(() => setCopiedTaskCode(false), 2000);
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-xs font-mono font-bold rounded-lg transition cursor-pointer active:scale-95 shrink-0"
+                title="Bấm để sao chép mã task"
+              >
+                <span>{effectiveTaskCode}</span>
+                {copiedTaskCode ? (
+                  <Check className="w-3 h-3 text-emerald-500" />
+                ) : (
+                  <Copy className="w-3 h-3 opacity-60" />
+                )}
+              </button>
 
               {isLate && (
                 <span className="px-2 py-0.5 bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 text-[10px] font-bold rounded-full flex items-center gap-1 shrink-0">
@@ -1044,6 +1073,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                           >
                             <div className="flex items-center gap-2 min-w-0 flex-1">
                               <span className="text-indigo-400 font-mono text-xs select-none">↳</span>
+                              {st.code && (
+                                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded font-bold bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
+                                  {st.code}
+                                </span>
+                              )}
                               <div className="min-w-0 flex-1">
                                 <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">
                                   {st.title}

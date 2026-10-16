@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   Milestone,
@@ -46,6 +46,7 @@ import {
 import { Dropdown } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
 import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
+import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
@@ -621,20 +622,47 @@ export const MilestonesView: React.FC = () => {
     return Array.from(titleAssigneeMap.values());
   };
 
-  // Filtered milestones and adhoc tasks (strictly from Week 95 onwards for active operational views)
-  const filteredMilestones = milestones
-    .filter(isMilestoneRoleMatch)
-    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  // Pre-indexed lookups for instant O(1) performance in Milestones view
+  const subtasksByParentIdMap = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    tasks.forEach((t) => {
+      if (t.subtaskParentId) {
+        const list = map.get(t.subtaskParentId) || [];
+        list.push(t);
+        map.set(t.subtaskParentId, list);
+      }
+    });
+    return map;
+  }, [tasks]);
 
-  const filteredAdhocTasks = deduplicateTasksForMilestoneView(
-    tasks.filter(
-      (t) =>
-        (t.weekNumber === undefined || t.weekNumber >= 95) &&
-        (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) &&
-        isTaskRoleMatch(t.role) &&
-        isTaskAssigneeMatch(t)
-    )
-  );
+  const usersByAccountMap = useMemo(() => {
+    const map = new Map<string, User>();
+    users.forEach((u) => {
+      if (u.account) {
+        map.set(u.account.trim().toLowerCase(), u);
+      }
+    });
+    return map;
+  }, [users]);
+
+  // Filtered milestones and adhoc tasks (strictly from Week 95 onwards for active operational views)
+  const filteredMilestones = useMemo(() => {
+    return milestones
+      .filter(isMilestoneRoleMatch)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [milestones]);
+
+  const filteredAdhocTasks = useMemo(() => {
+    return deduplicateTasksForMilestoneView(
+      tasks.filter(
+        (t) =>
+          (t.weekNumber === undefined || t.weekNumber >= 95) &&
+          (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) &&
+          isTaskRoleMatch(t.role) &&
+          isTaskAssigneeMatch(t)
+      )
+    );
+  }, [tasks, milestones, adminSelectedRole, roles, assigneeFilter]);
 
   const canManageMilestone = (ms: Milestone): boolean => {
     return isPOOrAdminOrPM(currentUser);
@@ -821,7 +849,7 @@ export const MilestonesView: React.FC = () => {
     const isMember = currentUser?.role === 'Member';
 
     // Subtask hierarchy logic
-    const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+    const taskSubtasks = subtasksByParentIdMap.get(t.id) || [];
     const hasSub = taskSubtasks.length > 0;
     const isParent = hasSub || Boolean(t.isParentTask);
     const isCollapsed = collapsedParentIds.has(t.id);
@@ -1062,7 +1090,7 @@ export const MilestonesView: React.FC = () => {
                   ) : isUnassigned ? (
                     <strong className="text-slate-400 italic ml-1 font-medium">Chưa gán</strong>
                   ) : (() => {
-                    const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount?.toLowerCase());
+                    const assigneeUser = usersByAccountMap.get(t.assigneeAccount?.toLowerCase() || '');
                     return (
                       <strong className={`ml-1 ${getUserRoleColorClass(assigneeUser?.role)}`}>{t.assigneeAccount}</strong>
                     );
@@ -1366,7 +1394,7 @@ export const MilestonesView: React.FC = () => {
               ) : isUnassigned ? (
                 <strong className="text-slate-400 italic font-medium">Chưa gán</strong>
               ) : (() => {
-                const assigneeUser = users.find((u) => u.account.toLowerCase() === t.assigneeAccount?.toLowerCase());
+                const assigneeUser = usersByAccountMap.get(t.assigneeAccount?.toLowerCase() || '');
                 return (
                   <strong className={getUserRoleColorClass(assigneeUser?.role)}>{t.assigneeAccount}</strong>
                 );
