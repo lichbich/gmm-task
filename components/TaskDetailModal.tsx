@@ -677,7 +677,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl text-slate-800 dark:text-slate-100 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-5xl xl:max-w-6xl shadow-2xl text-slate-800 dark:text-slate-100 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         }`}
       >
@@ -751,933 +751,943 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Scrollable Body with custom-scrollbar */}
-        <div className="p-5 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-4 min-h-0 min-w-0 bg-white dark:bg-slate-900">
-          {/* 1. Leader View: Pending Task Assignment Request Banner */}
-          {isLeaderOrAdmin && isRequested && (
-            <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-sm shrink-0">
-                  ✋
-                </div>
-                <div className="min-w-0">
-                  <div className="font-bold flex items-center gap-1.5 flex-wrap">
-                    <span>Thành viên</span>
-                    <span className="font-mono bg-amber-200/80 dark:bg-amber-900 text-amber-950 dark:text-amber-100 px-1.5 py-0.5 rounded-md font-black">
-                      @{task.assignmentRequestedBy}
-                    </span>
-                    <span>vừa gửi yêu cầu nhận task này{task.requestedWeekNumber ? ` (Tuần ${task.requestedWeekNumber})` : ''}</span>
+        <div className="p-4 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-5 min-h-0 min-w-0 bg-white dark:bg-slate-900">
+          {/* Top Pending / Claim Request Banners (Full width) */}
+          {((isLeaderOrAdmin && isRequested) || (isMember && isMyPendingRequest) || (isMember && isUnassigned && task.status !== 'Done' && !isRequested)) && (
+            <div className="space-y-3">
+              {/* 1. Leader View: Pending Task Assignment Request Banner */}
+              {isLeaderOrAdmin && isRequested && (
+                <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-sm shrink-0">
+                      ✋
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                        <span>Thành viên</span>
+                        <span className="font-mono bg-amber-200/80 dark:bg-amber-900 text-amber-950 dark:text-amber-100 px-1.5 py-0.5 rounded-md font-black">
+                          @{task.assignmentRequestedBy}
+                        </span>
+                        <span>vừa gửi yêu cầu nhận task này{task.requestedWeekNumber ? ` (Tuần ${task.requestedWeekNumber})` : ''}</span>
+                      </div>
+                      <div className="text-[11px] text-amber-700 dark:text-amber-300 truncate">
+                        Chuyển sang cửa sổ chỉnh sửa để kiểm tra chi tiết và duyệt phân công cho thành viên.
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-amber-700 dark:text-amber-300 truncate">
-                    Chuyển sang cửa sổ chỉnh sửa để kiểm tra chi tiết và duyệt phân công cho thành viên.
-                  </div>
-                </div>
-              </div>
 
-              {onEditTask && isEditable && (
-                <button
-                  type="button"
-                  onClick={() => handleNavigateTo(() => onEditTask(task))}
-                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <Edit3 className="w-3.5 h-3.5" />
-                  <span>Phân công ngay</span>
-                </button>
+                  {onEditTask && isEditable && (
+                    <button
+                      type="button"
+                      onClick={() => handleNavigateTo(() => onEditTask(task))}
+                      className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Phân công ngay</span>
+                    </button>
+                  )}
+                </div>
               )}
-            </div>
-          )}
 
-          {/* 2. Member View: Own Pending Request Notice */}
-          {isMember && isMyPendingRequest && (
-            <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
-              <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-sm shrink-0">
-                ⏳
-              </div>
-              <div className="min-w-0">
-                <div className="font-bold flex items-center gap-1.5 flex-wrap">
-                  <span>Bạn đã gửi yêu cầu nhận task này cho Tuần {task.requestedWeekNumber || selectedWeek}</span>
-                </div>
-                <div className="text-[11px] text-amber-700 dark:text-amber-300">
-                  Yêu cầu đang chờ Leader kiểm tra và duyệt phân công.
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 3. Member View: Unassigned Task Request Invitation Banner */}
-          {isMember && isUnassigned && task.status !== 'Done' && !isRequested && (
-            <div className="p-3.5 bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200/90 dark:border-indigo-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 animate-in fade-in duration-150">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 border border-indigo-300 dark:border-indigo-700 flex items-center justify-center text-sm shrink-0">
-                  ✋
-                </div>
-                <div className="min-w-0">
-                  <div className="font-bold flex items-center gap-1.5 flex-wrap">
-                    <span>Task chưa có người phụ trách</span>
+              {/* 2. Member View: Own Pending Request Notice */}
+              {isMember && isMyPendingRequest && (
+                <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex items-center gap-3 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-150">
+                  <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-sm shrink-0">
+                    ⏳
                   </div>
-                  <div className="text-[11px] text-indigo-700 dark:text-indigo-300">
-                    Bạn có thể gửi yêu cầu nhận task này để làm trong <b>Tuần {selectedWeek}</b>.
+                  <div className="min-w-0">
+                    <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                      <span>Bạn đã gửi yêu cầu nhận task này cho Tuần {task.requestedWeekNumber || selectedWeek}</span>
+                    </div>
+                    <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                      Yêu cầu đang chờ Leader kiểm tra và duyệt phân công.
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!currentUser?.account) return;
-                  confirmDialog({
-                    title: 'Yêu cầu nhận task',
-                    message: `Bạn có muốn gửi yêu cầu nhận task "${task.title}" cho Tuần ${selectedWeek} không?`,
-                    confirmText: 'Gửi yêu cầu',
-                    type: 'info',
-                    onConfirm: () => {
-                      requestTaskAssignment(task.id, currentUser.account, selectedWeek);
-                    },
-                  });
-                }}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                <span>✋ Xin nhận task (Tuần {selectedWeek})</span>
-              </button>
-            </div>
-          )}
-
-          {/* Creator & Creation Date Info Banner */}
-          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 text-xs text-slate-600 dark:text-slate-300">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
-                  <User className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-slate-400 dark:text-slate-400">Người tạo:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-100">{creatorDisplay}</span>
-                    <span className="text-slate-400 dark:text-slate-500">•</span>
-                    <span className="text-slate-500 dark:text-slate-400 font-mono text-[11px] flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {createdDateDisplay}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="shrink-0 flex items-center gap-2">
-                {displayWeekNumber ? (
-                  <span className="font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-3 py-1 rounded-xl border border-indigo-200/80 dark:border-indigo-800/80 text-xs">
-                    Tuần {displayWeekNumber} / {task.year || 2026}
-                  </span>
-                ) : (
-                  <span className="font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
-                    Kho Backlog (Chưa gán tuần)
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Task Details / Description Section */}
-          <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-2.5 relative min-w-0 overflow-hidden">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
-                <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <span>Mô Tả Chi Tiết & Hướng Dẫn Kỹ Thuật (Leader):</span>
-              </div>
-
-              {!isEditingDesc && (
-                <button
-                  type="button"
-                  onClick={() => setIsEditingDesc(true)}
-                  className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 hover:underline transition"
-                >
-                  <Edit3 className="w-3 h-3" />
-                  {task.description ? 'Chỉnh sửa mô tả' : '+ Thêm mô tả'}
-                </button>
               )}
-            </div>
 
-            {isEditingDesc ? (
-              <form onSubmit={handleSaveDescription} className="space-y-3 pt-1">
-                <DescriptionEditor
-                  value={descText}
-                  onChange={setDescText}
-                  placeholder="Nhập mô tả chi tiết công việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên... Hỗ trợ Paste (Ctrl+V) hoặc kéo thả ảnh trực tiếp!"
-                  minRows={5}
-                  autoFocus={true}
-                  onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
-                />
+              {/* 3. Member View: Unassigned Task Request Invitation Banner */}
+              {isMember && isUnassigned && task.status !== 'Done' && !isRequested && (
+                <div className="p-3.5 bg-indigo-50/90 dark:bg-indigo-950/40 border border-indigo-200/90 dark:border-indigo-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 border border-indigo-300 dark:border-indigo-700 flex items-center justify-center text-sm shrink-0">
+                      ✋
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                        <span>Task chưa có người phụ trách</span>
+                      </div>
+                      <div className="text-[11px] text-indigo-700 dark:text-indigo-300">
+                        Bạn có thể gửi yêu cầu nhận task này để làm trong <b>Tuần {selectedWeek}</b>.
+                      </div>
+                    </div>
+                  </div>
 
-                <div className="flex items-center justify-end gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => {
-                      if (descText.trim() !== (task.description || '').trim()) {
-                        confirmDialog({
-                          title: 'Hủy chỉnh sửa mô tả',
-                          message: 'Nội dung mô tả đã thay đổi nhưng chưa lưu. Bạn có chắc chắn muốn hủy các thay đổi này không?',
-                          confirmText: 'Xác nhận hủy',
-                          cancelText: 'Tiếp tục sửa',
-                          type: 'warning',
-                          onConfirm: () => {
-                            setDescText(task.description || '');
-                            setIsEditingDesc(false);
-                          },
-                        });
-                      } else {
-                        setDescText(task.description || '');
-                        setIsEditingDesc(false);
-                      }
+                      if (!currentUser?.account) return;
+                      confirmDialog({
+                        title: 'Yêu cầu nhận task',
+                        message: `Bạn có muốn gửi yêu cầu nhận task "${task.title}" cho Tuần ${selectedWeek} không?`,
+                        confirmText: 'Gửi yêu cầu',
+                        type: 'info',
+                        onConfirm: () => {
+                          requestTaskAssignment(task.id, currentUser.account, selectedWeek);
+                        },
+                      });
                     }}
-                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-xl font-medium transition cursor-pointer"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    Lưu Mô Tả
+                    <span>✋ Xin nhận task (Tuần {selectedWeek})</span>
                   </button>
                 </div>
-              </form>
-            ) : (
-              <div>
-                {task.description ? (
-                  <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3.5 min-w-0 overflow-hidden">
-                    <RichDescriptionViewer
-                      content={task.description}
-                      onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
-                      allowToggleCheckboxes={true}
-                      onToggleCheckbox={(lineIndex) => handleToggleCheckbox(lineIndex)}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    onClick={() => setIsEditingDesc(true)}
-                    className="border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3.5 text-center text-xs cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40 hover:border-indigo-300 dark:hover:border-indigo-700 transition space-y-1"
-                  >
-                    <div className="font-medium text-slate-600 dark:text-slate-300">Chưa có mô tả chi tiết cho task này</div>
-                    <div className="text-[11px] text-slate-400 dark:text-slate-400">
-                      Bấm vào đây để thêm nội dung hướng dẫn hoặc danh sách checklist / việc con cho thành viên.
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isSavedDesc && (
-              <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 animate-fade-in pt-1">
-                <CheckCircle className="w-3.5 h-3.5" /> Đã cập nhật mô tả task thành công!
-              </div>
-            )}
-          </div>
-
-          {/* Subtask Parent Relationship Banner */}
-          {task && isSubtask(task) && (
-            <div className="bg-indigo-50/90 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 p-3 rounded-2xl flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center shrink-0 text-indigo-600 dark:text-indigo-400">
-                  <CornerDownRight className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
-                    Subtask trực thuộc task lớn
-                  </div>
-                  <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
-                    {(() => {
-                      const parentObj = task.subtaskParentId ? tasks.find((t) => t.id === task.subtaskParentId) : null;
-                      return parentObj?.title || task.subtaskParentTitle || 'Task lớn';
-                    })()}
-                  </div>
-                  {(task.subtaskReviewerAccount) && (
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Reviewer / Leader: @{task.subtaskReviewerAccount}
-                    </div>
-                  )}
-                </div>
-              </div>
-              {task.subtaskParentId && onSelectTask && (() => {
-                const parentObj = tasks.find((t) => t.id === task.subtaskParentId);
-                return parentObj ? (
-                  <button
-                    type="button"
-                    onClick={() => onSelectTask(parentObj)}
-                    className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 text-indigo-700 dark:text-indigo-300 font-bold text-xs rounded-xl border border-indigo-200 dark:border-indigo-700 shadow-2xs shrink-0 transition cursor-pointer active:scale-95"
-                  >
-                    Xem task cha
-                  </button>
-                ) : null;
-              })()}
+              )}
             </div>
           )}
 
-          {/* Subtasks List Section (If task is a parent task or has subtasks) */}
-          {task && (() => {
-            const subtasksList = getSubtasksOfParent(task.id, tasks);
-            if (subtasksList.length === 0) return null;
-            return (
-              <div className="bg-white dark:bg-slate-850 p-3.5 sm:p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-3">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                    <span className="font-bold text-xs text-slate-800 dark:text-slate-100">
-                      Danh sách Subtask ({subtasksList.length})
-                    </span>
-                    {!task.isManualOverride ? (
-                      <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold">
-                        Tự động tổng hợp
-                      </span>
+          {/* Jira-style 2-Column Responsive Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
+            {/* LEFT COLUMN: Main Content Flow (Description, Subtasks, Discussion, Activity History) */}
+            <div className="lg:col-span-7 xl:col-span-7 space-y-4 min-w-0 order-2 lg:order-1">
+              {/* Task Details / Description Section */}
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-2.5 relative min-w-0 overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
+                    <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span>Mô Tả Chi Tiết & Hướng Dẫn Kỹ Thuật (Leader):</span>
+                  </div>
+
+                  {!isEditingDesc && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingDesc(true)}
+                      className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 hover:underline transition"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      {task.description ? 'Chỉnh sửa mô tả' : '+ Thêm mô tả'}
+                    </button>
+                  )}
+                </div>
+
+                {isEditingDesc ? (
+                  <form onSubmit={handleSaveDescription} className="space-y-3 pt-1">
+                    <DescriptionEditor
+                      value={descText}
+                      onChange={setDescText}
+                      placeholder="Nhập mô tả chi tiết công việc, hướng dẫn thực hiện, tiêu chí nghiệm thu hoặc checklist cho thành viên... Hỗ trợ Paste (Ctrl+V) hoặc kéo thả ảnh trực tiếp!"
+                      minRows={5}
+                      autoFocus={true}
+                      onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
+                    />
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (descText.trim() !== (task.description || '').trim()) {
+                            confirmDialog({
+                              title: 'Hủy chỉnh sửa mô tả',
+                              message: 'Nội dung mô tả đã thay đổi nhưng chưa lưu. Bạn có chắc chắn muốn hủy các thay đổi này không?',
+                              confirmText: 'Xác nhận hủy',
+                              cancelText: 'Tiếp tục sửa',
+                              type: 'warning',
+                              onConfirm: () => {
+                                setDescText(task.description || '');
+                                setIsEditingDesc(false);
+                              },
+                            });
+                          } else {
+                            setDescText(task.description || '');
+                            setIsEditingDesc(false);
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-xl font-medium transition cursor-pointer"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Lưu Mô Tả
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div>
+                    {task.description ? (
+                      <div className="bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3.5 min-w-0 overflow-hidden">
+                        <RichDescriptionViewer
+                          content={task.description}
+                          onPreviewImage={(url) => setLightboxImage({ url, alt: 'Ảnh đính kèm' })}
+                          allowToggleCheckboxes={true}
+                          onToggleCheckbox={(lineIndex) => handleToggleCheckbox(lineIndex)}
+                        />
+                      </div>
                     ) : (
-                      <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-semibold">
-                        Ghi đè thủ công
-                      </span>
+                      <div
+                        onClick={() => setIsEditingDesc(true)}
+                        className="border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3.5 text-center text-xs cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-indigo-950/40 hover:border-indigo-300 dark:hover:border-indigo-700 transition space-y-1"
+                      >
+                        <div className="font-medium text-slate-600 dark:text-slate-300">Chưa có mô tả chi tiết cho task này</div>
+                        <div className="text-[11px] text-slate-400 dark:text-slate-400">
+                          Bấm vào đây để thêm nội dung hướng dẫn hoặc danh sách checklist / việc con cho thành viên.
+                        </div>
+                      </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                )}
+
+                {isSavedDesc && (
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 animate-fade-in pt-1">
+                    <CheckCircle className="w-3.5 h-3.5" /> Đã cập nhật mô tả task thành công!
+                  </div>
+                )}
+              </div>
+
+              {/* Subtask Parent Relationship Banner */}
+              {task && isSubtask(task) && (
+                <div className="bg-indigo-50/90 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 p-3 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center shrink-0 text-indigo-600 dark:text-indigo-400">
+                      <CornerDownRight className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                        Subtask trực thuộc task lớn
+                      </div>
+                      <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                        {(() => {
+                          const parentObj = task.subtaskParentId ? tasks.find((t) => t.id === task.subtaskParentId) : null;
+                          return parentObj?.title || task.subtaskParentTitle || 'Task lớn';
+                        })()}
+                      </div>
+                      {(task.subtaskReviewerAccount) && (
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                          Reviewer / Leader: @{task.subtaskReviewerAccount}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {task.subtaskParentId && onSelectTask && (() => {
+                    const parentObj = tasks.find((t) => t.id === task.subtaskParentId);
+                    return parentObj ? (
+                      <button
+                        type="button"
+                        onClick={() => onSelectTask(parentObj)}
+                        className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-indigo-100 dark:hover:bg-slate-700 text-indigo-700 dark:text-indigo-300 font-bold text-xs rounded-xl border border-indigo-200 dark:border-indigo-700 shadow-2xs shrink-0 transition cursor-pointer active:scale-95"
+                      >
+                        Xem task cha
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
+              )}
+
+              {/* Subtasks List Section (If task is a parent task or has subtasks) */}
+              {task && (() => {
+                const subtasksList = getSubtasksOfParent(task.id, tasks);
+                if (subtasksList.length === 0) return null;
+                return (
+                  <div className="bg-white dark:bg-slate-850 p-3.5 sm:p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/60 space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        <span className="font-bold text-xs text-slate-800 dark:text-slate-100">
+                          Danh sách Subtask ({subtasksList.length})
+                        </span>
+                        {!task.isManualOverride ? (
+                          <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold">
+                            Tự động tổng hợp
+                          </span>
+                        ) : (
+                          <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-semibold">
+                            Ghi đè thủ công
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsLinkModalOpen(true)}
+                          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 transition flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs"
+                          title="Chọn thêm các task có sẵn để gộp vào task này"
+                        >
+                          <Link2 className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>+ Gộp task có sẵn</span>
+                        </button>
+                        {onOpenCreateSubtask && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenCreateSubtask(task)}
+                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800 transition flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs"
+                          >
+                            <CornerDownRight className="w-3.5 h-3.5" />
+                            <span>+ Thêm Subtask</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
+                      {subtasksList.map((st) => {
+                        const stUser = users.find((u) => u.account.toLowerCase() === (st.assigneeAccount || '').toLowerCase());
+                        return (
+                          <div
+                            key={st.id}
+                            onClick={() => onSelectTask?.(st)}
+                            className={`p-2.5 flex items-center justify-between gap-3 text-xs bg-slate-50/50 dark:bg-slate-900/40 hover:bg-indigo-50/60 dark:hover:bg-slate-800/80 transition ${
+                              onSelectTask ? 'cursor-pointer' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-indigo-400 font-mono text-xs select-none">↳</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                  {st.title}
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
+                                  <span>Effort: <strong className="font-mono text-indigo-600 dark:text-indigo-400">{st.actualEffort || st.estimatedEffort}h</strong></span>
+                                  <span>•</span>
+                                  <span>Tiến độ: <strong className="font-mono text-slate-600 dark:text-slate-300">{st.completionPercentage || 0}%</strong></span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {st.assigneeAccount ? (
+                                <div className="flex items-center gap-1">
+                                  <UserAvatar user={stUser} account={st.assigneeAccount} size="xs" shape="circle" />
+                                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                                    {st.assigneeAccount}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-amber-500 font-medium">Chưa gán</span>
+                              )}
+
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                st.status === 'Done' || (st.completionPercentage || 0) >= 100
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : st.status === 'In Progress' || (st.completionPercentage || 0) > 0
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                              }`}>
+                                {st.status || 'To do'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Quick Subtask conversion / Link existing tasks for standalone tasks */}
+              {task && !isSubtask(task) && getSubtasksOfParent(task.id, tasks).length === 0 && (
+                <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 min-w-0">
+                    <Layers className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <span className="truncate">Chưa có Subtask. Bạn có thể gộp các task lẻ có sẵn vào task này.</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => setIsLinkModalOpen(true)}
-                      className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 transition flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs"
-                      title="Chọn thêm các task có sẵn để gộp vào task này"
+                      className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold rounded-xl border border-indigo-200 dark:border-indigo-800 shadow-2xs transition active:scale-95 flex items-center gap-1 cursor-pointer"
                     >
                       <Link2 className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>+ Gộp task có sẵn</span>
+                      <span>Gộp task có sẵn</span>
                     </button>
                     {onOpenCreateSubtask && (
                       <button
                         type="button"
                         onClick={() => onOpenCreateSubtask(task)}
-                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800 transition flex items-center gap-1 active:scale-95 cursor-pointer shadow-2xs"
+                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-2xs transition active:scale-95 flex items-center gap-1 cursor-pointer"
                       >
                         <CornerDownRight className="w-3.5 h-3.5" />
-                        <span>+ Thêm Subtask</span>
+                        <span>+ Subtask mới</span>
                       </button>
                     )}
                   </div>
                 </div>
+              )}
 
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl overflow-hidden">
-                  {subtasksList.map((st) => {
-                    const stUser = users.find((u) => u.account.toLowerCase() === (st.assigneeAccount || '').toLowerCase());
-                    return (
-                      <div
-                        key={st.id}
-                        onClick={() => onSelectTask?.(st)}
-                        className={`p-2.5 flex items-center justify-between gap-3 text-xs bg-slate-50/50 dark:bg-slate-900/40 hover:bg-indigo-50/60 dark:hover:bg-slate-800/80 transition ${
-                          onSelectTask ? 'cursor-pointer' : ''
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <span className="text-indigo-400 font-mono text-xs select-none">↳</span>
-                          <div className="min-w-0 flex-1">
-                            <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">
-                              {st.title}
+              {/* SECTION: Collaborative Notes & Discussion Feed (Luồng Trao Đổi Task) */}
+              <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    Luồng Trao Đổi & Ghi Chú Task ({noteLines.length}):
+                  </label>
+                </div>
+
+                {/* Rich Thread Display & Quick Discussion Post */}
+                <div className="space-y-2.5">
+                  {/* Discussion History Container */}
+                  <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-72 sm:max-h-80 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-2 min-w-0">
+                    {noteLines.length === 0 ? (
+                      <div className="text-center py-5 text-slate-400 dark:text-slate-400 text-xs flex flex-col items-center gap-1.5">
+                        <MessageSquare className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                        <span>Chưa có ghi chú hoặc trao đổi nào cho task này.</span>
+                        <span className="text-[11px] text-slate-400 dark:text-slate-400">Hãy nhập phản hồi bên dưới để bắt đầu trao đổi luồng task!</span>
+                      </div>
+                    ) : (
+                      noteLines.map((line, idx) => {
+                        const parsed = parseNoteLine(line, currentUser);
+                        const isEditingThis = editingNoteIndex === idx;
+                        const isHighlighted = highlightedNoteIndex === idx;
+
+                        if (parsed.isTagged) {
+                          return (
+                            <div
+                              key={idx}
+                              id={`task-detail-note-${idx}`}
+                              className={`rounded-xl p-2.5 shadow-2xs text-xs space-y-1.5 transition-all duration-300 min-w-0 break-words [overflow-wrap:anywhere] ${
+                                isHighlighted
+                                  ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
+                                  : parsed.isMyMessage
+                                  ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/90 dark:border-indigo-800/80 ml-2'
+                                  : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 mr-2'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span
+                                    className={`font-semibold text-[11px] px-2 py-0.5 rounded-md ${
+                                      parsed.isMyMessage
+                                        ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 font-bold'
+                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    {parsed.baseAuthor}
+                                  </span>
+
+                                  {parsed.editedTime && (
+                                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-normal italic">
+                                      <Clock className="w-3 h-3 text-slate-400" />
+                                      (đã sửa {parsed.editedTime})
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Actions: Reply, Edit, Recall */}
+                                <div className="flex items-center gap-1">
+                                  {!isEditingThis && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartReply(parsed.baseAuthor || 'Thành viên', parsed.messageBody, idx)}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition cursor-pointer"
+                                      title="Trả lời tin nhắn này"
+                                    >
+                                      <Reply className="w-3 h-3" />
+                                      <span>Trả lời</span>
+                                    </button>
+                                  )}
+
+                                  {parsed.isMyMessage && !isEditingThis && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditNote(idx, parsed.messageBody)}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition cursor-pointer"
+                                        title="Chỉnh sửa nội dung ghi chú của bạn"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                        <span>Sửa</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRecallNote(idx)}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition cursor-pointer"
+                                        title="Thu hồi ghi chú này"
+                                      >
+                                        <RotateCcw className="w-3 h-3" />
+                                        <span>Thu hồi</span>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Quoted Reply Block if message is a reply */}
+                              {parsed.replyTo && (
+                                <NoteReplyQuoteBlock
+                                  replyTo={parsed.replyTo}
+                                  onClick={() => handleJumpToRepliedNote(parsed.replyTo!, idx)}
+                                />
+                              )}
+
+                              {/* Message Body or Inline Editor */}
+                              {isEditingThis ? (
+                                <div className="pt-1 space-y-2">
+                                  <MentionInput
+                                    as="textarea"
+                                    rows={2}
+                                    value={editingNoteText}
+                                    onChange={setEditingNoteText}
+                                    users={users}
+                                    mentionPlacement="top"
+                                    placeholder="Nhập nội dung ghi chú chỉnh sửa (Gõ @ để tag)..."
+                                    className="w-full bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none leading-relaxed"
+                                    autoFocus
+                                  />
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditNote}
+                                      className="px-2.5 py-1 bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium rounded-lg transition cursor-pointer"
+                                    >
+                                      Hủy
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={!editingNoteText.trim()}
+                                      onClick={() => handleSaveEditNote(idx)}
+                                      className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-lg shadow-xs transition flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Save className="w-3 h-3" />
+                                      Lưu thay đổi
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed whitespace-pre-wrap pl-1 break-words [overflow-wrap:anywhere] min-w-0">
+                                  {renderFormattedMessage(parsed.messageBody, users)}
+                                </p>
+                              )}
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5">
-                              <span>Effort: <strong className="font-mono text-indigo-600 dark:text-indigo-400">{st.actualEffort || st.estimatedEffort}h</strong></span>
-                              <span>•</span>
-                              <span>Tiến độ: <strong className="font-mono text-slate-600 dark:text-slate-300">{st.completionPercentage || 0}%</strong></span>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={idx}
+                            id={`task-detail-note-${idx}`}
+                            className={`rounded-xl p-2.5 text-xs leading-relaxed whitespace-pre-wrap space-y-1.5 transition-all duration-300 min-w-0 break-words [overflow-wrap:anywhere] ${
+                              isHighlighted
+                                ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
+                                : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200'
+                            }`}
+                          >
+                            <div className="break-words [overflow-wrap:anywhere] min-w-0">{renderFormattedMessage(line, users)}</div>
+                            <div className="flex items-center justify-end pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                              <button
+                                type="button"
+                                onClick={() => handleStartReply(creatorDisplay || 'Ghi chú ban đầu', line, idx)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition cursor-pointer"
+                                title="Trả lời ghi chú này"
+                              >
+                                <Reply className="w-3 h-3" />
+                                <span>Trả lời</span>
+                              </button>
                             </div>
                           </div>
-                        </div>
+                        );
+                      })
+                    )}
+                  </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                          {st.assigneeAccount ? (
-                            <div className="flex items-center gap-1">
-                              <UserAvatar user={stUser} account={st.assigneeAccount} size="xs" shape="circle" />
-                              <span className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                                {st.assigneeAccount}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-amber-500 font-medium">Chưa gán</span>
-                          )}
-
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                            st.status === 'Done' || (st.completionPercentage || 0) >= 100
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
-                              : st.status === 'In Progress' || (st.completionPercentage || 0) > 0
-                              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300'
-                              : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                          }`}>
-                            {st.status || 'To do'}
-                          </span>
+                  {/* Replying Banner Preview (Telegram/Messenger style) */}
+                  {replyingTo && (
+                    <div className="flex items-center justify-between gap-2 p-2 px-3 bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 border-l-4 border-l-indigo-500 rounded-xl text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Reply className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        <div className="min-w-0">
+                          <div className="font-bold text-indigo-700 dark:text-indigo-300 text-[11px] truncate flex items-center gap-1">
+                            <span>Đang trả lời:</span>
+                            <span className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[200px]">
+                              {replyingTo.author}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 italic truncate max-w-[320px] sm:max-w-[420px]">
+                            "{replyingTo.text}"
+                          </div>
                         </div>
                       </div>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        onClick={handleCancelReply}
+                        className="w-5 h-5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center shrink-0 transition cursor-pointer"
+                        title="Hủy trả lời"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Collaborative Input Field for ANY team member */}
+                  <form onSubmit={handleSendComment} className="flex flex-col sm:flex-row gap-2 min-w-0">
+                    <MentionInput
+                      as="input"
+                      value={quickComment}
+                      onChange={setQuickComment}
+                      users={users}
+                      mentionPlacement="top"
+                      placeholder={
+                        replyingTo
+                          ? `Trả lời @${replyingTo.author} (Gõ @ để tag)...`
+                          : `Gửi ghi chú/trao đổi luồng (${currentUser?.name || 'thành viên'} - Gõ @ để tag)...`
+                      }
+                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!quickComment.trim()}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center justify-center gap-1.5 shrink-0 active:scale-95 cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Gửi Phản Hồi</span>
+                    </button>
+                  </form>
+
+                  {isSaved && (
+                    <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-fade-in">
+                      <CheckCircle className="w-3.5 h-3.5" /> Đã lưu và đồng bộ ghi chú task thành công!
+                    </div>
+                  )}
                 </div>
               </div>
-            );
-          })()}
 
-          {/* Quick Subtask conversion / Link existing tasks for standalone tasks */}
-          {task && !isSubtask(task) && getSubtasksOfParent(task.id, tasks).length === 0 && (
-            <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 min-w-0">
-                <Layers className="w-4 h-4 text-indigo-500 shrink-0" />
-                <span className="truncate">Chưa có Subtask. Bạn có thể gộp các task lẻ có sẵn vào task này.</span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsLinkModalOpen(true)}
-                  className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold rounded-xl border border-indigo-200 dark:border-indigo-800 shadow-2xs transition active:scale-95 flex items-center gap-1 cursor-pointer"
-                >
-                  <Link2 className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Gộp task có sẵn</span>
-                </button>
-                {onOpenCreateSubtask && (
+              {/* SECTION: Lịch Sử & Nhật Ký Cập Nhật (Activity Log) */}
+              <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                    <span>Nhật Ký Cập Nhật:</span>
+                    <span className="text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-800/80">
+                      {activityLogsList.length} logs
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => onOpenCreateSubtask(task)}
-                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-2xs transition active:scale-95 flex items-center gap-1 cursor-pointer"
+                    onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+                    className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-1 transition cursor-pointer"
                   >
-                    <CornerDownRight className="w-3.5 h-3.5" />
-                    <span>+ Subtask mới</span>
+                    <span>{isHistoryOpen ? 'Thu gọn' : 'Xem lịch sử'}</span>
+                    {isHistoryOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                   </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Comprehensive Metadata Section */}
-          <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
-            {/* Top row: Assignee and Milestone */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {/* Assignee Card */}
-              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium">Người phụ trách chính:</span>
-                  {task.supporterAccounts && task.supporterAccounts.length > 0 && task.assigneeAccount && (
-                    <span className="text-[10.5px] font-bold font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
-                      {getMemberTaskEffort(task, task.assigneeAccount)}h
-                    </span>
-                  )}
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <UserAvatar
-                    user={assigneeUser}
-                    account={task.assigneeAccount}
-                    name={assigneeUser?.name}
-                    size="sm"
-                    shape="circle"
-                  />
-                  {(() => {
-                    const assigneeRoleInTask = assigneeUser ? getUserRoleInSpec(assigneeUser, task.role) : 'Member';
-                    return (
-                      <div className="min-w-0 flex-1">
-                        <div className={`font-bold text-xs leading-snug break-words ${getUserRoleColorClass(assigneeRoleInTask)}`}>
-                          {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
-                        </div>
-                        {task.assigneeAccount && (
-                          <div className={`text-[11px] font-medium font-mono ${getUserRoleColorClass(assigneeRoleInTask)}`}>
-                            @{task.assigneeAccount}
-                          </div>
-                        )}
+
+                {isHistoryOpen && (
+                  <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-72 sm:max-h-80 overflow-y-auto custom-scrollbar space-y-2.5">
+                    {activityLogsList.length === 0 ? (
+                      <div className="text-center py-4 text-slate-400 text-xs flex flex-col items-center gap-1">
+                        <Activity className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                        <span>Chưa có nhật ký hoạt động chi tiết nào.</span>
                       </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Milestone Card */}
-              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
-                <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Cột mốc Milestone:</span>
-                {milestone ? (
-                  <div className="flex items-start gap-1.5 text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/60 px-2.5 py-1.5 rounded-lg">
-                    <Flag className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
-                    <span className="font-semibold text-xs leading-snug break-words flex-1">{milestone.title}</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-lg">
-                    <FolderOpen className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span className="font-medium text-xs">Ngoài Milestone</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Collab Card (If collaborators are assigned to this task) */}
-            {task.supporterAccounts && task.supporterAccounts.length > 0 && (
-              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Thành viên Collab ({task.supporterAccounts.length}):</span>
-                  </span>
-                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
-                    Tổng task: {task.actualEffort || 0}h
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {task.supporterAccounts.map((supAcc) => {
-                    const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
-                    const supRoleInTask = supUser ? getUserRoleInSpec(supUser, task.role) : 'Member';
-                    const supEffort = getMemberTaskEffort(task, supAcc);
-                    return (
-                      <div
-                        key={supAcc}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800/80 border border-indigo-200/80 dark:border-indigo-800/80 rounded-xl"
-                      >
-                        <UserAvatar
-                          user={supUser}
-                          account={supAcc}
-                          name={supUser?.name}
-                          size="xs"
-                          shape="circle"
-                        />
-                        <div className="min-w-0">
-                          <span className={`font-bold text-xs ${getUserRoleColorClass(supRoleInTask)}`}>
-                            {supUser?.name || supAcc}
-                          </span>
-                          <span className="text-[10px] font-mono text-slate-400 ml-1">
-                            @{supAcc}
-                          </span>
-                        </div>
-                        <span className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
-                          {supEffort}h
-                        </span>
-                        <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                          Collab
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Bottom row: Effort and Completion Progress */}
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium">
-                    {displayWeekNumber ? `Effort Tuần ${displayWeekNumber}:` : 'Effort (Est):'}
-                  </span>
-                  {accumulatedEffort.hasMultiWeekHistory && (
-                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
-                      Tổng: {accumulatedEffort.totalEffort}h
-                    </span>
-                  )}
-                </div>
-                <div className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 flex items-baseline gap-1">
-                  <span>{displayActualEffort}h</span>
-                  <span className="text-slate-300 dark:text-slate-600 font-normal">/</span>
-                  <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{displayEstimatedEffort}h (Est)</span>
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-                <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Tiến độ hoàn thành:</span>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-indigo-600 dark:text-indigo-400 font-mono">
-                    {displayCompletionPct}%
-                  </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    effectiveDisplayStatus === 'Done'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
-                      : effectiveDisplayStatus === 'In Progress'
-                      ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
-                      : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                  }`}>
-                    {effectiveDisplayStatus}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Multi-week Accumulated Effort Breakdown */}
-            {accumulatedEffort.hasMultiWeekHistory && (
-              <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/60 space-y-2">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <span>Tổng Effort Lũy Kế ({accumulatedEffort.chainTaskCount} tuần làm việc):</span>
-                  </span>
-                  <span className="font-mono font-extrabold text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
-                    Tổng: {accumulatedEffort.totalEffort}h
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-0.5">
-                  {accumulatedEffort.weeklyBreakdown.map((item) => (
-                    <div
-                      key={item.weekNumber}
-                      className={`p-2 rounded-lg border text-xs flex flex-col justify-between transition-colors ${
-                        item.isCurrentWeek
-                          ? 'bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-300 dark:border-indigo-700 shadow-2xs'
-                          : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
-                        <span>Tuần {item.weekNumber}</span>
-                        {item.isCurrentWeek && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-600 text-white font-bold">Tuần này</span>
-                        )}
-                      </div>
-                      <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                        <span className="font-mono font-bold text-xs text-slate-800 dark:text-slate-100">
-                          {item.effort}h
-                        </span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                          {item.percentage}%
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Start Date & End Date Row if present */}
-            {(task.startDate || task.endDate) && (
-              <div className="grid grid-cols-2 gap-2.5 pt-0.5">
-                <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-                  <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-indigo-500" />
-                    Ngày bắt đầu:
-                  </span>
-                  <div className="font-mono font-bold text-xs text-indigo-700 dark:text-indigo-300">
-                    {formatDateOnlyDisplay(task.startDate) || 'Chưa cập nhật'}
-                  </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-                  <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-emerald-500" />
-                    {isTaskFullyDone ? 'Ngày hoàn thành:' : 'Hạn hoàn thành (Deadline):'}
-                  </span>
-                  <div className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300">
-                    {formatDateOnlyDisplay(task.endDate) || (isTaskFullyDone ? 'Hoàn thành' : 'Chưa đặt')}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Completion Progress Bar */}
-          <div className="space-y-1.5">
-            <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-200/80 dark:border-slate-700">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  task.completionPercentage === 100
-                    ? 'bg-emerald-500'
-                    : task.completionPercentage > 0
-                    ? 'bg-indigo-600 dark:bg-indigo-500'
-                    : 'bg-slate-300 dark:bg-slate-700'
-                }`}
-                style={{ width: `${task.completionPercentage}%` }}
-              />
-            </div>
-          </div>
-
-          {/* SECTION: Collaborative Notes & Discussion Feed (Luồng Trao Đổi Task) */}
-          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                Luồng Trao Đổi & Ghi Chú Task ({noteLines.length}):
-              </label>
-            </div>
-
-            {/* Rich Thread Display & Quick Discussion Post */}
-            <div className="space-y-2.5">
-              {/* Discussion History Container */}
-              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-56 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-2 min-w-0">
-                {noteLines.length === 0 ? (
-                  <div className="text-center py-5 text-slate-400 dark:text-slate-400 text-xs flex flex-col items-center gap-1.5">
-                    <MessageSquare className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-                    <span>Chưa có ghi chú hoặc trao đổi nào cho task này.</span>
-                    <span className="text-[11px] text-slate-400 dark:text-slate-400">Hãy nhập phản hồi bên dưới để bắt đầu trao đổi luồng task!</span>
-                  </div>
-                ) : (
-                  noteLines.map((line, idx) => {
-                    const parsed = parseNoteLine(line, currentUser);
-                    const isEditingThis = editingNoteIndex === idx;
-                    const isHighlighted = highlightedNoteIndex === idx;
-
-                    if (parsed.isTagged) {
-                      return (
-                        <div
-                          key={idx}
-                          id={`task-detail-note-${idx}`}
-                          className={`rounded-xl p-2.5 shadow-2xs text-xs space-y-1.5 transition-all duration-300 min-w-0 break-words [overflow-wrap:anywhere] ${
-                            isHighlighted
-                              ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
-                              : parsed.isMyMessage
-                              ? 'bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/90 dark:border-indigo-800/80 ml-2'
-                              : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 mr-2'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span
-                                className={`font-semibold text-[11px] px-2 py-0.5 rounded-md ${
-                                  parsed.isMyMessage
-                                    ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 font-bold'
-                                    : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                                }`}
-                              >
-                                {parsed.baseAuthor}
-                              </span>
-
-                              {parsed.editedTime && (
-                                <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 font-normal italic">
-                                  <Clock className="w-3 h-3 text-slate-400" />
-                                  (đã sửa {parsed.editedTime})
+                    ) : (
+                      activityLogsList.map((log) => {
+                        const badge = getActionBadge(log.actionType);
+                        return (
+                          <div
+                            key={log.id}
+                            className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 text-xs space-y-1.5 shadow-2xs hover:border-indigo-200 dark:hover:border-indigo-800/80 transition"
+                          >
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${badge.badgeClass}`}>
+                                  {badge.icon}
+                                  {badge.label}
                                 </span>
-                              )}
-                            </div>
+                                <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                  {log.authorName}
+                                </span>
+                                {log.authorAccount && (
+                                  <span className="text-[11px] text-slate-400 font-mono">
+                                    (@{log.authorAccount})
+                                  </span>
+                                )}
+                                {log.authorRole && (
+                                  <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded font-medium">
+                                    {log.authorRole}
+                                  </span>
+                                )}
+                              </div>
 
-                            {/* Actions: Reply, Edit, Recall */}
-                            <div className="flex items-center gap-1">
-                              {!isEditingThis && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartReply(parsed.baseAuthor || 'Thành viên', parsed.messageBody, idx)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition cursor-pointer"
-                                  title="Trả lời tin nhắn này"
-                                >
-                                  <Reply className="w-3 h-3" />
-                                  <span>Trả lời</span>
-                                </button>
-                              )}
-
-                              {parsed.isMyMessage && !isEditingThis && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleStartEditNote(idx, parsed.messageBody)}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition cursor-pointer"
-                                    title="Chỉnh sửa nội dung ghi chú của bạn"
-                                  >
-                                    <Edit3 className="w-3 h-3" />
-                                    <span>Sửa</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRecallNote(idx)}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition cursor-pointer"
-                                    title="Thu hồi ghi chú này"
-                                  >
-                                    <RotateCcw className="w-3 h-3" />
-                                    <span>Thu hồi</span>
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Quoted Reply Block if message is a reply */}
-                          {parsed.replyTo && (
-                            <NoteReplyQuoteBlock
-                              replyTo={parsed.replyTo}
-                              onClick={() => handleJumpToRepliedNote(parsed.replyTo!, idx)}
-                            />
-                          )}
-
-                          {/* Message Body or Inline Editor */}
-                          {isEditingThis ? (
-                            <div className="pt-1 space-y-2">
-                              <MentionInput
-                                as="textarea"
-                                rows={2}
-                                value={editingNoteText}
-                                onChange={setEditingNoteText}
-                                users={users}
-                                mentionPlacement="top"
-                                placeholder="Nhập nội dung ghi chú chỉnh sửa (Gõ @ để tag)..."
-                                className="w-full bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none leading-relaxed"
-                                autoFocus
-                              />
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={handleCancelEditNote}
-                                  className="px-2.5 py-1 bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-medium rounded-lg transition cursor-pointer"
-                                >
-                                  Hủy
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={!editingNoteText.trim()}
-                                  onClick={() => handleSaveEditNote(idx)}
-                                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-semibold rounded-lg shadow-xs transition flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Save className="w-3 h-3" />
-                                  Lưu thay đổi
-                                </button>
+                              <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono shrink-0">
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                <span>{formatDateTime(log.timestamp)}</span>
                               </div>
                             </div>
-                          ) : (
-                            <p className="text-slate-700 dark:text-slate-200 text-xs leading-relaxed whitespace-pre-wrap pl-1 break-words [overflow-wrap:anywhere] min-w-0">
-                              {renderFormattedMessage(parsed.messageBody, users)}
+
+                            <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed pl-1 border-l-2 border-slate-200 dark:border-slate-700">
+                              {log.summary}
                             </p>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: Sidebar (Creator info, Milestone, People & Progress) */}
+            <div className="lg:col-span-5 xl:col-span-5 space-y-3 min-w-0 lg:sticky lg:top-0 order-1 lg:order-2">
+              {/* Creator & Creation Date Info Banner */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3 sm:p-3.5 text-xs text-slate-600 dark:text-slate-300">
+                <div className="flex items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-400 dark:text-slate-400">Người tạo:</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">{creatorDisplay}</span>
+                      </div>
+                      <div className="text-slate-500 dark:text-slate-400 font-mono text-[11px] flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {createdDateDisplay}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    {displayWeekNumber ? (
+                      <span className="font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-xl border border-indigo-200/80 dark:border-indigo-800/80 text-xs">
+                        Tuần {displayWeekNumber} / {task.year || 2026}
+                      </span>
+                    ) : (
+                      <span className="font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                        Kho Backlog
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Comprehensive Metadata Section */}
+              <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
+                {/* Milestone Card (Full-width row on top) */}
+                <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                  <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Cột mốc Milestone:</span>
+                  {milestone ? (
+                    <div className="flex items-start gap-1.5 text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/60 px-2.5 py-1.5 rounded-lg">
+                      <Flag className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
+                      <span className="font-semibold text-xs leading-snug break-words flex-1">{milestone.title}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-lg">
+                      <FolderOpen className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <span className="font-medium text-xs">Ngoài Milestone</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Assignee Card (Full-width row, placed right next to Collab) */}
+                <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium">Người phụ trách chính:</span>
+                    {task.supporterAccounts && task.supporterAccounts.length > 0 && task.assigneeAccount && (
+                      <span className="text-[10.5px] font-bold font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
+                        {getMemberTaskEffort(task, task.assigneeAccount)}h
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <UserAvatar
+                      user={assigneeUser}
+                      account={task.assigneeAccount}
+                      name={assigneeUser?.name}
+                      size="sm"
+                      shape="circle"
+                    />
+                    {(() => {
+                      const assigneeRoleInTask = assigneeUser ? getUserRoleInSpec(assigneeUser, task.role) : 'Member';
+                      return (
+                        <div className="min-w-0 flex-1">
+                          <div className={`font-bold text-xs leading-snug break-words ${getUserRoleColorClass(assigneeRoleInTask)}`}>
+                            {assigneeUser?.name || task.assigneeAccount || 'Chưa gán'}
+                          </div>
+                          {task.assigneeAccount && (
+                            <div className={`text-[11px] font-medium font-mono ${getUserRoleColorClass(assigneeRoleInTask)}`}>
+                              @{task.assigneeAccount}
+                            </div>
                           )}
                         </div>
                       );
-                    }
+                    })()}
+                  </div>
+                </div>
 
-                    return (
-                      <div
-                        key={idx}
-                        id={`task-detail-note-${idx}`}
-                        className={`rounded-xl p-2.5 text-xs leading-relaxed whitespace-pre-wrap space-y-1.5 transition-all duration-300 min-w-0 break-words [overflow-wrap:anywhere] ${
-                          isHighlighted
-                            ? 'animate-note-jump ring-2 ring-indigo-500 shadow-xl bg-indigo-100/95 dark:bg-indigo-900/90'
-                            : 'bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200'
-                        }`}
-                      >
-                        <div className="break-words [overflow-wrap:anywhere] min-w-0">{renderFormattedMessage(line, users)}</div>
-                        <div className="flex items-center justify-end pt-1 border-t border-slate-100 dark:border-slate-700/60">
-                          <button
-                            type="button"
-                            onClick={() => handleStartReply(creatorDisplay || 'Ghi chú ban đầu', line, idx)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition cursor-pointer"
-                            title="Trả lời ghi chú này"
+                {/* Collab Card (If collaborators are assigned to this task) */}
+                {task.supporterAccounts && task.supporterAccounts.length > 0 && (
+                  <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Thành viên Collab ({task.supporterAccounts.length}):</span>
+                      </span>
+                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                        Tổng task: {task.actualEffort || 0}h
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {task.supporterAccounts.map((supAcc) => {
+                        const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
+                        const supRoleInTask = supUser ? getUserRoleInSpec(supUser, task.role) : 'Member';
+                        const supEffort = getMemberTaskEffort(task, supAcc);
+                        return (
+                          <div
+                            key={supAcc}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 dark:bg-slate-800/80 border border-indigo-200/80 dark:border-indigo-800/80 rounded-xl"
                           >
-                            <Reply className="w-3 h-3" />
-                            <span>Trả lời</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
+                            <UserAvatar
+                              user={supUser}
+                              account={supAcc}
+                              name={supUser?.name}
+                              size="xs"
+                              shape="circle"
+                            />
+                            <div className="min-w-0">
+                              <span className={`font-bold text-xs ${getUserRoleColorClass(supRoleInTask)}`}>
+                                {supUser?.name || supAcc}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-400 ml-1">
+                                @{supAcc}
+                              </span>
+                            </div>
+                            <span className="font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
+                              {supEffort}h
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                              Collab
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
-              </div>
 
-              {/* Replying Banner Preview (Telegram/Messenger style) */}
-              {replyingTo && (
-                <div className="flex items-center justify-between gap-2 p-2 px-3 bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 border-l-4 border-l-indigo-500 rounded-xl text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Reply className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="font-bold text-indigo-700 dark:text-indigo-300 text-[11px] truncate flex items-center gap-1">
-                        <span>Đang trả lời:</span>
-                        <span className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[200px]">
-                          {replyingTo.author}
+                {/* Bottom row: Effort and Completion Progress */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-slate-400 dark:text-slate-400 text-[11px] font-medium">
+                        {displayWeekNumber ? `Effort Tuần ${displayWeekNumber}:` : 'Effort (Est):'}
+                      </span>
+                      {accumulatedEffort.hasMultiWeekHistory && (
+                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950 px-1.5 py-0.2 rounded border border-indigo-200 dark:border-indigo-800">
+                          Tổng: {accumulatedEffort.totalEffort}h
                         </span>
+                      )}
+                    </div>
+                    <div className="font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400 flex items-baseline gap-1">
+                      <span>{displayActualEffort}h</span>
+                      <span className="text-slate-300 dark:text-slate-600 font-normal">/</span>
+                      <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{displayEstimatedEffort}h (Est)</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                    <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">Tiến độ hoàn thành:</span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-indigo-600 dark:text-indigo-400 font-mono">
+                        {displayCompletionPct}%
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        effectiveDisplayStatus === 'Done'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                          : effectiveDisplayStatus === 'In Progress'
+                          ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
+                          : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                      }`}>
+                        {effectiveDisplayStatus}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Completion Progress Bar */}
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden border border-slate-200/80 dark:border-slate-700">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        displayCompletionPct === 100
+                          ? 'bg-emerald-500'
+                          : displayCompletionPct > 0
+                          ? 'bg-indigo-600 dark:bg-indigo-500'
+                          : 'bg-slate-300 dark:bg-slate-700'
+                      }`}
+                      style={{ width: `${displayCompletionPct}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Multi-week Accumulated Effort Breakdown */}
+                {accumulatedEffort.hasMultiWeekHistory && (
+                  <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/60 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        <span>Tổng Effort Lũy Kế ({accumulatedEffort.chainTaskCount} tuần làm việc):</span>
+                      </span>
+                      <span className="font-mono font-extrabold text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                        Tổng: {accumulatedEffort.totalEffort}h
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-0.5">
+                      {accumulatedEffort.weeklyBreakdown.map((item) => (
+                        <div
+                          key={item.weekNumber}
+                          className={`p-2 rounded-lg border text-xs flex flex-col justify-between transition-colors ${
+                            item.isCurrentWeek
+                              ? 'bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-300 dark:border-indigo-700 shadow-2xs'
+                              : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
+                            <span>Tuần {item.weekNumber}</span>
+                            {item.isCurrentWeek && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-600 text-white font-bold">Tuần này</span>
+                            )}
+                          </div>
+                          <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                            <span className="font-mono font-bold text-xs text-slate-800 dark:text-slate-100">
+                              {item.effort}h
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                              {item.percentage}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Start Date & End Date Row if present */}
+                {(task.startDate || task.endDate) && (
+                  <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+                    <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-indigo-500" />
+                        Ngày bắt đầu:
+                      </span>
+                      <div className="font-mono font-bold text-xs text-indigo-700 dark:text-indigo-300">
+                        {formatDateOnlyDisplay(task.startDate) || 'Chưa cập nhật'}
                       </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 italic truncate max-w-[320px] sm:max-w-[420px]">
-                        "{replyingTo.text}"
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                      <span className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-emerald-500" />
+                        {isTaskFullyDone ? 'Ngày hoàn thành:' : 'Hạn hoàn thành (Deadline):'}
+                      </span>
+                      <div className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-300">
+                        {formatDateOnlyDisplay(task.endDate) || (isTaskFullyDone ? 'Hoàn thành' : 'Chưa đặt')}
                       </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleCancelReply}
-                    className="w-5 h-5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center shrink-0 transition cursor-pointer"
-                    title="Hủy trả lời"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {/* Collaborative Input Field for ANY team member */}
-              <form onSubmit={handleSendComment} className="flex flex-col sm:flex-row gap-2 min-w-0">
-                <MentionInput
-                  as="input"
-                  value={quickComment}
-                  onChange={setQuickComment}
-                  users={users}
-                  mentionPlacement="top"
-                  placeholder={
-                    replyingTo
-                      ? `Trả lời @${replyingTo.author} (Gõ @ để tag)...`
-                      : `Gửi ghi chú/trao đổi luồng (${currentUser?.name || 'thành viên'} - Gõ @ để tag)...`
-                  }
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
-                />
-                <button
-                  type="submit"
-                  disabled={!quickComment.trim()}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center justify-center gap-1.5 shrink-0 active:scale-95 cursor-pointer"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Gửi Phản Hồi</span>
-                </button>
-              </form>
-
-              {isSaved && (
-                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-fade-in">
-                  <CheckCircle className="w-3.5 h-3.5" /> Đã lưu và đồng bộ ghi chú task thành công!
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* SECTION: Lịch Sử & Nhật Ký Cập Nhật (Activity Log) */}
-          <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
-                <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <span>Nhật Ký Cập Nhật:</span>
-                <span className="text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-800/80">
-                  {activityLogsList.length} logs
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-                className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-1 transition cursor-pointer"
-              >
-                <span>{isHistoryOpen ? 'Thu gọn' : 'Xem lịch sử'}</span>
-                {isHistoryOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-
-            {isHistoryOpen && (
-              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 max-h-56 overflow-y-auto custom-scrollbar space-y-2.5">
-                {activityLogsList.length === 0 ? (
-                  <div className="text-center py-4 text-slate-400 text-xs flex flex-col items-center gap-1">
-                    <Activity className="w-5 h-5 text-slate-300 dark:text-slate-600" />
-                    <span>Chưa có nhật ký hoạt động chi tiết nào.</span>
-                  </div>
-                ) : (
-                  activityLogsList.map((log) => {
-                    const badge = getActionBadge(log.actionType);
-                    return (
-                      <div
-                        key={log.id}
-                        className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-2.5 text-xs space-y-1.5 shadow-2xs hover:border-indigo-200 dark:hover:border-indigo-800/80 transition"
-                      >
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${badge.badgeClass}`}>
-                              {badge.icon}
-                              {badge.label}
-                            </span>
-                            <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">
-                              {log.authorName}
-                            </span>
-                            {log.authorAccount && (
-                              <span className="text-[11px] text-slate-400 font-mono">
-                                (@{log.authorAccount})
-                              </span>
-                            )}
-                            {log.authorRole && (
-                              <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded font-medium">
-                                {log.authorRole}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono shrink-0">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            <span>{formatDateTime(log.timestamp)}</span>
-                          </div>
-                        </div>
-
-                        <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed pl-1 border-l-2 border-slate-200 dark:border-slate-700">
-                          {log.summary}
-                        </p>
-                      </div>
-                    );
-                  })
                 )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 

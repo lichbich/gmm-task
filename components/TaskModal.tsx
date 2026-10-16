@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Specialization, TaskStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, isSpecializationMatchingRole } from '../types/task';
-import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2, CornerDownRight, GitFork, Layers, ChevronDown, ChevronRight, Check, Link2 } from 'lucide-react';
+import { Task, Specialization, TaskStatus, TaskActivityLog, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, isSpecializationMatchingRole } from '../types/task';
+import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2, CornerDownRight, GitFork, Layers, ChevronDown, ChevronRight, ChevronUp, Check, Link2, User, Flag, FolderOpen, History, Activity, Clock, UserCheck, CheckCircle2 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
@@ -17,6 +17,57 @@ import { SubTaskSuggestion, requestAIEffortSuggestion, isAIFeatureEnabled } from
 import { ensureTaskTitlePrefix, getRoleTaskPrefix } from '../lib/taskPrefixHelper';
 import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
 import { LinkExistingTasksModal } from './common/LinkExistingTasksModal';
+
+const formatDateTime = (isoOrStr: string) => {
+  if (!isoOrStr) return '';
+  try {
+    const d = new Date(isoOrStr);
+    if (isNaN(d.getTime())) return isoOrStr;
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${hours}:${minutes} • ${day}/${month}/${year}`;
+  } catch {
+    return isoOrStr;
+  }
+};
+
+const getActionBadge = (actionType: string) => {
+  switch (actionType) {
+    case 'CREATE':
+      return {
+        icon: <Sparkles className="w-3.5 h-3.5 text-indigo-500" />,
+        label: 'Khởi tạo',
+        badgeClass: 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/80',
+      };
+    case 'REPORT_SUBMIT':
+      return {
+        icon: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />,
+        label: 'Báo cáo',
+        badgeClass: 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80',
+      };
+    case 'NOTE_ADD':
+      return {
+        icon: <MessageSquare className="w-3.5 h-3.5 text-purple-500" />,
+        label: 'Ghi chú',
+        badgeClass: 'bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border-purple-200/80 dark:border-purple-800/80',
+      };
+    case 'ASSIGNEE_CHANGE':
+      return {
+        icon: <UserCheck className="w-3.5 h-3.5 text-blue-500" />,
+        label: 'Phân công',
+        badgeClass: 'bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 border-blue-200/80 dark:border-blue-800/80',
+      };
+    default:
+      return {
+        icon: <Activity className="w-3.5 h-3.5 text-amber-500" />,
+        label: 'Cập nhật',
+        badgeClass: 'bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80',
+      };
+  }
+};
 
 interface TaskModalProps {
   task?: Task | null;
@@ -222,8 +273,71 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     return list;
   }, [potentialParentTasks]);
 
+  const creatorDisplay = useMemo(() => {
+    if (!task) return currentUser?.name || currentUser?.account || 'Bạn';
+    if (task.createdBy) return task.createdBy;
+    return 'Hệ thống';
+  }, [task, currentUser]);
+
+  const createdDateDisplay = useMemo(() => {
+    if (!task) return 'Hôm nay (Tạo mới)';
+    if (!task.createdAt) return 'Không rõ thời gian';
+    try {
+      const d = new Date(task.createdAt);
+      if (isNaN(d.getTime())) return task.createdAt;
+      return d.toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    } catch {
+      return task.createdAt;
+    }
+  }, [task]);
+
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+
+  const assigneeUser = useMemo(() => {
+    if (!task?.assigneeAccount) return null;
+    return users.find((u) => u.account.toLowerCase() === task.assigneeAccount.toLowerCase()) || null;
+  }, [task?.assigneeAccount, users]);
+
+  const activityLogsList: TaskActivityLog[] = useMemo(() => {
+    if (!task) return [];
+    if (task.activityLogs && Array.isArray(task.activityLogs) && task.activityLogs.length > 0) {
+      return [...task.activityLogs].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+    }
+    const logs: TaskActivityLog[] = [];
+    if (task.updatedAt && task.updatedAt !== task.createdAt) {
+      logs.push({
+        id: `legacy-update-${task.id}`,
+        timestamp: task.updatedAt,
+        authorName: assigneeUser ? assigneeUser.name : task.assigneeAccount || 'Người phụ trách',
+        authorAccount: task.assigneeAccount || 'member',
+        authorRole: 'Member',
+        actionType: 'REPORT_SUBMIT',
+        summary: `Cập nhật tiến độ: ${task.completionPercentage}%, Effort: ${task.actualEffort}h, Trạng thái: "${task.status}"`,
+      });
+    }
+    if (task.createdAt) {
+      logs.push({
+        id: `init-${task.id}`,
+        timestamp: task.createdAt,
+        authorName: task.createdBy || 'Hệ thống',
+        authorAccount: assigneeUser?.account || 'system',
+        authorRole: 'Admin',
+        actionType: 'CREATE',
+        summary: 'Khởi tạo công việc ban đầu',
+      });
+    }
+    return logs;
+  }, [task, assigneeUser]);
+
   // Mobile tab state ('form' | 'ai')
   const [activeMobileTab, setActiveMobileTab] = useState<'form' | 'ai'>('form');
+  const [showAIChat, setShowAIChat] = useState<boolean>(false);
 
   // AI Effort Estimation & Breakdown state
   const [isAILoadingEffort, setIsAILoadingEffort] = useState<boolean>(false);
@@ -692,9 +806,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setAiEffortError(null);
     setIsAILoadingEffort(false);
     setActiveMobileTab('form');
+    setShowAIChat(false);
+    setIsHistoryOpen(false);
   }, [isOpen, task?.id, initialSubtaskParent?.id]);
-
-  if (!isRendered) return null;
 
   const todayStr = getTodayDateOnlyString(simulatedTime);
   const userRoleInTaskSpec = getUserRoleInSpec(currentUser, role);
@@ -946,54 +1060,82 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     });
   };
 
+  if (!isRendered) return null;
+
   return (
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
+      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[120] flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       }`}
     >
       <div
-        className={`bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl w-full shadow-2xl text-slate-800 relative max-h-[92vh] flex flex-col overflow-hidden modal-dialog-transition ${
-          canUseAI ? 'max-w-5xl lg:max-w-6xl' : 'max-w-2xl sm:max-w-3xl'
+        onClick={(e) => e.stopPropagation()}
+        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full shadow-2xl text-slate-800 dark:text-slate-100 relative h-[90vh] sm:h-[92vh] max-h-[92vh] flex flex-col overflow-hidden modal-dialog-transition ${
+          showAIChat ? 'max-w-7xl' : 'w-full max-w-5xl xl:max-w-6xl'
         } ${isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'}`}
       >
         {/* Fixed Header */}
-        <div className="flex items-center justify-between p-4 sm:px-6 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 font-bold shadow-xs">
+        <div className="flex items-center justify-between p-4 sm:px-6 sm:py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold shadow-xs shrink-0">
               {task ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
                 {task
                   ? 'Chỉnh Sửa & Phân Công Task'
                   : milestoneId
                   ? 'Break Task Mới từ Milestone'
                   : 'Tạo Task Tự Do Mới'}
               </h3>
-              <p className="text-xs text-slate-500">Thiết lập đầu việc, số giờ ước tính, phân công và ghi chú luồng task</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">Thiết lập đầu việc, số giờ ước tính, phân công và ghi chú luồng task</p>
             </div>
           </div>
-          <button
-            onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95"
-          >
-            <X className="w-4 h-4" />
-          </button>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {canUseAI && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAIChat((prev) => !prev);
+                  if (activeMobileTab === 'form') setActiveMobileTab('ai');
+                  else setActiveMobileTab('form');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 ${
+                  showAIChat || activeMobileTab === 'ai'
+                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
+                    : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200/80 dark:border-indigo-800'
+                }`}
+                title={showAIChat ? 'Thu gọn AI Co-pilot Chat' : 'Mở AI Co-pilot trợ lý phân tích task'}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">AI Co-pilot</span>
+                {(showAIChat || activeMobileTab === 'ai') && <span className="text-[10px] bg-white/20 px-1 rounded">Bật</span>}
+              </button>
+            )}
+
+            <button
+              onClick={handleClose}
+              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition active:scale-95 cursor-pointer"
+              title="Đóng cửa sổ"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Mobile Tab Switcher (Visible only when AI features are available) */}
+        {/* Mobile Tab Switcher (Visible only when AI features are available on small screens) */}
         {canUseAI && (
-          <div className="md:hidden flex items-center border-b border-slate-200/90 px-4 py-2 bg-slate-50/90 gap-2 shrink-0">
+          <div className="md:hidden flex items-center border-b border-slate-200 dark:border-slate-800 px-4 py-2 bg-slate-50 dark:bg-slate-900 gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setActiveMobileTab('form')}
               className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition ${
                 activeMobileTab === 'form'
                   ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
               }`}
             >
               📝 Thông Tin Task
@@ -1004,7 +1146,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 ${
                 activeMobileTab === 'ai'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:bg-slate-200'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -1013,19 +1155,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
         )}
 
-        {/* Split or Single Column Body */}
-        <div
-          className={`flex-1 overflow-hidden min-h-0 ${
-            canUseAI
-              ? 'grid grid-cols-1 md:grid-cols-12 divide-y md:divide-y-0 md:divide-x divide-slate-200/90'
-              : 'flex flex-col'
-          }`}
-        >
-          {/* Left Column: Multi-turn AI Co-pilot Chatbox (5/12 - Only for LichDT) */}
+        {/* Body Container */}
+        <div className="flex-1 overflow-hidden min-h-0 flex flex-col md:flex-row">
+          {/* Optional Left Panel: Multi-turn AI Co-pilot Chatbox (Expandable/Collapsible) */}
           {canUseAI && (
             <div
-              className={`md:col-span-5 lg:col-span-5 flex flex-col h-full overflow-hidden ${
-                activeMobileTab === 'ai' ? 'flex' : 'hidden md:flex'
+              className={`w-full md:w-80 lg:w-96 shrink-0 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden bg-slate-50/50 dark:bg-slate-900/50 ${
+                activeMobileTab === 'ai' ? 'flex' : showAIChat ? 'hidden md:flex' : 'hidden'
               }`}
             >
               <AITaskChatBox
@@ -1046,777 +1182,858 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
           )}
 
-          {/* Right Column: Standard Task Form (7/12 when AI enabled, Full-width when AI disabled) */}
+          {/* Main Form Container */}
           <div
-            className={`flex flex-col h-full overflow-hidden ${
-              canUseAI
-                ? `md:col-span-7 lg:col-span-7 ${activeMobileTab === 'form' ? 'flex' : 'hidden md:flex'}`
-                : 'flex-1'
+            className={`flex flex-col flex-1 h-full min-h-0 min-w-0 overflow-hidden ${
+              canUseAI && activeMobileTab === 'ai' ? 'hidden md:flex' : 'flex'
             }`}
           >
-            <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden min-h-0">
-              <div className="p-4 sm:p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4">
-                {/* Member Task Assignment Request Banner */}
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="p-4 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-4 min-h-0 min-w-0">
+                {/* Member Task Assignment Request Banner (Full width on top) */}
                 {task?.assignmentRequestedBy && task.assignmentRequestStatus !== 'REJECTED' && (
-                  <div className="p-3.5 bg-amber-50 border border-amber-200/90 rounded-2xl flex items-start gap-3 text-xs text-amber-900 shadow-2xs animate-in fade-in duration-150">
-                    <div className="w-7 h-7 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-sm shrink-0 mt-0.5">
+                  <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200 shadow-2xs animate-in fade-in duration-150">
+                    <div className="w-7 h-7 rounded-xl bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-sm shrink-0 mt-0.5">
                       ✋
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-bold text-amber-900 flex items-center gap-1.5 flex-wrap">
+                      <div className="font-bold text-amber-900 dark:text-amber-100 flex items-center gap-1.5 flex-wrap">
                         <span>Yêu cầu nhận task từ thành viên:</span>
-                        <span className="bg-amber-200/90 text-amber-950 px-1.5 py-0.5 rounded-md font-mono font-black">
+                        <span className="bg-amber-200/90 dark:bg-amber-900 text-amber-950 dark:text-amber-100 px-1.5 py-0.5 rounded-md font-mono font-black">
                           @{task.assignmentRequestedBy}
                         </span>
                         {task.requestedWeekNumber && (
-                          <span className="text-[11px] text-amber-800 font-medium">
+                          <span className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">
                             (Tuần {task.requestedWeekNumber})
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
-                        Hệ thống đã tự động chọn <b>@{task.assignmentRequestedBy}</b> ở mục <b>Phân Công Thành Viên</b> bên dưới. Bạn có thể kiểm tra mô tả, thời lượng rồi bấm <b>"Duyệt & Phân Công Task"</b> để hoàn tất.
+                      <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 mt-0.5 leading-relaxed">
+                        Hệ thống đã tự động chọn <b>@{task.assignmentRequestedBy}</b> ở mục <b>Người phụ trách chính</b> bên phải. Bạn có thể kiểm tra mô tả, thời lượng rồi bấm <b>"Duyệt & Phân Công Task"</b> để hoàn tất.
                       </p>
                     </div>
                   </div>
                 )}
 
-                {/* Subtask Parent Linking Selector (Option 1) */}
-                {!hasSubtasks && (
-                  <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
-                        <span className="text-indigo-600 dark:text-indigo-400 font-mono text-sm font-bold">↳</span>
-                        <span>Thuộc Task lớn nào (Task cha trực thuộc)?</span>
-                        {role && (
-                          <span className="text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 px-1.5 py-0.5 rounded-md font-semibold border border-indigo-200/60 dark:border-indigo-800">
-                            Chỉ gợi ý team {role}
-                          </span>
-                        )}
+                {/* Jira-style 2-Column Responsive Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
+                  {/* LEFT COLUMN: Main Content Flow (Task Title, Description & Checklist, Subtasks, Notes) */}
+                  <div className="lg:col-span-7 xl:col-span-7 space-y-4 min-w-0">
+                    {/* Task Title */}
+                    <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-1.5 min-w-0">
+                      <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                        Tên Đầu Việc (Task Name): <span className="text-red-500">*</span>
                       </label>
-                      <div className="flex items-center gap-2">
-                        {isSubtaskMode && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsSubtaskMode(false);
-                              setSubtaskParentId('');
-                              setSubtaskParentTitle('');
-                              setSubtaskReviewerAccount('');
-                            }}
-                            className="text-[11px] text-rose-600 hover:text-rose-700 font-medium underline cursor-pointer"
-                          >
-                            Tách ra độc lập
-                          </button>
-                        )}
-                        {task && !isSubtaskMode && (
-                          <button
-                            type="button"
-                            onClick={() => setIsLinkExistingModalOpen(true)}
-                            className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200"
-                            title="Gộp các task lẻ khác vào làm Subtask của task này"
-                          >
-                            <Link2 className="w-3 h-3" />
-                            Gộp task khác vào đây
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="relative">
-                      <Dropdown
-                        value={isSubtaskMode ? subtaskParentId : ''}
-                        onChange={(val) => {
-                          if (!val) {
-                            setIsSubtaskMode(false);
-                            setSubtaskParentId('');
-                            setSubtaskParentTitle('');
-                            setSubtaskReviewerAccount('');
-                          } else {
-                            const p = potentialParentTasks.find((item: Task) => item.id === val);
-                            if (p) {
-                              setIsSubtaskMode(true);
-                              setSubtaskParentId(p.id);
-                              setSubtaskParentTitle(p.title);
-                              setSubtaskReviewerAccount(p.assigneeAccount || p.subtaskReviewerAccount || '');
-                            }
-                          }
-                        }}
-                        options={parentDropdownOptions}
-                        searchable={true}
-                        placeholder="Chọn hoặc gõ tìm kiếm task cha..."
-                        className="w-full"
-                        buttonClassName="w-full py-2.5 px-3 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium rounded-xl text-slate-800 dark:text-slate-200 shadow-2xs hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors"
+                      <TaskTitleInput
+                        role={role}
+                        value={title}
+                        onChange={setTitle}
+                        required
                       />
                     </div>
 
-                    {isSubtaskMode && (
-                      <div className="text-[11px] text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 pt-0.5 bg-indigo-50/60 dark:bg-indigo-950/40 p-2 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
-                        <span>✓ Sẽ hiển thị lùi đầu dòng dưới:</span>
-                        <strong className="truncate max-w-xs">{subtaskParentTitle}</strong>
-                        {subtaskReviewerAccount && <span>(Reviewer: @{subtaskReviewerAccount})</span>}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Parent Task Subtasks Management Panel */}
-                {hasSubtasks && (
-                  <div className="p-4 bg-slate-50/90 border border-slate-200 rounded-2xl space-y-3 shadow-2xs">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-7 h-7 rounded-xl bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center text-xs shadow-2xs">
-                          🌳
-                        </span>
-                        <div>
-                          <span className="font-bold text-slate-800 text-xs block">
-                            Subtasks trực thuộc ({existingSubtasks.length} đầu việc con)
-                          </span>
-                          <span className="text-[10px] text-slate-500">
-                            Task cha tổng hợp tiến độ và thời lượng từ các subtask
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => setIsManualOverride(!isManualOverride)}
-                          className={`text-[11px] px-2.5 py-1 rounded-xl border font-semibold transition cursor-pointer flex items-center gap-1 ${
-                            isManualOverride
-                              ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
-                              : 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
-                          }`}
-                          title={
-                            isManualOverride
-                              ? 'Đang bật ghi đè thủ công. Bấm để bật tính toán tự động'
-                              : 'Đang tự động tính từ Subtask. Bấm để cho phép ghi đè thủ công'
-                          }
-                        >
-                          {isManualOverride ? '✏️ Ghi đè thủ công' : '⚡ Tự động tính từ Subtask'}
-                        </button>
-                        {task && (
-                          <button
-                            type="button"
-                            onClick={() => setIsLinkExistingModalOpen(true)}
-                            className="text-[11px] px-2.5 py-1 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
-                            title="Chọn thêm các task có sẵn để gộp vào task này"
-                          >
-                            <Link2 className="w-3 h-3 text-indigo-600" />
-                            Gộp task có sẵn
-                          </button>
-                        )}
-                        {onOpenCreateSubtask && task && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              forceClose();
-                              onOpenCreateSubtask(task);
-                            }}
-                            className="text-[11px] px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
-                          >
-                            <Plus className="w-3 h-3" />
-                            Thêm Subtask
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Summary metrics badge */}
-                    {parentMetrics && !isManualOverride && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs">
-                        <div>
-                          <span className="text-slate-400 block text-[10px]">Tổng Est:</span>
-                          <span className="font-bold text-indigo-600 font-mono text-xs">{parentMetrics.totalEstimatedEffort}h</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px]">Tổng Actual:</span>
-                          <span className="font-bold text-emerald-600 font-mono text-xs">{parentMetrics.totalActualEffort}h</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px]">Tiến độ tổng:</span>
-                          <span className="font-bold text-slate-700 text-xs">{parentMetrics.completionPercentage}%</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 block text-[10px]">Trạng thái:</span>
-                          <span className="font-bold text-slate-700 text-xs">{parentMetrics.status}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Subtask list */}
-                    <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
-                      {existingSubtasks.map((st) => (
-                        <div
-                          key={st.id}
-                          onClick={() => {
-                            if (onSelectTaskToEdit) {
-                              forceClose();
-                              onSelectTaskToEdit(st);
-                            }
-                          }}
-                          className="p-2.5 bg-white border border-slate-200/90 rounded-xl flex items-center justify-between gap-2 text-xs hover:border-indigo-300 hover:bg-indigo-50/40 transition cursor-pointer group shadow-2xs"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-indigo-400 font-mono text-xs font-bold">↳</span>
-                            <span className="font-semibold text-slate-800 group-hover:text-indigo-600 transition truncate">
-                              {st.title}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200 font-semibold shrink-0">
-                              {st.role}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0 text-[11px]">
-                            <span className="font-mono text-slate-500">{st.estimatedEffort}h</span>
-                            <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] ${
-                              st.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {st.completionPercentage}%
-                            </span>
-                            <span className="font-medium text-slate-600">@{st.assigneeAccount || 'Trống'}</span>
-                            <Edit2 className="w-3 h-3 text-slate-400 group-hover:text-indigo-600" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Milestone Selection (Synchronized with clicked milestone or ad-hoc) */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Thuộc Cột Mốc Milestone:
-                  </label>
-                  {isMember && !task && !initialMilestoneId ? (
-                    <div className="w-full bg-slate-50 border border-slate-300/90 rounded-xl px-3 py-2 text-slate-700 text-xs font-semibold flex items-center justify-between gap-2 h-[38px] shadow-2xs">
-                      <span>📌 Không gán Milestone (Task tự do / Phát sinh ngoài)</span>
-                      <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md font-medium shrink-0">
-                        Thành viên (Task Tự Do)
-                      </span>
-                    </div>
-                  ) : (
-                    <Dropdown
-                      value={milestoneId}
-                      onChange={setMilestoneId}
-                      options={[
-                        { value: '', label: '📌 Không gán Milestone (Task tự do / Phát sinh ngoài)' },
-                        ...milestones.map((m) => ({
-                          value: m.id,
-                          label: `🚩 ${m.title}${m.role && m.role !== 'ALL' ? ` [${m.role}]` : ''}`,
-                        })),
-                      ]}
-                      className="w-full"
-                      buttonClassName="py-2.5 px-3 text-xs bg-slate-50 border-slate-300/90 font-medium"
-                    />
-                  )}
-                </div>
-
-                {/* Task Title */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
-                    Tên Đầu Việc (Task Name): <span className="text-red-500">*</span>
-                  </label>
-                  <TaskTitleInput
-                    role={role}
-                    value={title}
-                    onChange={setTitle}
-                    required
-                  />
-                </div>
-
-                {/* Chi Tiết Task (Mô tả công việc chi tiết cho thành viên) */}
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
-                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                    Chi Tiết Task (Mô tả & Checklist việc con):
-                  </label>
-                  <DescriptionEditor
-                    value={description}
-                    onChange={setDescription}
-                    placeholder="Mô tả chi tiết nội dung đầu việc, hướng dẫn thực hiện, hoặc checklist việc con cho thành viên... (Gõ - [ ] Tên việc con, hoặc Paste / Kéo thả ảnh trực tiếp)"
-                    minRows={3}
-                    onPreviewImage={(url) => setLightboxUrl(url)}
-                  />
-                </div>
-
-                {/* Role & Estimated Effort */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">
-                      Role Phụ Trách:
-                    </label>
-                    {allowedRoles.length === 1 ? (
-                      <div
-                        className="w-full bg-slate-50 border border-slate-300/90 rounded-xl px-3 py-2 text-slate-800 text-xs font-semibold flex items-center justify-between gap-2 h-[38px] shadow-2xs"
-                        title={`${role}${roles.find((ro) => ro.code === role)?.name && roles.find((ro) => ro.code === role)?.name.trim().toLowerCase() !== role.trim().toLowerCase() ? ` - ${roles.find((ro) => ro.code === role)?.name}` : ''} (Cố định theo chuyên môn Leader)`}
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0"></span>
-                          <span className="font-bold text-indigo-700 shrink-0">
-                            {role}
-                          </span>
-                          {roles.find((ro) => ro.code === role)?.name && roles.find((ro) => ro.code === role)?.name.trim().toLowerCase() !== role.trim().toLowerCase() && (
-                            <span className="text-[11px] text-slate-500 font-normal truncate hidden sm:inline">
-                              • {roles.find((ro) => ro.code === role)?.name}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded-md font-medium shrink-0">
-                          Leader
-                        </span>
-                      </div>
-                    ) : (
-                      <Dropdown
-                        value={role}
-                        onChange={(newRole) => {
-                          const nextRole = newRole as Specialization;
-                          const oldPrefix = getRoleTaskPrefix(role);
-                          const nextPrefix = getRoleTaskPrefix(nextRole);
-                          if (!task && title.startsWith(oldPrefix)) {
-                            setTitle(`${nextPrefix}${title.slice(oldPrefix.length)}`);
-                          }
-                          setRole(nextRole);
-                          setAssigneeAccount('');
-                        }}
-                        options={allowedRoles.map((r) => {
-                          const matched = roles.find((ro) => ro.code === r);
-                          const displayLabel =
-                            matched?.name && matched.name.trim().toLowerCase() !== r.trim().toLowerCase()
-                              ? `${r} - ${matched.name}`
-                              : r;
-                          return {
-                            value: r,
-                            label: displayLabel,
-                          };
-                        })}
-                        className="w-full"
-                        buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300/90 h-[38px]"
-                      />
-                    )}
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-semibold text-slate-700 block">
-                        Ước Tính Giờ (Estimate):
+                    {/* Chi Tiết Task (Mô tả & Checklist việc con) */}
+                    <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-2 min-w-0">
+                      <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>Chi Tiết Task (Mô tả & Checklist việc con):</span>
                       </label>
-                      {canUseAI && (
-                        <button
-                          type="button"
-                          onClick={handleSuggestEffort}
-                          disabled={isAILoadingEffort}
-                          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50 active:scale-95 transition"
-                          title="Dùng AI Gemini 3.8 Flash để ước tính số giờ làm việc hợp lý"
-                        >
-                          {isAILoadingEffort ? (
-                            <>
-                              <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
-                              <span>Đang tính...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="w-3 h-3 text-indigo-600 animate-pulse" />
-                              <span>AI Gợi ý giờ</span>
-                            </>
-                          )}
-                        </button>
-                      )}
+                      <DescriptionEditor
+                        value={description}
+                        onChange={setDescription}
+                        placeholder="Mô tả chi tiết nội dung đầu việc, hướng dẫn thực hiện, hoặc checklist việc con cho thành viên... (Gõ - [ ] Tên việc con, hoặc Paste / Kéo thả ảnh trực tiếp)"
+                        minRows={4}
+                        onPreviewImage={(url) => setLightboxUrl(url)}
+                      />
                     </div>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0.1"
-                      max="24"
-                      value={estimatedEffort}
-                      onChange={(e) => {
-                        setEstimatedEffort(e.target.value);
-                        setAiEffortReasoning(null);
-                      }}
-                      placeholder="2.0"
-                      className="w-full bg-slate-50 border border-slate-300/90 rounded-xl px-3 py-2 text-slate-800 text-xs focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition font-mono font-semibold"
-                      required
-                    />
-                    {canUseAI && aiEffortReasoning && (
-                      <div className="mt-1.5 p-2 bg-indigo-50/80 border border-indigo-200/90 rounded-lg text-[10.5px] text-indigo-900 flex items-start gap-1.5 animate-in fade-in shadow-2xs">
-                        <Sparkles className="w-3 h-3 text-indigo-600 shrink-0 mt-0.5" />
-                        <div className="leading-snug">
-                          <span className="font-bold">Lý do gợi ý ({estimatedEffort}h):</span> {aiEffortReasoning}
-                        </div>
-                      </div>
-                    )}
-                    {canUseAI && aiEffortError && (
-                      <div className="mt-1 text-[10.5px] text-red-600">
-                        {aiEffortError}
-                      </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Assignee Account */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-700">
-                      Người Phụ Trách Chính (Assignee):
-                    </label>
-                    <span className="text-[10px] text-indigo-600 font-medium">
-                      {eligibleAssignees.length} thành viên phù hợp
-                    </span>
-                  </div>
-                  <Dropdown
-                    value={assigneeAccount}
-                    onChange={handleAssigneeChange}
-                    options={[
-                      { value: '', label: '-- Để trống (Chưa phân công) --' },
-                      ...eligibleAssignees.map((u) => {
-                        const isRequester =
-                          task?.assignmentRequestedBy &&
-                          u.account.toLowerCase() === task.assignmentRequestedBy.toLowerCase();
-                        const uRoleInTask = getUserRoleInSpec(u, role);
-                        return {
-                          value: u.account,
-                          label: `${u.account} - ${u.name}${isRequester ? ' ✋ (Đang xin nhận task)' : ''}`,
-                          subLabel: `${uRoleInTask} • [${u.specializations.join(', ')}]`,
-                        };
-                      }),
-                    ]}
-                    className="w-full"
-                    buttonClassName="py-2.5 px-3 text-xs bg-slate-50 border-slate-300/90"
-                  />
-
-                  {eligibleAssignees.length === 0 && (
-                    <p className="text-[11px] text-amber-700 mt-1.5 p-2 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-1.5">
-                      <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Chưa có thành viên nào có chuyên môn {role}. Hãy tạo hoặc cấp chuyên môn trong Quản lý User.
-                    </p>
-                  )}
-                </div>
-
-                {/* Week Planning / Backlog Assignment */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Kế Hoạch Thực Hiện (Tuần):
-                    </label>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                      {weekNumber ? `Tuần ${weekNumber <= 53 ? weekNumber + 55 : weekNumber}` : 'Kho Backlog (Chưa gán tuần)'}
-                    </span>
-                  </div>
-                  <Dropdown
-                    value={weekNumber !== undefined ? String(weekNumber) : 'backlog'}
-                    onChange={(val) => {
-                      if (val === 'backlog') {
-                        setWeekNumber(undefined);
-                      } else {
-                        setWeekNumber(Number(val));
-                      }
-                    }}
-                    options={[
-                      { value: 'backlog', label: '📦 Kho Backlog (Chưa gán tuần cụ thể)' },
-                      ...generateWeekOptions(selectedWeek),
-                    ]}
-                    className="w-full"
-                    buttonClassName="py-2.5 px-3 text-xs bg-slate-50 border-slate-300/90 font-medium"
-                  />
-                </div>
-
-                {/* Supporter/Collab Accounts Section (Multi-select collaborators with tag) */}
-                <div className="p-3.5 bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 rounded-2xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                      <span>Thành viên Collab (Hợp tác làm cùng):</span>
-                    </label>
-                    <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                      Tính effort và hiển thị trên bảng của người Collab
-                    </span>
-                  </div>
-
-                  {/* Add Collab Dropdown */}
-                  <Dropdown
-                    value=""
-                    onChange={(selectedAcc) => {
-                      if (selectedAcc) handleToggleSupporter(selectedAcc);
-                    }}
-                    options={[
-                      { value: '', label: '+ Thêm thành viên Collab (Chọn thành viên)...' },
-                      ...eligibleSupporters
-                        .filter((u) => !supporterAccounts.some((s) => s.toLowerCase() === u.account.toLowerCase()))
-                        .map((u) => ({
-                          value: u.account,
-                          label: `${u.account} - ${u.name}`,
-                          subLabel: `[${(u.specializations || []).join(', ')}]`,
-                        })),
-                    ]}
-                    className="w-full"
-                    buttonClassName="py-2 px-3 text-xs bg-white dark:bg-slate-900 border-slate-300/90 dark:border-slate-700"
-                  />
-
-                  {/* Selected Collab Tag Chips */}
-                  {supporterAccounts.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {supporterAccounts.map((supAcc) => {
-                        const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
-                        return (
-                          <div
-                            key={supAcc}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-slate-850 border border-indigo-200 dark:border-indigo-800 rounded-xl shadow-2xs text-xs animate-in fade-in duration-100"
-                          >
-                            <UserAvatar
-                              user={supUser}
-                              account={supAcc}
-                              name={supUser?.name}
-                              size="xs"
-                              shape="circle"
-                            />
-                            <div className="flex items-center gap-1">
-                              <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">
-                                {supUser?.name || supAcc}
+                    {/* Subtask Parent Linking Selector (Option 1: When task does not have subtasks) */}
+                    {!hasSubtasks && (
+                      <div className="p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-2 text-xs min-w-0">
+                        <div className="flex items-center justify-between">
+                          <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
+                            <span className="text-indigo-600 dark:text-indigo-400 font-mono text-sm font-bold">↳</span>
+                            <span>Thuộc Task lớn nào (Task cha trực thuộc)?</span>
+                            {role && (
+                              <span className="text-[10px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 px-1.5 py-0.5 rounded-md font-semibold border border-indigo-200/60 dark:border-indigo-800">
+                                Chỉ gợi ý team {role}
                               </span>
-                              <span className="text-[10px] font-mono text-slate-400">
-                                @{supAcc}
+                            )}
+                          </label>
+                          <div className="flex items-center gap-2">
+                            {isSubtaskMode && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsSubtaskMode(false);
+                                  setSubtaskParentId('');
+                                  setSubtaskParentTitle('');
+                                  setSubtaskReviewerAccount('');
+                                }}
+                                className="text-[11px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-medium underline cursor-pointer"
+                              >
+                                Tách ra độc lập
+                              </button>
+                            )}
+                            {task && !isSubtaskMode && (
+                              <button
+                                type="button"
+                                onClick={() => setIsLinkExistingModalOpen(true)}
+                                className="text-[11px] text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 font-semibold flex items-center gap-1 cursor-pointer bg-indigo-50 dark:bg-indigo-950 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800"
+                                title="Gộp các task lẻ khác vào làm Subtask của task này"
+                              >
+                                <Link2 className="w-3 h-3" />
+                                Gộp task khác vào đây
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="relative">
+                          <Dropdown
+                            value={isSubtaskMode ? subtaskParentId : ''}
+                            onChange={(val) => {
+                              if (!val) {
+                                setIsSubtaskMode(false);
+                                setSubtaskParentId('');
+                                setSubtaskParentTitle('');
+                                setSubtaskReviewerAccount('');
+                              } else {
+                                const p = potentialParentTasks.find((item: Task) => item.id === val);
+                                if (p) {
+                                  setIsSubtaskMode(true);
+                                  setSubtaskParentId(p.id);
+                                  setSubtaskParentTitle(p.title);
+                                  setSubtaskReviewerAccount(p.assigneeAccount || p.subtaskReviewerAccount || '');
+                                }
+                              }
+                            }}
+                            options={parentDropdownOptions}
+                            searchable={true}
+                            placeholder="Chọn hoặc gõ tìm kiếm task cha..."
+                            className="w-full"
+                            buttonClassName="w-full py-2 px-3 text-xs bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium rounded-xl text-slate-800 dark:text-slate-200 shadow-2xs hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors"
+                          />
+                        </div>
+
+                        {isSubtaskMode && (
+                          <div className="text-[11px] text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 pt-0.5 bg-indigo-50/60 dark:bg-indigo-950/40 p-2 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                            <span>✓ Sẽ hiển thị lùi đầu dòng dưới:</span>
+                            <strong className="truncate max-w-xs">{subtaskParentTitle}</strong>
+                            {subtaskReviewerAccount && <span>(Reviewer: @{subtaskReviewerAccount})</span>}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Parent Task Subtasks Management Panel (Option 2: When task is parent / has subtasks) */}
+                    {hasSubtasks && (
+                      <div className="p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs min-w-0">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-xs shadow-2xs">
+                              🌳
+                            </span>
+                            <div>
+                              <span className="font-bold text-slate-800 dark:text-slate-100 text-xs block">
+                                Subtasks trực thuộc ({existingSubtasks.length} đầu việc con)
+                              </span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                Task cha tổng hợp tiến độ và thời lượng từ các subtask
                               </span>
                             </div>
-                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 ml-0.5">
-                              Collab
-                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
                               type="button"
-                              onClick={() => handleToggleSupporter(supAcc)}
-                              className="ml-1 p-0.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                              title={`Bỏ Collab @${supAcc}`}
+                              onClick={() => setIsManualOverride(!isManualOverride)}
+                              className={`text-[11px] px-2.5 py-1 rounded-xl border font-semibold transition cursor-pointer flex items-center gap-1 ${
+                                isManualOverride
+                                  ? 'bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 shadow-2xs'
+                                  : 'bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 shadow-2xs'
+                              }`}
+                              title={
+                                isManualOverride
+                                  ? 'Đang bật ghi đè thủ công. Bấm để bật tính toán tự động'
+                                  : 'Đang tự động tính từ Subtask. Bấm để cho phép ghi đè thủ công'
+                              }
                             >
-                              <X className="w-3 h-3" />
+                              {isManualOverride ? '✏️ Ghi đè thủ công' : '⚡ Tự động tính từ Subtask'}
                             </button>
+                            {task && (
+                              <button
+                                type="button"
+                                onClick={() => setIsLinkExistingModalOpen(true)}
+                                className="text-[11px] px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                                title="Chọn thêm các task có sẵn để gộp vào task này"
+                              >
+                                <Link2 className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                                Gộp task có sẵn
+                              </button>
+                            )}
+                            {onOpenCreateSubtask && task && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  forceClose();
+                                  onOpenCreateSubtask(task);
+                                }}
+                                className="text-[11px] px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                              >
+                                <Plus className="w-3 h-3" />
+                                Thêm Subtask
+                              </button>
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Status & Priority Selection */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">
-                      Trạng Thái:
-                    </label>
-                    <Dropdown
-                      value={status}
-                      onChange={(newStatus) => handleStatusChange(newStatus as TaskStatus)}
-                      options={[
-                        { value: 'To do', label: 'To do (Cần làm)' },
-                        { value: 'In Progress', label: 'In Progress (Đang làm)' },
-                        { value: 'Done', label: 'Done (Đã hoàn thành)' },
-                      ]}
-                      className="w-full"
-                      buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300/90"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1">
-                      Mức Độ Ưu Tiên:
-                    </label>
-                    <Dropdown
-                      value={priority}
-                      onChange={(newPriority) => setPriority(newPriority as 'High' | 'Medium' | 'Low')}
-                      options={[
-                        { value: 'High', label: '🔴 Cao (Khẩn cấp)' },
-                        { value: 'Medium', label: '🟡 Trung bình (Bình thường)' },
-                        { value: 'Low', label: '🟢 Thấp' },
-                      ]}
-                      className="w-full"
-                      buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300/90"
-                    />
-                  </div>
-                </div>
-
-                {/* Start Date & End Date (Custom DatePicker matching Dropdown) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-300/80 text-xs">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1.5 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                      <span>Ngày bắt đầu (Start Date):</span>
-                    </label>
-                    <DatePicker
-                      value={startDate}
-                      onChange={handleStartDateChange}
-                      placeholder="Chọn ngày bắt đầu..."
-                      maxDate={endDate || undefined}
-                      icon={<Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-slate-700 block mb-1.5 flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Hạn hoàn thành (End Date):</span>
-                    </label>
-                    <DatePicker
-                      value={endDate}
-                      onChange={handleEndDateChange}
-                      placeholder="Chọn hạn hoàn thành..."
-                      minDate={startDate || undefined}
-                      icon={<Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                    />
-                  </div>
-                </div>
-
-                {/* Admin/PM-only Progress & Actual Effort Control Box */}
-                {isUserAdminOrPM(currentUser) && (
-                  <div className="p-3.5 sm:p-4 bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/90 dark:border-purple-800/80 rounded-2xl space-y-3 shadow-2xs animate-in fade-in duration-150">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/60 dark:text-purple-200 dark:border-purple-700">
-                          👑 Admin / PM Override
-                        </span>
-                        <span className="text-xs font-bold text-purple-950 dark:text-purple-200">
-                          Quản Lý Tiến Độ & Giờ Thực Tế
-                        </span>
-                      </div>
-                      <span className="text-[10.5px] text-purple-700 dark:text-purple-300 font-medium">
-                        Đồng bộ thời gian thực cho người được phân công & supporters
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-                      {/* Actual Effort Input */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            Số Giờ Làm Thực Tế (Actual Effort):
-                          </label>
-                          <span className="text-xs font-bold text-purple-700 dark:text-purple-300 font-mono">
-                            {typeof actualEffort === 'number'
-                              ? actualEffort
-                              : parseFloat(String(actualEffort).replace(',', '.')) || 0}{' '}
-                            giờ
-                          </span>
                         </div>
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          max="24"
-                          value={actualEffort}
-                          onChange={(e) => setActualEffort(e.target.value)}
-                          placeholder="0.0"
-                          className="w-full bg-white dark:bg-slate-900 border border-purple-300/80 dark:border-purple-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 text-xs font-mono font-bold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
-                        />
-                      </div>
 
-                      {/* Completion Percentage Slider & Quick Buttons */}
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            Phần Trăm Tiến Độ (%):
-                          </label>
-                          <span className="text-xs font-bold text-purple-700 dark:text-purple-300 font-mono">
-                            {completionPercentage}%
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          step="5"
-                          value={completionPercentage}
-                          onChange={(e) => handleProgressChange(Number(e.target.value))}
-                          className="w-full accent-purple-600 cursor-pointer h-2 bg-purple-200 dark:bg-purple-900 rounded-lg"
-                        />
-                        <div className="flex justify-between text-[10px] text-purple-700 dark:text-purple-400 font-mono font-semibold mt-1">
-                          <button
-                            type="button"
-                            onClick={() => handleProgressChange(0)}
-                            className="hover:underline cursor-pointer"
-                          >
-                            0%
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleProgressChange(25)}
-                            className="hover:underline cursor-pointer"
-                          >
-                            25%
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleProgressChange(50)}
-                            className="hover:underline cursor-pointer"
-                          >
-                            50%
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleProgressChange(75)}
-                            className="hover:underline cursor-pointer"
-                          >
-                            75%
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleProgressChange(100)}
-                            className="hover:underline cursor-pointer"
-                          >
-                            100%
-                          </button>
+                        {/* Summary metrics badge */}
+                        {parentMetrics && !isManualOverride && (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-white dark:bg-slate-850 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700 shadow-2xs">
+                            <div>
+                              <span className="text-slate-400 dark:text-slate-400 block text-[10px]">Tổng Est:</span>
+                              <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono text-xs">{parentMetrics.totalEstimatedEffort}h</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 dark:text-slate-400 block text-[10px]">Tổng Actual:</span>
+                              <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-xs">{parentMetrics.totalActualEffort}h</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 dark:text-slate-400 block text-[10px]">Tiến độ tổng:</span>
+                              <span className="font-bold text-slate-700 dark:text-slate-200 text-xs">{parentMetrics.completionPercentage}%</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 dark:text-slate-400 block text-[10px]">Trạng thái:</span>
+                              <span className="font-bold text-slate-700 dark:text-slate-200 text-xs">{parentMetrics.status}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Subtask list */}
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                          {existingSubtasks.map((st) => (
+                            <div
+                              key={st.id}
+                              onClick={() => {
+                                if (onSelectTaskToEdit) {
+                                  forceClose();
+                                  onSelectTaskToEdit(st);
+                                }
+                              }}
+                              className="p-2.5 bg-white dark:bg-slate-850 border border-slate-200/90 dark:border-slate-700 rounded-xl flex items-center justify-between gap-2 text-xs hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/40 dark:hover:bg-slate-800 transition cursor-pointer group shadow-2xs"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-indigo-400 font-mono text-xs font-bold">↳</span>
+                                <span className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition truncate">
+                                  {st.title}
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-semibold shrink-0">
+                                  {st.role}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 text-[11px]">
+                                <span className="font-mono text-slate-500 dark:text-slate-400">{st.estimatedEffort}h</span>
+                                <span className={`px-2 py-0.5 rounded-full font-semibold text-[10px] ${
+                                  st.status === 'Done' ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                }`}>
+                                  {st.completionPercentage}%
+                                </span>
+                                <span className="font-medium text-slate-600 dark:text-slate-300">@{st.assigneeAccount || 'Trống'}</span>
+                                <Edit2 className="w-3 h-3 text-slate-400 group-hover:text-indigo-600" />
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
+                    )}
+
+                    {/* Dedicated Note & Discussion Field */}
+                    <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-2 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                          <span>Ghi Chú & Trao Đổi Luồng Task:</span>
+                        </label>
+                        <span className="text-[10px] text-slate-400">Các thành viên cùng theo dõi & phản hồi</span>
+                      </div>
+                      <textarea
+                        rows={3}
+                        placeholder="Nhập ghi chú yêu cầu, trao đổi luồng công việc hoặc cập nhật giữa các thành viên..."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700 rounded-xl p-3 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-900/30 transition resize-none leading-relaxed"
+                      />
                     </div>
 
-                    {/* Warning if effort > 0 but completion percentage is 0 */}
-                    {(typeof actualEffort === 'number'
-                      ? actualEffort
-                      : parseFloat(String(actualEffort).replace(',', '.')) || 0) > 0 &&
-                      completionPercentage === 0 && (
-                        <div className="p-3 bg-amber-50 border border-amber-200/90 rounded-xl flex items-start gap-2.5 text-xs text-amber-900 animate-in fade-in duration-200">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                          <div className="leading-relaxed">
-                            <span className="font-bold block text-amber-950">
-                              Lưu ý: Tiến độ đang để 0%
+                    {/* SECTION: Lịch Sử & Nhật Ký Cập Nhật (Activity Log) - Hiển thị khi đang chỉnh sửa task */}
+                    {task && (
+                      <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-3 min-w-0">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                            <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                            <span>Nhật Ký Cập Nhật (Activity Log):</span>
+                            <span className="text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-800/80">
+                              {activityLogsList.length} logs
                             </span>
-                            Bạn đã nhập{' '}
-                            <strong>
-                              {typeof actualEffort === 'number'
-                                ? actualEffort
-                                : parseFloat(String(actualEffort).replace(',', '.')) || 0}
-                              h
-                            </strong>{' '}
-                            làm việc nhưng % tiến độ vẫn là <strong>0%</strong>. Hãy kéo thanh tiến độ
-                            lên nếu bạn đã làm. Nếu giữ 0% (chưa làm), hệ thống sẽ tự động đặt số giờ về{' '}
-                            <strong>0h</strong>.
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+                            className="text-[11px] text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium flex items-center gap-1 transition cursor-pointer"
+                          >
+                            <span>{isHistoryOpen ? 'Thu gọn' : 'Xem lịch sử'}</span>
+                            {isHistoryOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+
+                        {isHistoryOpen && (
+                          <div className="bg-white dark:bg-slate-850 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3 max-h-60 overflow-y-auto custom-scrollbar space-y-2.5">
+                            {activityLogsList.length === 0 ? (
+                              <div className="text-center py-4 text-slate-400 text-xs flex flex-col items-center gap-1">
+                                <Activity className="w-5 h-5 text-slate-300 dark:text-slate-600" />
+                                <span>Chưa có nhật ký hoạt động chi tiết nào.</span>
+                              </div>
+                            ) : (
+                              activityLogsList.map((log) => {
+                                const badge = getActionBadge(log.actionType);
+                                return (
+                                  <div
+                                    key={log.id}
+                                    className="bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 rounded-lg p-2.5 text-xs space-y-1.5 shadow-2xs hover:border-indigo-200 dark:hover:border-indigo-800/80 transition"
+                                  >
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${badge.badgeClass}`}>
+                                          {badge.icon}
+                                          {badge.label}
+                                        </span>
+                                        <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                          {log.authorName}
+                                        </span>
+                                        {log.authorAccount && (
+                                          <span className="text-[11px] text-slate-400 font-mono">
+                                            (@{log.authorAccount})
+                                          </span>
+                                        )}
+                                        {log.authorRole && (
+                                          <span className="text-[10px] px-1.5 py-0.2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded font-medium">
+                                            {log.authorRole}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-1 text-[11px] text-slate-400 font-mono shrink-0">
+                                        <Clock className="w-3 h-3 text-slate-400" />
+                                        <span>{formatDateTime(log.timestamp)}</span>
+                                      </div>
+                                    </div>
+
+                                    <p className="text-slate-600 dark:text-slate-300 text-xs leading-relaxed pl-1 border-l-2 border-slate-200 dark:border-slate-700">
+                                      {log.summary}
+                                    </p>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* RIGHT COLUMN: Sidebar (Creator banner, Metadata Card: Milestone, Assignee, Collab, Role, Est, Week, Priority, Status, Dates, Admin Progress) */}
+                  <div className="lg:col-span-5 xl:col-span-5 space-y-3 min-w-0 lg:sticky lg:top-0">
+                    {/* Creator & Creation Date Info Banner */}
+                    <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3 sm:p-3.5 text-xs text-slate-600 dark:text-slate-300">
+                      <div className="flex items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold shrink-0">
+                            <User className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-slate-400 dark:text-slate-400">{task ? 'Người tạo:' : 'Khởi tạo bởi:'}</span>
+                              <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">{creatorDisplay}</span>
+                            </div>
+                            <div className="text-slate-500 dark:text-slate-400 font-mono text-[11px] flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {createdDateDisplay}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 flex items-center gap-2">
+                          {weekNumber ? (
+                            <span className="font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-xl border border-indigo-200/80 dark:border-indigo-800/80 text-xs">
+                              Tuần {weekNumber <= 53 ? weekNumber + 55 : weekNumber} / {task?.year || selectedYear || 2026}
+                            </span>
+                          ) : (
+                            <span className="font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs">
+                              Kho Backlog
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Comprehensive Metadata Section */}
+                    <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
+                      {/* Milestone Card (Full-width row on top) */}
+                      <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                        <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">
+                          Cột mốc Milestone:
+                        </label>
+                        {isMember && !task && !initialMilestoneId ? (
+                          <div className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center justify-between gap-2 shadow-2xs">
+                            <span className="truncate">📌 Không gán Milestone (Task tự do)</span>
+                            <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800 px-1.5 py-0.5 rounded-md font-medium shrink-0">
+                              Tự Do
+                            </span>
+                          </div>
+                        ) : (
+                          <Dropdown
+                            value={milestoneId}
+                            onChange={setMilestoneId}
+                            options={[
+                              { value: '', label: '📌 Không gán Milestone (Task tự do / Phát sinh ngoài)' },
+                              ...milestones.map((m) => ({
+                                value: m.id,
+                                label: `🚩 ${m.title}${m.role && m.role !== 'ALL' ? ` [${m.role}]` : ''}`,
+                              })),
+                            ]}
+                            className="w-full"
+                            buttonClassName="py-1.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 font-medium rounded-xl"
+                          />
+                        )}
+                      </div>
+
+                      {/* Assignee Card (Full-width row) */}
+                      <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-slate-400 dark:text-slate-400 text-[11px] font-medium">
+                            Người phụ trách chính:
+                          </label>
+                          <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium">
+                            {eligibleAssignees.length} phù hợp
+                          </span>
+                        </div>
+                        <Dropdown
+                          value={assigneeAccount}
+                          onChange={handleAssigneeChange}
+                          options={[
+                            { value: '', label: '-- Để trống (Chưa phân công) --' },
+                            ...eligibleAssignees.map((u) => {
+                              const isRequester =
+                                task?.assignmentRequestedBy &&
+                                u.account.toLowerCase() === task.assignmentRequestedBy.toLowerCase();
+                              const uRoleInTask = getUserRoleInSpec(u, role);
+                              return {
+                                value: u.account,
+                                label: `${u.account} - ${u.name}${isRequester ? ' ✋ (Đang xin nhận task)' : ''}`,
+                                subLabel: `${uRoleInTask} • [${u.specializations.join(', ')}]`,
+                              };
+                            }),
+                          ]}
+                          className="w-full"
+                          buttonClassName="py-1.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 font-medium rounded-xl"
+                        />
+                        {eligibleAssignees.length === 0 && (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1.5 p-2 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 rounded-lg flex items-center gap-1.5">
+                            <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" /> Chưa có thành viên chuyên môn {role}.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Collab Card (Full-width row, placed right next to Assignee) */}
+                      <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-slate-400 dark:text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 text-indigo-500" />
+                            <span>Thành viên Collab ({supporterAccounts.length}):</span>
+                          </label>
+                          <span className="text-[10px] font-medium text-slate-400">
+                            Hợp tác cùng làm
+                          </span>
+                        </div>
+
+                        <Dropdown
+                          value=""
+                          onChange={(selectedAcc) => {
+                            if (selectedAcc) handleToggleSupporter(selectedAcc);
+                          }}
+                          options={[
+                            { value: '', label: '+ Thêm thành viên Collab...' },
+                            ...eligibleSupporters
+                              .filter((u) => !supporterAccounts.some((s) => s.toLowerCase() === u.account.toLowerCase()))
+                              .map((u) => ({
+                                value: u.account,
+                                label: `${u.account} - ${u.name}`,
+                                subLabel: `[${(u.specializations || []).join(', ')}]`,
+                              })),
+                          ]}
+                          className="w-full"
+                          buttonClassName="py-1.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 rounded-xl"
+                        />
+
+                        {supporterAccounts.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {supporterAccounts.map((supAcc) => {
+                              const supUser = users.find((u) => u.account.toLowerCase() === supAcc.toLowerCase());
+                              return (
+                                <div
+                                  key={supAcc}
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-50 dark:bg-slate-800/80 border border-indigo-200/80 dark:border-indigo-800/80 rounded-xl text-xs"
+                                >
+                                  <UserAvatar
+                                    user={supUser}
+                                    account={supAcc}
+                                    name={supUser?.name}
+                                    size="xs"
+                                    shape="circle"
+                                  />
+                                  <span className="font-bold text-[11px] text-slate-800 dark:text-slate-200">
+                                    {supUser?.name || supAcc}
+                                  </span>
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                                    Collab
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSupporter(supAcc)}
+                                    className="p-0.5 text-slate-400 hover:text-rose-600 rounded-full transition cursor-pointer"
+                                    title={`Bỏ Collab @${supAcc}`}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Role & Estimated Effort (2-col grid) */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                          <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">
+                            Role Phụ Trách:
+                          </label>
+                          {allowedRoles.length === 1 ? (
+                            <div
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center justify-between gap-1 shadow-2xs h-[36px]"
+                              title={`${role}${roles.find((ro) => ro.code === role)?.name && roles.find((ro) => ro.code === role)?.name.trim().toLowerCase() !== role.trim().toLowerCase() ? ` - ${roles.find((ro) => ro.code === role)?.name}` : ''} (Cố định theo chuyên môn)`}
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="w-2 h-2 rounded-full bg-indigo-600 shrink-0"></span>
+                                <span className="font-bold text-indigo-700 dark:text-indigo-300 truncate">{role}</span>
+                              </div>
+                              <span className="text-[9.5px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 px-1 py-0.2 rounded font-medium shrink-0">
+                                Cố định
+                              </span>
+                            </div>
+                          ) : (
+                            <Dropdown
+                              value={role}
+                              onChange={(newRole) => {
+                                const nextRole = newRole as Specialization;
+                                const oldPrefix = getRoleTaskPrefix(role);
+                                const nextPrefix = getRoleTaskPrefix(nextRole);
+                                if (!task && title.startsWith(oldPrefix)) {
+                                  setTitle(`${nextPrefix}${title.slice(oldPrefix.length)}`);
+                                }
+                                setRole(nextRole);
+                                setAssigneeAccount('');
+                              }}
+                              options={allowedRoles.map((r) => {
+                                const matched = roles.find((ro) => ro.code === r);
+                                const displayLabel =
+                                  matched?.name && matched.name.trim().toLowerCase() !== r.trim().toLowerCase()
+                                    ? `${r} - ${matched.name}`
+                                    : r;
+                                return {
+                                  value: r,
+                                  label: displayLabel,
+                                };
+                              })}
+                              className="w-full"
+                              buttonClassName="py-1.5 px-2.5 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 rounded-xl font-medium h-[36px]"
+                            />
+                          )}
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-slate-400 dark:text-slate-400 block text-[11px] font-medium">
+                              Ước Tính Giờ:
+                            </label>
+                            {canUseAI && (
+                              <button
+                                type="button"
+                                onClick={handleSuggestEffort}
+                                disabled={isAILoadingEffort}
+                                className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-bold flex items-center gap-0.5 cursor-pointer disabled:opacity-50 active:scale-95 transition"
+                                title="AI Gemini gợi ý giờ"
+                              >
+                                {isAILoadingEffort ? (
+                                  <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
+                                ) : (
+                                  <Sparkles className="w-3 h-3 text-indigo-600 dark:text-indigo-400 animate-pulse" />
+                                )}
+                                <span>Gợi ý</span>
+                              </button>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.1"
+                              max="24"
+                              value={estimatedEffort}
+                              onChange={(e) => {
+                                setEstimatedEffort(e.target.value);
+                                setAiEffortReasoning(null);
+                              }}
+                              placeholder="2.0"
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-100 text-xs focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:border-indigo-500 font-mono font-bold h-[36px]"
+                              required
+                            />
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400 font-semibold pointer-events-none">h</span>
+                          </div>
+                        </div>
+                      </div>
+                      {canUseAI && aiEffortReasoning && (
+                        <div className="p-2 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/90 dark:border-indigo-800/80 rounded-xl text-[10.5px] text-indigo-900 dark:text-indigo-200 flex items-start gap-1.5 animate-in fade-in shadow-2xs">
+                          <Sparkles className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                          <div className="leading-snug">
+                            <span className="font-bold">Lý do ({estimatedEffort}h):</span> {aiEffortReasoning}
                           </div>
                         </div>
                       )}
-                  </div>
-                )}
+                      {canUseAI && aiEffortError && (
+                        <div className="text-[10.5px] text-red-600 dark:text-red-400">
+                          {aiEffortError}
+                        </div>
+                      )}
 
-                {/* Dedicated Note & Discussion Field for All Task Management */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                      <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
-                      Ghi Chú & Trao Đổi Luồng Task (Notes / Discussion):
-                    </label>
-                    <span className="text-[10px] text-slate-400">Các thành viên cùng theo dõi & phản hồi</span>
+                      {/* Week & Priority (2-col grid) */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                          <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">
+                            Kế hoạch (Tuần):
+                          </label>
+                          <Dropdown
+                            value={weekNumber !== undefined ? String(weekNumber) : 'backlog'}
+                            onChange={(val) => {
+                              if (val === 'backlog') {
+                                setWeekNumber(undefined);
+                              } else {
+                                setWeekNumber(Number(val));
+                              }
+                            }}
+                            options={[
+                              { value: 'backlog', label: '📦 Kho Backlog' },
+                              ...generateWeekOptions(selectedWeek),
+                            ]}
+                            className="w-full"
+                            buttonClassName="py-1.5 px-2.5 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 font-medium rounded-xl h-[36px]"
+                          />
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                          <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">
+                            Mức Độ Ưu Tiên:
+                          </label>
+                          <Dropdown
+                            value={priority}
+                            onChange={(newPriority) => setPriority(newPriority as 'High' | 'Medium' | 'Low')}
+                            options={[
+                              { value: 'High', label: '🔴 Cao' },
+                              { value: 'Medium', label: '🟡 Trung bình' },
+                              { value: 'Low', label: '🟢 Thấp' },
+                            ]}
+                            className="w-full"
+                            buttonClassName="py-1.5 px-2.5 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 font-medium rounded-xl h-[36px]"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                        <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">
+                          Trạng Thái:
+                        </label>
+                        <Dropdown
+                          value={status}
+                          onChange={(newStatus) => handleStatusChange(newStatus as TaskStatus)}
+                          options={[
+                            { value: 'To do', label: 'To do (Cần làm)' },
+                            { value: 'In Progress', label: 'In Progress (Đang làm)' },
+                            { value: 'Done', label: 'Done (Đã hoàn thành)' },
+                          ]}
+                          className="w-full"
+                          buttonClassName="py-1.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 font-medium rounded-xl"
+                        />
+                      </div>
+
+                      {/* Start Date & End Date (2-col grid) */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                          <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-indigo-500 shrink-0" />
+                            <span>Bắt đầu:</span>
+                          </label>
+                          <DatePicker
+                            value={startDate}
+                            onChange={handleStartDateChange}
+                            placeholder="Chọn ngày..."
+                            maxDate={endDate || undefined}
+                          />
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                          <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-emerald-500 shrink-0" />
+                            <span>Hạn hoàn thành:</span>
+                          </label>
+                          <DatePicker
+                            value={endDate}
+                            onChange={handleEndDateChange}
+                            placeholder="Hạn xong..."
+                            minDate={startDate || undefined}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Admin/PM-only Progress & Actual Effort Control Box */}
+                      {isUserAdminOrPM(currentUser) && (
+                        <div className="p-3 sm:p-3.5 bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/90 dark:border-purple-800/80 rounded-xl space-y-2.5 shadow-2xs animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between flex-wrap gap-1.5">
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 dark:bg-purple-900/60 dark:text-purple-200 dark:border-purple-700">
+                              👑 Admin / PM Override
+                            </span>
+                            <span className="text-[10px] text-purple-700 dark:text-purple-300 font-medium">
+                              Quản lý tiến độ
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                            {/* Actual Effort Input */}
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                                  Giờ thực tế:
+                                </label>
+                                <span className="text-xs font-bold text-purple-700 dark:text-purple-300 font-mono">
+                                  {typeof actualEffort === 'number'
+                                    ? actualEffort
+                                    : parseFloat(String(actualEffort).replace(',', '.')) || 0}{' '}
+                                  giờ
+                                </span>
+                              </div>
+                              <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                max="24"
+                                value={actualEffort}
+                                onChange={(e) => setActualEffort(e.target.value)}
+                                placeholder="0.0"
+                                className="w-full bg-white dark:bg-slate-900 border border-purple-300/80 dark:border-purple-700 rounded-xl px-2.5 py-1.5 text-slate-800 dark:text-slate-100 text-xs font-mono font-bold focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
+                              />
+                            </div>
+
+                            {/* Completion Percentage Slider & Quick Buttons */}
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                                  Tiến độ (%):
+                                </label>
+                                <span className="text-xs font-bold text-purple-700 dark:text-purple-300 font-mono">
+                                  {completionPercentage}%
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                step="5"
+                                value={completionPercentage}
+                                onChange={(e) => handleProgressChange(Number(e.target.value))}
+                                className="w-full accent-purple-600 cursor-pointer h-2 bg-purple-200 dark:bg-purple-900 rounded-lg"
+                              />
+                              <div className="flex justify-between text-[10px] text-purple-700 dark:text-purple-400 font-mono font-semibold mt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleProgressChange(0)}
+                                  className="hover:underline cursor-pointer"
+                                >
+                                  0%
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleProgressChange(25)}
+                                  className="hover:underline cursor-pointer"
+                                >
+                                  25%
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleProgressChange(50)}
+                                  className="hover:underline cursor-pointer"
+                                >
+                                  50%
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleProgressChange(75)}
+                                  className="hover:underline cursor-pointer"
+                                >
+                                  75%
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleProgressChange(100)}
+                                  className="hover:underline cursor-pointer"
+                                >
+                                  100%
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Warning if effort > 0 but completion percentage is 0 */}
+                          {(typeof actualEffort === 'number'
+                            ? actualEffort
+                            : parseFloat(String(actualEffort).replace(',', '.')) || 0) > 0 &&
+                            completionPercentage === 0 && (
+                              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-xl flex items-start gap-2 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in duration-200">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                <div className="leading-tight text-[11px]">
+                                  <span className="font-bold block text-amber-950 dark:text-amber-100">
+                                    Tiến độ đang 0%:
+                                  </span>
+                                  Nếu giữ 0% khi lưu, hệ thống sẽ tự động đặt số giờ về 0h.
+                                </div>
+                              </div>
+                            )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <textarea
-                    rows={3}
-                    placeholder="Nhập ghi chú yêu cầu, trao đổi luồng công việc hoặc cập nhật giữa các thành viên..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300/90 rounded-xl p-3 text-slate-800 text-xs focus:bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition resize-none leading-relaxed"
-                  />
                 </div>
               </div>
 
               {/* Fixed Footer */}
-              <div className="p-4 sm:px-6 sm:py-4 border-t border-slate-100 shrink-0 bg-slate-50/60 flex items-center justify-between gap-3 rounded-b-3xl">
+              <div className="p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900/60 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl">
                 {task && (userRoleInTaskSpec === 'Leader' || userRoleInTaskSpec === 'Advisor' || currentUser?.role === 'Admin') ? (
                   <button
                     type="button"
                     onClick={handleDelete}
-                    className="px-3.5 py-2 text-red-600 hover:bg-red-50 border border-red-200 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
+                    className="px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
                   >
-                    Xóa Task
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa Task</span>
                   </button>
                 ) : (
                   <div />
@@ -1826,7 +2043,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-medium rounded-xl transition active:scale-95 shadow-2xs"
+                    className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-xl transition active:scale-95 shadow-2xs cursor-pointer"
                   >
                     Hủy
                   </button>

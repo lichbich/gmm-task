@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.9.7';
+export const APP_VERSION = '2.9.9';
 export const APP_RELEASE_NOTE =
-  'Tối ưu hiển thị Subtask theo đúng quyền phụ trách/collab trong Task Của Tôi';
+  'Khắc phục lỗi cuộn trang và tích hợp phần Nhật ký Activity Log cho Modal Task';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 
