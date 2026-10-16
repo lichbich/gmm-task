@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.9.6';
+export const APP_VERSION = '2.9.7';
 export const APP_RELEASE_NOTE =
-  'Lưu trạng thái tab khi tải lại trang, Quản lý Subtask phân cấp';
+  'Tối ưu hiển thị Subtask theo đúng quyền phụ trách/collab trong Task Của Tôi';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 

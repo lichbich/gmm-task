@@ -794,6 +794,12 @@ const getRoleOrderRank = (roleCode?: string): number => {
       filteredTasks.reduce((acc, t) => {
         const hasSubtasksInFiltered = filteredTasks.some((st) => st.subtaskParentId === t.id);
         if (hasSubtasksInFiltered) return acc;
+        if (subTab === 'MY_TASKS' && currentUser?.account) {
+          const isPrimary = t.assigneeAccount?.toLowerCase() === currentUser.account.toLowerCase();
+          if (!isPrimary) {
+            return acc + getMemberTaskEffort(t, currentUser.account);
+          }
+        }
         return acc + (t.estimatedEffort || 0);
       }, 0) * 100
     ) / 100;
@@ -856,7 +862,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
     t: Task,
     displayIdx: number,
     forAccount?: string,
-    isNestedSubtask?: boolean
+    isNestedSubtask?: boolean,
+    hasVisibleSubtasks?: boolean
   ) => {
     const todayStr = getTodayDateOnlyString(simulatedTime);
     const sundayNoon = getWeekSundayNoon(t.weekNumber || selectedWeek, t.year || selectedYear);
@@ -933,7 +940,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
                   </span>
                 </div>
               )}
-              {hasSub && (
+              {hasSub && hasVisibleSubtasks !== false && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -953,13 +960,21 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 <span
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleParentCollapse(t.id);
+                    if (hasVisibleSubtasks !== false) {
+                      toggleParentCollapse(t.id);
+                    } else {
+                      handleTaskClick(t);
+                    }
                   }}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] shrink-0 cursor-pointer hover:bg-indigo-100"
-                  title={`${taskSubtasks.length} subtask trực thuộc. Bấm để ${isCollapsed ? 'mở rộng' : 'thu gọn'}`}
+                  title={
+                    hasVisibleSubtasks !== false
+                      ? `${taskSubtasks.length} subtask trực thuộc. Bấm để ${isCollapsed ? 'mở rộng' : 'thu gọn'}`
+                      : `${taskSubtasks.length} subtask trực thuộc (giao cho thành viên khác). Bấm để xem chi tiết task cha`
+                  }
                 >
                   <Layers className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  {taskSubtasks.length} Subtask{isCollapsed ? ' (đang ẩn)' : ''}
+                  {taskSubtasks.length} Subtask{hasVisibleSubtasks !== false && isCollapsed ? ' (đang ẩn)' : ''}
                 </span>
               )}
               {isSub && !isNestedSubtask && (
@@ -1098,7 +1113,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
         <td className="py-3 px-3 font-medium">
           <div className="space-y-1">
             {(() => {
-              const currentAcc = forAccount || t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
+              const currentAcc = t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
               const collabs = (parentMetrics && parentMetrics.collaboratorAccounts.length > 0)
                 ? parentMetrics.collaboratorAccounts
                 : (t.supporterAccounts || []);
@@ -1330,7 +1345,8 @@ const getRoleOrderRank = (roleCode?: string): number => {
     t: Task,
     displayIdx: number,
     forAccount?: string,
-    isNestedSubtask?: boolean
+    isNestedSubtask?: boolean,
+    hasVisibleSubtasks?: boolean
   ) => {
     const todayStr = getTodayDateOnlyString(simulatedTime);
     const isAssignedToMe = canReportTask(t);
@@ -1404,12 +1420,21 @@ const getRoleOrderRank = (roleCode?: string): number => {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  toggleParentCollapse(t.id);
+                  if (hasVisibleSubtasks !== false) {
+                    toggleParentCollapse(t.id);
+                  } else {
+                    handleTaskClick(t);
+                  }
                 }}
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold text-[10px]"
+                title={
+                  hasVisibleSubtasks !== false
+                    ? `${taskSubtasks.length} subtask trực thuộc. Bấm để ${isCollapsed ? 'mở rộng' : 'thu gọn'}`
+                    : `${taskSubtasks.length} subtask trực thuộc (giao cho thành viên khác). Bấm để xem chi tiết task cha`
+                }
               >
                 <Layers className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                {taskSubtasks.length} Subtask {isCollapsed ? '▶' : '▼'}
+                {taskSubtasks.length} Subtask{hasVisibleSubtasks !== false ? (isCollapsed ? ' ▶' : ' ▼') : ''}
               </button>
             )}
             {isSub && !isNestedSubtask && (
@@ -1479,7 +1504,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
                 {(() => {
-                  const currentAcc = forAccount || t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
+                  const currentAcc = t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
                   if (currentAcc) {
                     const userObj = users.find((u) => u.account.toLowerCase() === currentAcc.toLowerCase());
                     const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
@@ -2202,12 +2227,15 @@ const getRoleOrderRank = (roleCode?: string): number => {
                                   const taskIdx = tasks.findIndex((item) => item.id === t.id);
                                   const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
                                   const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+                                  const visibleSubtasks = acc
+                                    ? taskSubtasks.filter((st) => accTasks.some((at) => at.id === st.id))
+                                    : taskSubtasks;
                                   const isCollapsed = collapsedParentIds.has(t.id);
                                   return (
                                     <React.Fragment key={t.id}>
-                                      {renderTaskRow(t, displayIdx, acc || undefined, false)}
+                                      {renderTaskRow(t, displayIdx, acc || undefined, false, visibleSubtasks.length > 0)}
                                       {!isCollapsed &&
-                                        taskSubtasks.map((st) =>
+                                        visibleSubtasks.map((st) =>
                                           renderTaskRow(st, displayIdx, acc || undefined, true)
                                         )}
                                     </React.Fragment>
@@ -2230,12 +2258,15 @@ const getRoleOrderRank = (roleCode?: string): number => {
                         const taskIdx = tasks.findIndex((item) => item.id === t.id);
                         const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
                         const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+                        const visibleSubtasks = subTab === 'MY_TASKS'
+                          ? taskSubtasks.filter((st) => filteredTasks.some((ft) => ft.id === st.id))
+                          : taskSubtasks;
                         const isCollapsed = collapsedParentIds.has(t.id);
                         return (
                           <React.Fragment key={t.id}>
-                            {renderTaskRow(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, false)}
+                            {renderTaskRow(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, false, visibleSubtasks.length > 0)}
                             {!isCollapsed &&
-                              taskSubtasks.map((st) =>
+                              visibleSubtasks.map((st) =>
                                 renderTaskRow(st, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, true)
                               )}
                           </React.Fragment>
@@ -2458,13 +2489,16 @@ const getRoleOrderRank = (roleCode?: string): number => {
                               const taskIdx = tasks.findIndex((item) => item.id === t.id);
                               const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : 1250;
                               const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+                              const visibleSubtasks = acc
+                                ? taskSubtasks.filter((st) => accTasks.some((at) => at.id === st.id))
+                                : taskSubtasks;
                               const isCollapsed = collapsedParentIds.has(t.id);
                               return (
                                 <React.Fragment key={t.id}>
-                                  {renderMobileTaskCard(t, displayIdx, acc || undefined, false)}
-                                  {!isCollapsed && taskSubtasks.length > 0 && (
+                                  {renderMobileTaskCard(t, displayIdx, acc || undefined, false, visibleSubtasks.length > 0)}
+                                  {!isCollapsed && visibleSubtasks.length > 0 && (
                                     <div className="pl-3 border-l-2 border-indigo-200 dark:border-indigo-800 space-y-2 mt-1">
-                                      {taskSubtasks.map((st) =>
+                                      {visibleSubtasks.map((st) =>
                                         renderMobileTaskCard(st, displayIdx, acc || undefined, true)
                                       )}
                                     </div>
@@ -2488,13 +2522,16 @@ const getRoleOrderRank = (roleCode?: string): number => {
                   const taskIdx = tasks.findIndex((item) => item.id === t.id);
                   const displayIdx = taskIdx >= 0 ? taskIdx + 1250 : idx + 1250;
                   const taskSubtasks = getSubtasksOfParent(t.id, tasks);
+                  const visibleSubtasks = subTab === 'MY_TASKS'
+                    ? taskSubtasks.filter((st) => filteredTasks.some((ft) => ft.id === st.id))
+                    : taskSubtasks;
                   const isCollapsed = collapsedParentIds.has(t.id);
                   return (
                     <React.Fragment key={t.id}>
-                      {renderMobileTaskCard(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, false)}
-                      {!isCollapsed && taskSubtasks.length > 0 && (
+                      {renderMobileTaskCard(t, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, false, visibleSubtasks.length > 0)}
+                      {!isCollapsed && visibleSubtasks.length > 0 && (
                         <div className="pl-3 border-l-2 border-indigo-200 dark:border-indigo-800 space-y-2 mt-1">
-                          {taskSubtasks.map((st) =>
+                          {visibleSubtasks.map((st) =>
                             renderMobileTaskCard(st, displayIdx, subTab === 'MY_TASKS' ? currentUser?.account : undefined, true)
                           )}
                         </div>
