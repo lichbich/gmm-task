@@ -409,7 +409,6 @@ export function enrichTasksWithHierarchicalCodes(
   roles?: RoleItem[]
 ): { enrichedTasks: Task[]; hasChanges: boolean } {
   let hasChanges = false;
-  const nowIso = new Date().toISOString();
   const standaloneTasks: Task[] = [];
   const subtasksList: Task[] = [];
 
@@ -424,113 +423,62 @@ export function enrichTasksWithHierarchicalCodes(
 
   const finalStandalone: Task[] = [];
   standaloneTasks.forEach((t) => {
-    const targetScope = getScopePrefix(t.milestoneId, milestones);
-    const targetRole = getRolePrefix(t.role, roles);
     const parsed = parseTaskCode(t.code);
 
-    // Code is considered valid only if it strictly matches the current milestone scope & role
-    const isCodeMatching =
-      Boolean(parsed) &&
-      parsed?.scope === targetScope &&
-      parsed?.role === targetRole &&
-      !parsed?.isSubtask;
-
-    if (isCodeMatching && t.code) {
+    // If task already has a valid hierarchical standalone code, preserve it permanently!
+    // Never auto-mutate or renumber existing valid codes in background sync.
+    if (t.code && isValidTaskCode(t.code) && !parsed?.isSubtask) {
       finalStandalone.push(t);
-    } else {
-      hasChanges = true;
-      const newCode = generateNextTaskCode({
-        milestoneId: t.milestoneId,
-        role: t.role,
-        isSubtask: false,
-        existingTasks: finalStandalone,
-        milestones,
-        roles,
-      });
-
-      if (t.code && t.code !== newCode) {
-        const recentLogs = t.activityLogs || [];
-        const isDuplicateLog =
-          recentLogs.length > 0 &&
-          recentLogs[0].actionType === 'TASK_CODE_CHANGE' &&
-          recentLogs[0].summary.includes(newCode);
-
-        const transitionLog: TaskActivityLog = {
-          id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          timestamp: nowIso,
-          authorName: 'Hệ thống',
-          authorAccount: 'system',
-          authorRole: 'System',
-          actionType: 'TASK_CODE_CHANGE',
-          summary: `Chuẩn hóa mã phân cấp theo Cột mốc. Mã mới: [${newCode}] (Mã cũ: [${t.code}])`,
-        };
-        finalStandalone.push({
-          ...t,
-          code: newCode,
-          activityLogs: isDuplicateLog ? recentLogs : [transitionLog, ...recentLogs],
-        });
-      } else {
-        finalStandalone.push({ ...t, code: newCode });
-      }
+      return;
     }
+
+    // Only assign a new code if code is missing or format is invalid
+    hasChanges = true;
+    const newCode = generateNextTaskCode({
+      milestoneId: t.milestoneId,
+      role: t.role,
+      isSubtask: false,
+      existingTasks: [...tasks, ...finalStandalone],
+      milestones,
+      roles,
+    });
+
+    finalStandalone.push({ ...t, code: newCode });
   });
 
   const finalSubtasks: Task[] = [];
   subtasksList.forEach((st) => {
     const parent = finalStandalone.find((p) => p.id === st.subtaskParentId);
+    const parsed = parseTaskCode(st.code);
+
+    // If subtask already has a valid hierarchical subtask code, preserve it permanently!
+    if (st.code && isValidTaskCode(st.code) && parsed?.isSubtask) {
+      finalSubtasks.push(st);
+      return;
+    }
+
     if (parent && parent.code) {
-      const baseParentCode = parent.code.split('.')[0];
-      const parsed = parseTaskCode(st.code);
-      const isSubMatching =
-        Boolean(parsed) &&
-        parsed?.baseCode === baseParentCode &&
-        parsed?.isSubtask;
+      hasChanges = true;
+      const allCurrent = [...tasks, ...finalStandalone, ...finalSubtasks];
+      const newSubCode = generateNextTaskCode({
+        milestoneId: st.milestoneId || parent.milestoneId,
+        role: st.role,
+        isSubtask: true,
+        subtaskParentId: st.subtaskParentId,
+        existingTasks: allCurrent,
+        milestones,
+        roles,
+      });
 
-      if (isSubMatching && st.code) {
-        finalSubtasks.push(st);
-      } else {
-        hasChanges = true;
-        const allCurrent = [...finalStandalone, ...finalSubtasks];
-        const newSubCode = generateNextTaskCode({
-          milestoneId: st.milestoneId || parent.milestoneId,
-          role: st.role,
-          isSubtask: true,
-          subtaskParentId: st.subtaskParentId,
-          existingTasks: allCurrent,
-          milestones,
-          roles,
-        });
-
-        if (st.code && st.code !== newSubCode) {
-          const recentLogs = st.activityLogs || [];
-          const isDuplicateLog =
-            recentLogs.length > 0 &&
-            recentLogs[0].actionType === 'TASK_CODE_CHANGE' &&
-            recentLogs[0].summary.includes(newSubCode);
-
-          const transitionLog: TaskActivityLog = {
-            id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            timestamp: nowIso,
-            authorName: 'Hệ thống',
-            authorAccount: 'system',
-            authorRole: 'System',
-            actionType: 'TASK_CODE_CHANGE',
-            summary: `Chuẩn hóa mã việc con theo task cha [${parent.code}]. Mã mới: [${newSubCode}] (Mã cũ: [${st.code}])`,
-          };
-          finalSubtasks.push({
-            ...st,
-            code: newSubCode,
-            isSubtask: true,
-            activityLogs: isDuplicateLog ? recentLogs : [transitionLog, ...recentLogs],
-          });
-        } else {
-          finalSubtasks.push({ ...st, code: newSubCode, isSubtask: true });
-        }
-      }
+      finalSubtasks.push({
+        ...st,
+        code: newSubCode,
+        isSubtask: true,
+      });
     } else {
       // Orphaned subtask -> promote to standalone
       hasChanges = true;
-      const allCurrent = [...finalStandalone, ...finalSubtasks];
+      const allCurrent = [...tasks, ...finalStandalone, ...finalSubtasks];
       const newCode = generateNextTaskCode({
         milestoneId: st.milestoneId,
         role: st.role,
@@ -540,16 +488,6 @@ export function enrichTasksWithHierarchicalCodes(
         roles,
       });
 
-      const transitionLog: TaskActivityLog = {
-        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        timestamp: nowIso,
-        authorName: 'Hệ thống',
-        authorAccount: 'system',
-        authorRole: 'System',
-        actionType: 'TASK_CODE_CHANGE',
-        summary: `Tách việc độc lập và chuẩn hóa mã. Mã mới: [${newCode}] (Mã cũ: [${st.code || 'Chưa có'}])`,
-      };
-
       finalSubtasks.push({
         ...st,
         code: newCode,
@@ -557,7 +495,6 @@ export function enrichTasksWithHierarchicalCodes(
         subtaskParentId: undefined,
         subtaskParentTitle: undefined,
         subtaskReviewerAccount: undefined,
-        activityLogs: [transitionLog, ...(st.activityLogs || [])],
       });
     }
   });

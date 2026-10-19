@@ -735,37 +735,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // 2. Process remote tasks from Firebase
           const rawRemoteTasks: Task[] = data.tasks ? (Object.values(data.tasks) as Task[]) : [];
-          let hasLegacy = false;
           const formattedRemoteTasks: Task[] = rawRemoteTasks.map((t: any) => {
             const weekNo =
               typeof t.weekNumber === 'number' && t.weekNumber <= 53 && (!t.year || t.year === 2026)
                 ? t.weekNumber + 55
                 : t.weekNumber;
-            if (weekNo !== t.weekNumber) {
-              hasLegacy = true;
-            }
 
             const pct = typeof t.completionPercentage === 'number' ? t.completionPercentage : 0;
             let taskStatus: TaskStatus = t.status || 'To do';
 
-            // Auto-normalize status:
+            // Auto-normalize status in memory:
             // - 100% -> Done
             // - 0% < pct < 100% -> In Progress (even if legacy database had it as 'To do')
             // - 0% -> To do (cannot be Done if 0%)
             if (pct >= 100) {
               if (taskStatus !== 'Done') {
                 taskStatus = 'Done';
-                hasLegacy = true;
               }
             } else if (pct > 0) {
               if (taskStatus === 'To do') {
                 taskStatus = 'In Progress';
-                hasLegacy = true;
               }
             } else if (pct === 0) {
               if (taskStatus === 'Done') {
                 taskStatus = 'To do';
-                hasLegacy = true;
               }
             }
             const rawLogs: TaskActivityLog[] = Array.isArray(t.activityLogs)
@@ -774,24 +767,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ? (Object.values(t.activityLogs) as TaskActivityLog[])
               : [];
 
-            // Prune duplicate consecutive TASK_CODE_CHANGE spam logs
+            // Prune duplicate consecutive TASK_CODE_CHANGE spam logs in memory
             const cleanedLogs: TaskActivityLog[] = [];
-            let hadSpamLogs = false;
             rawLogs.forEach((log) => {
               if (
                 log.actionType === 'TASK_CODE_CHANGE' &&
                 cleanedLogs.length > 0 &&
                 cleanedLogs[cleanedLogs.length - 1].actionType === 'TASK_CODE_CHANGE'
               ) {
-                hadSpamLogs = true;
                 return;
               }
               cleanedLogs.push(log);
             });
             const finalLogs = cleanedLogs.length > 30 ? cleanedLogs.slice(0, 30) : cleanedLogs;
-            if (rawLogs.length > 30 && hadSpamLogs) {
-              hasLegacy = true; // One-time purge of 500+ spam logs from database
-            }
 
             return {
               ...t,
@@ -825,8 +813,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (mergedTasks.length > 0) {
             // Enrich with hierarchical task codes (Enterprise Standard - Dynamic Roles)
-            // Note: We do NOT set hasLegacy = true on code enrichment or prefix healing in onValue
-            // to prevent distributed ping-pong loops between clients with different cached bundle versions.
+            // Note: onValue is strictly READ-ONLY. We do NOT perform background database writes.
             const { enrichedTasks } = enrichTasksWithHierarchicalCodes(
               mergedTasks,
               activeMilestones,
@@ -879,14 +866,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setTimeout(() => {
               saveLocalTasksCache(reconciledTasks);
             }, 0);
-
-            if (hasLegacy) {
-              const obj: Record<string, Task> = {};
-              reconciledTasks.forEach((t) => {
-                obj[t.id] = sanitizeForFirebase(t);
-              });
-              update(ref(database, `${DB_ROOT_NODE}/tasks`), obj).catch(console.error);
-            }
           } else if (rawRemoteTasks.length === 0 && localCached.length === 0) {
             setTasks([]);
           }
