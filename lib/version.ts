@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.10.0';
+export const APP_VERSION = '2.10.1';
 export const APP_RELEASE_NOTE =
-  'Ra mắt Hệ thống Mã Task Phân Cấp (Hierarchical Task Code) chuẩn Enterprise [SCOPE]-[ROLE]-[NUM][.SUB], bảo vệ công sức khi xóa task cha và tự động hóa mã khi chuyển đổi vị trí';
+  'Hotfix v2.10.1: Cố định cứng mã task và loại bỏ hoàn toàn tự động đổi mã/ghi đè nền.';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 
