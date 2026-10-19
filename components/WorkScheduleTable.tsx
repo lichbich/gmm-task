@@ -409,28 +409,29 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     [tasks]
   );
 
-// Preferred role display order: BA -> Designer/Design -> FE -> BE -> DevOps -> AI -> PO
-const PREFERRED_ROLE_ORDER = ['BA', 'Designer', 'Design', 'FE', 'BE', 'DevOps', 'AI', 'PO'];
-
-const getRoleOrderRank = (roleCode?: string): number => {
-  if (!roleCode) return 999;
-  const normalized = roleCode.trim().toLowerCase();
-  if (normalized === 'ba') return 1;
-  if (normalized === 'designer' || normalized === 'design') return 2;
-  if (normalized === 'fe') return 3;
-  if (normalized === 'be') return 4;
-  if (normalized === 'devops') return 5;
-  if (normalized === 'ai') return 6;
-  if (normalized === 'po') return 7;
-  return 100;
-};
+  // Dynamic role rank based on Admin configured order in AppContext (roles array is already sorted by order)
+  const getRoleOrderRank = useCallback(
+    (roleCode?: string): number => {
+      if (!roleCode) return 999;
+      const rNorm = roleCode.trim().toLowerCase();
+      const idx = roles.findIndex(
+        (r) =>
+          r.code.toLowerCase() === rNorm ||
+          isSpecializationMatchingRole(r.code, roleCode)
+      );
+      if (idx !== -1) {
+        return typeof roles[idx].order === 'number' ? (roles[idx].order as number) : idx + 1;
+      }
+      return 999;
+    },
+    [roles]
+  );
 
   const roleOptions: DropdownOption[] = useMemo(() => {
     const sortedRoles = [...roles].sort((a, b) => {
-      const rankA = getRoleOrderRank(a.code);
-      const rankB = getRoleOrderRank(b.code);
-      if (rankA !== rankB) return rankA - rankB;
-      return (a.order || 0) - (b.order || 0);
+      const orderA = typeof a.order === 'number' ? a.order : 999;
+      const orderB = typeof b.order === 'number' ? b.order : 999;
+      return orderA - orderB;
     });
 
     return [
@@ -583,18 +584,11 @@ const getRoleOrderRank = (roleCode?: string): number => {
 
   const ROLE_ORDER: Specialization[] = useMemo(() => {
     const sortedRoles = [...roles].sort((a, b) => {
-      const rankA = getRoleOrderRank(a.code);
-      const rankB = getRoleOrderRank(b.code);
-      if (rankA !== rankB) return rankA - rankB;
-      return (a.order || 0) - (b.order || 0);
+      const orderA = typeof a.order === 'number' ? a.order : 999;
+      const orderB = typeof b.order === 'number' ? b.order : 999;
+      return orderA - orderB;
     });
-    const codes = sortedRoles.map((r) => r.code);
-    PREFERRED_ROLE_ORDER.forEach((pRole) => {
-      if (!codes.some((c) => c.toLowerCase() === pRole.toLowerCase())) {
-        codes.push(pRole);
-      }
-    });
-    return codes;
+    return sortedRoles.map((r) => r.code);
   }, [roles]);
 
   const getRoleConfig = (roleCode: string) => {
@@ -763,7 +757,7 @@ const getRoleOrderRank = (roleCode?: string): number => {
     });
 
     return groups;
-  }, [filteredTasks, ROLE_ORDER, users]);
+  }, [filteredTasks, ROLE_ORDER, users, getRoleOrderRank]);
 
   const [activeRoleInView, setActiveRoleInView] = useState<string>('');
   const [showFloatingRoleBar, setShowFloatingRoleBar] = useState<boolean>(false);

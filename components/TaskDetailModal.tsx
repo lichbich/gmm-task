@@ -81,6 +81,7 @@ import { TaskShareButton } from './common/TaskShareButton';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
 import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
+import { ensureTaskTitlePrefix } from '../lib/taskPrefixHelper';
 
 interface TaskDetailModalProps {
   task: Task | null;
@@ -134,14 +135,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     selectedWeek,
     selectedYear,
     requestTaskAssignment,
+    roles,
   } = useApp();
 
   // Keep task updated in real-time with context
   const task = tasks.find((t) => t.id === taskProp?.id) || taskProp;
 
   const effectiveTaskCode = useMemo(() => {
-    return getEffectiveTaskCode(task, tasks, milestones);
-  }, [task, tasks, milestones]);
+    return getEffectiveTaskCode(task, tasks, milestones, roles);
+  }, [task, tasks, milestones, roles]);
 
   // Silently heal / persist code if task was lacking one or outdated
   useEffect(() => {
@@ -149,6 +151,16 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       updateTask(task.id, { code: effectiveTaskCode }, { skipLog: true });
     }
   }, [isOpen, task?.id, task?.code, effectiveTaskCode]);
+
+  // Silently heal / persist title prefix if it was mismatched (e.g. QA | ... on QC task)
+  useEffect(() => {
+    if (isOpen && task) {
+      const safeTitle = ensureTaskTitlePrefix(task.title, task.role, roles);
+      if (safeTitle && safeTitle !== task.title) {
+        updateTask(task.id, { title: safeTitle }, { skipLog: true });
+      }
+    }
+  }, [isOpen, task?.id, task?.title, task?.role, roles]);
 
   // Calculate total accumulated effort across all weeks
   const accumulatedEffort = useMemo(() => {

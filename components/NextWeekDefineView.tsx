@@ -44,23 +44,7 @@ import {
   Ticket as TicketIcon,
 } from 'lucide-react';
 
-const PREFERRED_ROLE_ORDER = ['BA', 'Designer', 'Design', 'FE', 'BE', 'DevOps', 'AI', 'PO'];
 
-const getRoleOrderRank = (roleCode?: string): number => {
-  if (!roleCode) return 999;
-  const normalized = roleCode.trim().toLowerCase();
-  if (normalized === 'ba') return 1;
-  if (normalized === 'designer' || normalized === 'design') return 2;
-  if (normalized === 'fe' || normalized === 'frontend') return 3;
-  if (normalized === 'be' || normalized === 'backend') return 4;
-  if (normalized === 'qa' || normalized === 'qc' || normalized === 'tester') return 5;
-  if (normalized === 'devops') return 6;
-  if (normalized === 'ai') return 7;
-  if (normalized === 'po') return 8;
-  if (normalized === 'sa') return 9;
-  if (normalized === 'pm') return 10;
-  return 100;
-};
 
 interface NextWeekDefineViewProps {
   onOpenTaskModal: (task?: Task, defaultWeek?: number, defaultAssignee?: string) => void;
@@ -91,6 +75,23 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
+
+  const getRoleOrderRank = React.useCallback(
+    (roleCode?: string): number => {
+      if (!roleCode) return 999;
+      const rNorm = roleCode.trim().toLowerCase();
+      const idx = roles.findIndex(
+        (r) =>
+          r.code.toLowerCase() === rNorm ||
+          isSpecializationMatchingRole(r.code, roleCode)
+      );
+      if (idx !== -1) {
+        return typeof roles[idx].order === 'number' ? (roles[idx].order as number) : idx + 1;
+      }
+      return 999;
+    },
+    [roles]
+  );
 
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
   const [viewingTicket, setViewingTicket] = useState<Ticket | null>(null);
@@ -293,15 +294,14 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     });
   }, [tasks, nextWeek, selectedYear, currentUser, roleFilter, searchQuery, users]);
 
-  // Group next week assigned tasks by Role & sort by preferred role order
+  // Group next week assigned tasks by Role & sort by dynamic role order
   const nextWeekTasksByRole = React.useMemo(() => {
     const map = new Map<string, Task[]>();
 
     const sortedRoles = [...roles].sort((a, b) => {
-      const rankA = getRoleOrderRank(a.code);
-      const rankB = getRoleOrderRank(b.code);
-      if (rankA !== rankB) return rankA - rankB;
-      return (a.order || 0) - (b.order || 0);
+      const orderA = typeof a.order === 'number' ? a.order : 999;
+      const orderB = typeof b.order === 'number' ? b.order : 999;
+      return orderA - orderB;
     });
 
     sortedRoles.forEach((r) => map.set(r.code, []));
@@ -319,7 +319,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     const entries = Array.from(map.entries()).filter(([_, list]) => list.length > 0);
     entries.sort(([roleA], [roleB]) => getRoleOrderRank(roleA) - getRoleOrderRank(roleB));
     return entries;
-  }, [nextWeekAssignedTasks, roles]);
+  }, [nextWeekAssignedTasks, roles, getRoleOrderRank]);
 
   // 3. Unassigned Milestone Tasks Pool
   const unassignedMilestoneTasks = React.useMemo(() => {

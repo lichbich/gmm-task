@@ -16,7 +16,7 @@ import { AITaskChatBox } from './AITaskChatBox';
 import { SubTaskSuggestion, requestAIEffortSuggestion, isAIFeatureEnabled } from '../lib/geminiService';
 import { ensureTaskTitlePrefix, getRoleTaskPrefix } from '../lib/taskPrefixHelper';
 import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
-import { generateNextTaskCode } from '../lib/taskCodeHelper';
+import { generateNextTaskCode, getRolePrefix, parseTaskCode } from '../lib/taskCodeHelper';
 import { LinkExistingTasksModal } from './common/LinkExistingTasksModal';
 
 const formatDateTime = (isoOrStr: string) => {
@@ -300,8 +300,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
 
   const previewCode = useMemo(() => {
+    const expectedRolePrefix = getRolePrefix(role, roles);
+    const parsed = parseTaskCode(task?.code);
+    const isCodeRoleMatching = parsed && parsed.role === expectedRolePrefix;
+
     const isUnchanged =
       Boolean(task?.code) &&
+      isCodeRoleMatching &&
       task?.milestoneId === milestoneId &&
       task?.role === role &&
       Boolean(task?.isSubtask || task?.subtaskParentId) === Boolean(isSubtaskMode || subtaskParentId) &&
@@ -316,8 +321,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       subtaskParentId: subtaskParentId,
       existingTasks: tasks.filter((t) => t.id !== task?.id),
       milestones,
+      roles,
     });
-  }, [task, milestoneId, role, isSubtaskMode, subtaskParentId, tasks, milestones]);
+  }, [task, milestoneId, role, isSubtaskMode, subtaskParentId, tasks, milestones, roles]);
 
   const assigneeUser = useMemo(() => {
     if (!task?.assigneeAccount) return null;
@@ -915,7 +921,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     const cleanSupporters = supporterAccounts.filter(
       (a) => !assigneeAccount || a.toLowerCase() !== assigneeAccount.toLowerCase()
     );
-    const finalTitle = ensureTaskTitlePrefix(title, role);
+    const finalTitle = ensureTaskTitlePrefix(title, role, roles);
 
     if (task) {
       const isAssigned = Boolean(assigneeAccount && assigneeAccount.trim() !== '');
@@ -1789,11 +1795,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               value={role}
                               onChange={(newRole) => {
                                 const nextRole = newRole as Specialization;
-                                const oldPrefix = getRoleTaskPrefix(role);
-                                const nextPrefix = getRoleTaskPrefix(nextRole);
-                                if (!task && title.startsWith(oldPrefix)) {
-                                  setTitle(`${nextPrefix}${title.slice(oldPrefix.length)}`);
-                                }
+                                setTitle((prevTitle) => ensureTaskTitlePrefix(prevTitle, nextRole, roles));
                                 setRole(nextRole);
                                 setAssigneeAccount('');
                               }}

@@ -229,6 +229,7 @@ interface AppContextType {
   addRole: (role: Omit<RoleItem, 'id'>) => void;
   updateRole: (id: string, updates: Partial<RoleItem>) => void;
   deleteRole: (id: string) => void;
+  reorderRoles: (newRoles: RoleItem[]) => void;
   
   resources: ProjectResource[];
   addResource: (res: Omit<ProjectResource, 'id' | 'order'>) => void;
@@ -713,6 +714,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setMilestones([]);
           }
 
+          let activeRoles: RoleItem[] = [];
+          if (data.roles) {
+            const roleList = Object.values(data.roles) as RoleItem[];
+            activeRoles = roleList.sort((a, b) => (a.order || 0) - (b.order || 0));
+            setRoles(activeRoles);
+          } else {
+            setRoles([]);
+          }
+
           // 1. Process explicit deletion tombstones from Firebase
           const remoteDeletedTasks: Record<string, any> = data.deletedTasks || {};
           const localDeletedSet = getLocalDeletedTaskIds();
@@ -794,15 +804,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
 
           if (mergedTasks.length > 0) {
-            // Enrich with hierarchical task codes (Enterprise Standard)
-            const { enrichedTasks, hasChanges: codesChanged } = enrichTasksWithHierarchicalCodes(mergedTasks, activeMilestones);
+            // Enrich with hierarchical task codes (Enterprise Standard - Dynamic Roles)
+            const { enrichedTasks, hasChanges: codesChanged } = enrichTasksWithHierarchicalCodes(
+              mergedTasks,
+              activeMilestones,
+              activeRoles
+            );
             if (codesChanged) {
+              hasLegacy = true;
+            }
+
+            // Also heal task title prefixes if they mismatch current role (e.g. QA | ... on QC task)
+            let titlesChanged = false;
+            const normalizedTasks = enrichedTasks.map((t) => {
+              const safeTitle = ensureTaskTitlePrefix(t.title, t.role, activeRoles);
+              if (safeTitle !== t.title) {
+                titlesChanged = true;
+                return { ...t, title: safeTitle };
+              }
+              return t;
+            });
+            if (titlesChanged) {
               hasLegacy = true;
             }
 
             // Reconcile parent task metrics in a single O(N) pass
             const subtasksByParent = new Map<string, Task[]>();
-            enrichedTasks.forEach((t) => {
+            normalizedTasks.forEach((t) => {
               if (t.subtaskParentId) {
                 const list = subtasksByParent.get(t.subtaskParentId) || [];
                 list.push(t);
@@ -810,7 +838,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             });
             const todayStr = getTodayDateOnlyString(simulatedTime);
-            const reconciledTasks = enrichedTasks.map((t) => {
+            const reconciledTasks = normalizedTasks.map((t) => {
               const subtasks = subtasksByParent.get(t.id);
               if (!subtasks || subtasks.length === 0) return t;
               const metrics = calculateParentMetrics(t, subtasks);
@@ -871,12 +899,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           } else {
             setWeeklyArchives([]);
-          }
-          if (data.roles) {
-            const roleList = Object.values(data.roles) as RoleItem[];
-            setRoles(roleList.sort((a, b) => (a.order || 0) - (b.order || 0)));
-          } else {
-            setRoles([]);
           }
           if (data.resources) {
             const resList = Object.values(data.resources) as ProjectResource[];
@@ -1810,11 +1832,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setUsers(updatedUsers);
       syncUsersToFirebase(updatedUsers);
 
-      // Update tasks' role
+      // Update tasks' role, re-enrich codes and normalize titles
       const updatedTasks = tasks.map((t) => (t.role === oldCode ? { ...t, role: newCode } : t));
-      setTasks(updatedTasks);
-      saveLocalTasksCache(updatedTasks);
-      const affectedTasks = updatedTasks.filter((t) => t.role === newCode);
+      const { enrichedTasks } = enrichTasksWithHierarchicalCodes(updatedTasks, milestones, updated);
+      const fullyNormalized = enrichedTasks.map((t) => {
+        if (t.role === newCode) {
+          return { ...t, title: ensureTaskTitlePrefix(t.title, newCode, updated) };
+        }
+        return t;
+      });
+      setTasks(fullyNormalized);
+      saveLocalTasksCache(fullyNormalized);
+      const affectedTasks = fullyNormalized.filter((t) => t.role === newCode);
       if (affectedTasks.length > 0) {
         syncTasksToFirebase(affectedTasks).catch(console.error);
       }
@@ -1844,6 +1873,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     setUsers(updatedUsers);
     syncUsersToFirebase(updatedUsers);
+  };
+
+  const reorderRoles = (newRoles: RoleItem[]) => {
+    const updated = newRoles.map((r, idx) => ({
+      ...r,
+      order: idx + 1,
+    }));
+    setRoles(updated);
+    syncRolesToFirebase(updated).catch(console.error);
   };
 
   // Resource Management
@@ -1929,6 +1967,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subtaskParentId: taskData.subtaskParentId,
       existingTasks: tasks,
       milestones,
+      roles,
     });
 
     const initialLog: TaskActivityLog = {
@@ -1951,7 +1990,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       initialStatus = 'To do';
     }
 
-    const safeTitle = ensureTaskTitlePrefix(taskData.title, taskData.role);
+    const safeTitle = ensureTaskTitlePrefix(taskData.title, taskData.role, roles);
 
     const newTask: Task = {
       ...taskData,
@@ -2017,8 +2056,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let updated = tasks.map((t) => {
       if (t.id !== id) return t;
 
-      if (updates.title !== undefined) {
-        updates.title = ensureTaskTitlePrefix(updates.title, updates.role || t.role);
+      if (updates.title !== undefined || updates.role !== undefined) {
+        const nextRole = updates.role || t.role;
+        const rawTitle = updates.title !== undefined ? updates.title : t.title;
+        updates.title = ensureTaskTitlePrefix(rawTitle, nextRole, roles);
       }
 
       if (updates.estimatedEffort !== undefined) {
@@ -2104,6 +2145,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           subtaskParentId: effectiveParentId,
           existingTasks: tasks.filter((item) => item.id !== t.id),
           milestones,
+          roles,
         });
         updates.code = nextCode;
       }
@@ -2411,6 +2453,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subtaskParentId: taskToClone.subtaskParentId,
       existingTasks: tasks,
       milestones,
+      roles,
     });
 
     const newTask: Task = {
@@ -2450,11 +2493,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!taskToDelete) return;
 
     // Rule 3: Detach & Promote subtasks when deleting a parent task
-    const promotedSubtasks = promoteSubtasksToStandalone(id, tasks, milestones, {
-      name: authSession?.name || 'Admin',
-      account: authSession?.account || 'admin',
-      role: authSession?.role || 'Admin',
-    });
+    const promotedSubtasks = promoteSubtasksToStandalone(
+      id,
+      tasks,
+      milestones,
+      {
+        name: authSession?.name || 'Admin',
+        account: authSession?.account || 'admin',
+        role: authSession?.role || 'Admin',
+      },
+      roles
+    );
 
     const promotedMap = new Map(promotedSubtasks.map((p) => [p.id, p]));
     let updated = tasks
@@ -2489,11 +2538,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Rule 3: Detach & Promote subtasks for all deleted parents
     let promotedSubtasksTotal: Task[] = [];
     ids.forEach((pId) => {
-      const promoted = promoteSubtasksToStandalone(pId, tasks, milestones, {
-        name: authSession?.name || 'Admin',
-        account: authSession?.account || 'admin',
-        role: authSession?.role || 'Admin',
-      });
+      const promoted = promoteSubtasksToStandalone(
+        pId,
+        tasks,
+        milestones,
+        {
+          name: authSession?.name || 'Admin',
+          account: authSession?.account || 'admin',
+          role: authSession?.role || 'Admin',
+        },
+        roles
+      );
       if (promoted.length > 0) {
         promotedSubtasksTotal.push(...promoted);
       }
@@ -3934,6 +3989,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addRole,
         updateRole,
         deleteRole,
+        reorderRoles,
         resources,
         addResource,
         updateResource,

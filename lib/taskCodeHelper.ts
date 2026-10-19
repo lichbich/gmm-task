@@ -1,4 +1,4 @@
-import { Task, Milestone, Specialization, TaskActivityLog, normalizeRoleToken } from '../types/task';
+import { Task, Milestone, Specialization, TaskActivityLog, normalizeRoleToken, RoleItem } from '../types/task';
 
 /**
  * Standard prefix mapping for Roles / Domains
@@ -11,35 +11,91 @@ export const ROLE_CODE_MAP: Record<string, string> = {
   qa: 'QA',
   qc: 'QC',
   devops: 'OPS',
+  ops: 'OPS',
   ai: 'AI',
   mobile: 'MOB',
   po: 'PO',
   pm: 'PM',
   sa: 'SA',
+  bop: 'BOP',
+  'back office': 'BOP',
 };
 
 /**
- * Convert role / specialization string to standardized 2-3 char Role Prefix
+ * Convert role / specialization string to standardized Role Prefix.
+ * Dynamic: Always checks user-configured roles list (r.code) first.
  */
-export function getRolePrefix(role?: Specialization | string): string {
+export function getRolePrefix(role?: Specialization | string, roles?: RoleItem[]): string {
   if (!role) return 'ALL';
-  const token = normalizeRoleToken(role);
+  const trimmed = role.trim();
+
+  // 1. Dynamic roles check (Single Source of Truth from Database / Admin Management)
+  if (roles && roles.length > 0) {
+    // 1a. Direct match by role code (case-insensitive) e.g. "QC" === "QC"
+    const byCode = roles.find((r) => r.code?.trim().toUpperCase() === trimmed.toUpperCase());
+    if (byCode && byCode.code) {
+      return byCode.code.trim().toUpperCase();
+    }
+    // 1b. Direct match by full name (case-insensitive) e.g. "QC / Tester" -> "QC"
+    const byName = roles.find((r) => r.name?.trim().toLowerCase() === trimmed.toLowerCase());
+    if (byName && byName.code) {
+      return byName.code.trim().toUpperCase();
+    }
+    // 1c. Token match on code or name using normalizeRoleToken
+    const token = normalizeRoleToken(trimmed);
+    const byToken = roles.find(
+      (r) => normalizeRoleToken(r.code) === token || normalizeRoleToken(r.name) === token
+    );
+    if (byToken && byToken.code) {
+      return byToken.code.trim().toUpperCase();
+    }
+    // 1d. Fuzzy substring match (contains)
+    const fuzzy = roles.find((r) => {
+      const c = r.code?.trim().toLowerCase();
+      const n = r.name?.trim().toLowerCase();
+      const t = trimmed.toLowerCase();
+      return (
+        (c && (c === t || t.includes(c) || c.includes(t))) ||
+        (n && (n === t || t.includes(n) || n.includes(t)))
+      );
+    });
+    if (fuzzy && fuzzy.code) {
+      return fuzzy.code.trim().toUpperCase();
+    }
+  }
+
+  // 2. Static canonical map fallback
+  const token = normalizeRoleToken(trimmed);
   if (ROLE_CODE_MAP[token]) {
     return ROLE_CODE_MAP[token];
   }
-  // Fallbacks for direct match or partial match
-  const r = role.trim().toUpperCase();
-  if (r === 'FE' || r === 'BE' || r === 'BA' || r === 'QA' || r === 'QC' || r === 'PO' || r === 'PM' || r === 'SA' || r === 'AI') {
+
+  // 3. Fallbacks for direct match or known abbreviations
+  const r = trimmed.toUpperCase();
+  if (
+    r === 'FE' ||
+    r === 'BE' ||
+    r === 'BA' ||
+    r === 'QA' ||
+    r === 'QC' ||
+    r === 'PO' ||
+    r === 'PM' ||
+    r === 'SA' ||
+    r === 'AI' ||
+    r === 'OPS' ||
+    r === 'BOP'
+  ) {
     return r;
   }
   if (r.startsWith('DES') || r.includes('DESIGN')) return 'DES';
   if (r.startsWith('DEV') || r.includes('OPS')) return 'OPS';
   if (r.startsWith('MOB') || r.includes('APP')) return 'MOB';
-  if (r.startsWith('TEST')) return 'QC';
-  
-  // Extract alphanumeric letters (2-3 chars)
+  if (r === 'QC' || r.includes('QC') || r.startsWith('TEST')) return 'QC';
+  if (r === 'QA') return 'QA';
+
+  // 4. Extract alphanumeric letters (2-5 chars) for custom roles
   const clean = r.replace(/[^A-Z0-9]/g, '');
-  if (clean.length >= 2) return clean.substring(0, 3);
+  if (clean.length >= 2) return clean.substring(0, 5);
   return 'ALL';
 }
 
@@ -99,7 +155,7 @@ export interface ParsedTaskCode {
  * Format: [SCOPE]-[ROLE]-[NUMBER][.SUB]
  * e.g. MS01-FE-015, MS01-FE-015.01, ADH-BE-008
  */
-export const TASK_CODE_REGEX = /^([A-Z0-9]{2,6})-([A-Z]{2,4})-(\d{3,4})(?:\.(\d{2}))?$/;
+export const TASK_CODE_REGEX = /^([A-Z0-9]{2,6})-([A-Z0-9]{2,5})-(\d{3,4})(?:\.(\d{2}))?$/;
 
 /**
  * Parse a task code string into structured components
@@ -141,6 +197,7 @@ export interface GenerateTaskCodeOptions {
   subtaskParentId?: string;
   existingTasks: Task[];
   milestones?: Milestone[];
+  roles?: RoleItem[];
 }
 
 /**
@@ -151,7 +208,7 @@ export interface GenerateTaskCodeOptions {
  * - Subtask inheritance: [ParentCode].[01..99]
  */
 export function generateNextTaskCode(options: GenerateTaskCodeOptions): string {
-  const { milestoneId, role, isSubtask, subtaskParentId, existingTasks, milestones } = options;
+  const { milestoneId, role, isSubtask, subtaskParentId, existingTasks, milestones, roles } = options;
 
   // Case 1: Subtask inheriting parent code
   if (isSubtask || (subtaskParentId && subtaskParentId.trim() !== '')) {
@@ -166,6 +223,7 @@ export function generateNextTaskCode(options: GenerateTaskCodeOptions): string {
             isSubtask: false,
             existingTasks: existingTasks.filter((t) => t.id !== parentTask.id),
             milestones,
+            roles,
           });
 
       // Find all existing subtasks of this parent
@@ -188,7 +246,7 @@ export function generateNextTaskCode(options: GenerateTaskCodeOptions): string {
 
   // Case 2: Standalone or Parent Task
   const scope = getScopePrefix(milestoneId, milestones);
-  const roleCode = getRolePrefix(role);
+  const roleCode = getRolePrefix(role, roles);
   const prefix = `${scope}-${roleCode}`;
 
   // Find all tasks with same prefix (ignore subtasks and sub-indices for sequence counting)
@@ -210,9 +268,14 @@ export function generateNextTaskCode(options: GenerateTaskCodeOptions): string {
 /**
  * Ensure a task has a valid code. If missing or invalid, generate one.
  */
-export function ensureTaskCode(task: Task, existingTasks: Task[], milestones?: Milestone[]): string {
+export function ensureTaskCode(
+  task: Task,
+  existingTasks: Task[],
+  milestones?: Milestone[],
+  roles?: RoleItem[]
+): string {
   const targetScope = getScopePrefix(task.milestoneId, milestones);
-  const targetRole = getRolePrefix(task.role);
+  const targetRole = getRolePrefix(task.role, roles);
   const parsed = parseTaskCode(task.code);
   const isMatching =
     Boolean(parsed) &&
@@ -230,6 +293,7 @@ export function ensureTaskCode(task: Task, existingTasks: Task[], milestones?: M
     subtaskParentId: task.subtaskParentId,
     existingTasks,
     milestones,
+    roles,
   });
 }
 
@@ -243,11 +307,12 @@ export function ensureTaskCode(task: Task, existingTasks: Task[], milestones?: M
 export function getEffectiveTaskCode(
   task?: Task | null,
   allTasks?: Task[],
-  milestones?: Milestone[]
+  milestones?: Milestone[],
+  roles?: RoleItem[]
 ): string {
   if (!task) return '';
   const targetScope = getScopePrefix(task.milestoneId, milestones);
-  const targetRole = getRolePrefix(task.role);
+  const targetRole = getRolePrefix(task.role, roles);
   const parsed = parseTaskCode(task.code);
 
   const isSubtask = Boolean(task.isSubtask || task.subtaskParentId);
@@ -269,6 +334,7 @@ export function getEffectiveTaskCode(
     subtaskParentId: task.subtaskParentId,
     existingTasks: (allTasks || []).filter((t) => t.id !== task.id),
     milestones,
+    roles,
   });
 }
 
@@ -280,7 +346,8 @@ export function promoteSubtasksToStandalone(
   deletedParentId: string,
   allTasks: Task[],
   milestones?: Milestone[],
-  authorInfo?: { name: string; account: string; role?: string }
+  authorInfo?: { name: string; account: string; role?: string },
+  roles?: RoleItem[]
 ): Task[] {
   const authorName = authorInfo?.name || 'Hệ thống';
   const authorAccount = authorInfo?.account || 'system';
@@ -302,6 +369,7 @@ export function promoteSubtasksToStandalone(
       isSubtask: false,
       existingTasks: [...currentPool, ...promotedList],
       milestones,
+      roles,
     });
 
     const promotionLog: TaskActivityLog = {
@@ -337,7 +405,8 @@ export function promoteSubtasksToStandalone(
  */
 export function enrichTasksWithHierarchicalCodes(
   tasks: Task[],
-  milestones?: Milestone[]
+  milestones?: Milestone[],
+  roles?: RoleItem[]
 ): { enrichedTasks: Task[]; hasChanges: boolean } {
   let hasChanges = false;
   const nowIso = new Date().toISOString();
@@ -356,7 +425,7 @@ export function enrichTasksWithHierarchicalCodes(
   const finalStandalone: Task[] = [];
   standaloneTasks.forEach((t) => {
     const targetScope = getScopePrefix(t.milestoneId, milestones);
-    const targetRole = getRolePrefix(t.role);
+    const targetRole = getRolePrefix(t.role, roles);
     const parsed = parseTaskCode(t.code);
 
     // Code is considered valid only if it strictly matches the current milestone scope & role
@@ -376,6 +445,7 @@ export function enrichTasksWithHierarchicalCodes(
         isSubtask: false,
         existingTasks: finalStandalone,
         milestones,
+        roles,
       });
 
       if (t.code && t.code !== newCode) {
@@ -422,6 +492,7 @@ export function enrichTasksWithHierarchicalCodes(
           subtaskParentId: st.subtaskParentId,
           existingTasks: allCurrent,
           milestones,
+          roles,
         });
 
         if (st.code && st.code !== newSubCode) {
@@ -454,6 +525,7 @@ export function enrichTasksWithHierarchicalCodes(
         isSubtask: false,
         existingTasks: allCurrent,
         milestones,
+        roles,
       });
 
       const transitionLog: TaskActivityLog = {

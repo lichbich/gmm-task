@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { Bold, Sparkles, Plus } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
 import { applyInlineFormatting } from '../../lib/textFormattingHelper';
 import { FormattedTaskTitle } from './FormattedTaskTitle';
 import { getRoleTaskPrefix, hasTaskPrefix, ensureTaskTitlePrefix } from '../../lib/taskPrefixHelper';
@@ -31,10 +32,11 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
   showPreview = true,
   autoPrefixOnBlur = true,
 }) => {
+  const { roles } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const rolePrefix = role ? getRoleTaskPrefix(role) : '';
-  const alreadyHasPrefix = hasTaskPrefix(value, role);
+  const rolePrefix = role ? getRoleTaskPrefix(role, roles) : '';
+  const alreadyHasPrefix = hasTaskPrefix(value, role, roles);
   const defaultPlaceholder = rolePrefix
     ? `VD: ${rolePrefix}Tên công việc...`
     : "VD: BA | Viết tài liệu phần 'Working schedule'...";
@@ -164,8 +166,8 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
     value.includes('==');
 
   const handleBlur = () => {
-    if (autoPrefixOnBlur && role && value.trim() && !hasTaskPrefix(value, role)) {
-      const formatted = ensureTaskTitlePrefix(value, role);
+    if (autoPrefixOnBlur && role && value.trim() && !hasTaskPrefix(value, role, roles)) {
+      const formatted = ensureTaskTitlePrefix(value, role, roles);
       onChange(formatted);
       pushTitleSnapshot(formatted);
     }
@@ -173,7 +175,7 @@ export const TaskTitleInput: React.FC<TaskTitleInputProps> = ({
 
   const handleApplyPrefix = () => {
     if (!rolePrefix) return;
-    const formatted = ensureTaskTitlePrefix(value, role);
+    const formatted = ensureTaskTitlePrefix(value, role, roles);
     onChange(formatted);
     pushTitleSnapshot(formatted);
     if (inputRef.current) {

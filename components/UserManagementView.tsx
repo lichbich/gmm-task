@@ -293,6 +293,7 @@ export const UserManagementView: React.FC = () => {
     addRole,
     updateRole,
     deleteRole,
+    reorderRoles,
     tasks,
     currentUser,
     confirmDialog,
@@ -1216,6 +1217,23 @@ export const UserManagementView: React.FC = () => {
       type: 'danger',
       onConfirm: () => deleteRole(roleItem.id),
     });
+  };
+
+  // Drag & drop role ordering state and handler
+  const [draggedRoleId, setDraggedRoleId] = useState<string | null>(null);
+  const [dragOverRoleId, setDragOverRoleId] = useState<string | null>(null);
+
+  const handleReorderRoles = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    const sourceIdx = roles.findIndex((r) => r.id === sourceId);
+    const targetIdx = roles.findIndex((r) => r.id === targetId);
+    if (sourceIdx < 0 || targetIdx < 0) return;
+
+    const newRoles = [...roles];
+    const [moved] = newRoles.splice(sourceIdx, 1);
+    newRoles.splice(targetIdx, 0, moved);
+
+    reorderRoles(newRoles);
   };
 
   return (
@@ -2395,7 +2413,9 @@ export const UserManagementView: React.FC = () => {
                   Danh Mục Role & Chuyên Môn Dự Án ({roles.length} role)
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Các role dùng để phân nhóm công việc, giao task và theo dõi cột mốc milestone.
+                  {isAdmin
+                    ? 'Kéo thả (drag & drop) các dòng từ trên xuống dưới để sắp xếp thứ tự hiển thị của các role trên toàn bộ hệ thống.'
+                    : 'Các role dùng để phân nhóm công việc, giao task và theo dõi cột mốc milestone.'}
                 </p>
               </div>
             </div>
@@ -2404,6 +2424,7 @@ export const UserManagementView: React.FC = () => {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-200">
+                    {isAdmin && <th className="py-3 px-2 w-10 text-center">#</th>}
                     <th className="py-3 px-4">Mã Role</th>
                     <th className="py-3 px-4">Tên Hiển Thị & Mô Tả</th>
                     <th className="py-3 px-3">Thành Viên Đảm Nhận</th>
@@ -2413,12 +2434,66 @@ export const UserManagementView: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {roles.map((r) => {
+                    const isDragging = draggedRoleId === r.id;
+                    const isOver = dragOverRoleId === r.id;
                     const style = getRoleStyle(r.color);
                     const members = users.filter((u) => !u.disabled && u.status !== 'disabled' && u.specializations?.includes(r.code));
                     const roleTasks = tasks.filter((t) => t.role === r.code);
 
                     return (
-                      <tr key={r.id} className="hover:bg-slate-50 transition">
+                      <tr
+                        key={r.id}
+                        draggable={isAdmin}
+                        onDragStart={(e) => {
+                          if (!isAdmin) return;
+                          e.dataTransfer.setData('text/plain', r.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          setDraggedRoleId(r.id);
+                        }}
+                        onDragOver={(e) => {
+                          if (!isAdmin) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          if (dragOverRoleId !== r.id && draggedRoleId !== r.id) {
+                            setDragOverRoleId(r.id);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverRoleId === r.id) setDragOverRoleId(null);
+                        }}
+                        onDrop={(e) => {
+                          if (!isAdmin) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const sourceId = e.dataTransfer.getData('text/plain') || draggedRoleId;
+                          setDragOverRoleId(null);
+                          setDraggedRoleId(null);
+                          if (sourceId && sourceId !== r.id) {
+                            handleReorderRoles(sourceId, r.id);
+                          }
+                        }}
+                        onDragEnd={() => {
+                          setDraggedRoleId(null);
+                          setDragOverRoleId(null);
+                        }}
+                        className={`transition select-none ${
+                          isDragging
+                            ? 'opacity-30 bg-indigo-50/50'
+                            : isOver
+                            ? 'border-t-2 border-indigo-600 bg-indigo-50/60'
+                            : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        {isAdmin && (
+                          <td className="py-3 px-2 text-center text-slate-400">
+                            <div
+                              className="flex items-center justify-center cursor-grab active:cursor-grabbing hover:text-indigo-600 transition p-1"
+                              title="Kéo thả để sắp xếp thứ tự Role"
+                            >
+                              <GripVertical className="w-4 h-4" />
+                            </div>
+                          </td>
+                        )}
                         <td className="py-3 px-4">
                           <span
                             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-bold font-mono text-xs border ${style.bg} ${style.text} ${style.border} shadow-2xs`}
@@ -2482,6 +2557,13 @@ export const UserManagementView: React.FC = () => {
                       </tr>
                     );
                   })}
+                  {roles.length === 0 && (
+                    <tr>
+                      <td colSpan={isAdmin ? 6 : 5} className="py-8 text-center text-slate-400 italic">
+                        Chưa có role nào được định nghĩa
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
