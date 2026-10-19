@@ -768,17 +768,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 hasLegacy = true;
               }
             }
+            const rawLogs: TaskActivityLog[] = Array.isArray(t.activityLogs)
+              ? t.activityLogs
+              : t.activityLogs && typeof t.activityLogs === 'object'
+              ? (Object.values(t.activityLogs) as TaskActivityLog[])
+              : [];
+
+            // Prune duplicate consecutive TASK_CODE_CHANGE spam logs
+            const cleanedLogs: TaskActivityLog[] = [];
+            let hadSpamLogs = false;
+            rawLogs.forEach((log) => {
+              if (
+                log.actionType === 'TASK_CODE_CHANGE' &&
+                cleanedLogs.length > 0 &&
+                cleanedLogs[cleanedLogs.length - 1].actionType === 'TASK_CODE_CHANGE'
+              ) {
+                hadSpamLogs = true;
+                return;
+              }
+              cleanedLogs.push(log);
+            });
+            const finalLogs = cleanedLogs.length > 30 ? cleanedLogs.slice(0, 30) : cleanedLogs;
+            if (rawLogs.length > 30 && hadSpamLogs) {
+              hasLegacy = true; // One-time purge of 500+ spam logs from database
+            }
 
             return {
               ...t,
               weekNumber: weekNo,
               status: taskStatus,
               completionPercentage: pct,
-              activityLogs: Array.isArray(t.activityLogs)
-                ? t.activityLogs
-                : t.activityLogs && typeof t.activityLogs === 'object'
-                ? Object.values(t.activityLogs)
-                : [],
+              activityLogs: finalLogs,
             };
           });
 
@@ -805,28 +825,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (mergedTasks.length > 0) {
             // Enrich with hierarchical task codes (Enterprise Standard - Dynamic Roles)
-            const { enrichedTasks, hasChanges: codesChanged } = enrichTasksWithHierarchicalCodes(
+            // Note: We do NOT set hasLegacy = true on code enrichment or prefix healing in onValue
+            // to prevent distributed ping-pong loops between clients with different cached bundle versions.
+            const { enrichedTasks } = enrichTasksWithHierarchicalCodes(
               mergedTasks,
               activeMilestones,
               activeRoles
             );
-            if (codesChanged) {
-              hasLegacy = true;
-            }
 
-            // Also heal task title prefixes if they mismatch current role (e.g. QA | ... on QC task)
-            let titlesChanged = false;
+            // Also heal task title prefixes in-memory if they mismatch current role (e.g. QA | ... on QC task)
             const normalizedTasks = enrichedTasks.map((t) => {
               const safeTitle = ensureTaskTitlePrefix(t.title, t.role, activeRoles);
               if (safeTitle !== t.title) {
-                titlesChanged = true;
                 return { ...t, title: safeTitle };
               }
               return t;
             });
-            if (titlesChanged) {
-              hasLegacy = true;
-            }
 
             // Reconcile parent task metrics in a single O(N) pass
             const subtasksByParent = new Map<string, Task[]>();

@@ -449,6 +449,12 @@ export function enrichTasksWithHierarchicalCodes(
       });
 
       if (t.code && t.code !== newCode) {
+        const recentLogs = t.activityLogs || [];
+        const isDuplicateLog =
+          recentLogs.length > 0 &&
+          recentLogs[0].actionType === 'TASK_CODE_CHANGE' &&
+          recentLogs[0].summary.includes(newCode);
+
         const transitionLog: TaskActivityLog = {
           id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           timestamp: nowIso,
@@ -461,7 +467,7 @@ export function enrichTasksWithHierarchicalCodes(
         finalStandalone.push({
           ...t,
           code: newCode,
-          activityLogs: [transitionLog, ...(t.activityLogs || [])],
+          activityLogs: isDuplicateLog ? recentLogs : [transitionLog, ...recentLogs],
         });
       } else {
         finalStandalone.push({ ...t, code: newCode });
@@ -496,6 +502,12 @@ export function enrichTasksWithHierarchicalCodes(
         });
 
         if (st.code && st.code !== newSubCode) {
+          const recentLogs = st.activityLogs || [];
+          const isDuplicateLog =
+            recentLogs.length > 0 &&
+            recentLogs[0].actionType === 'TASK_CODE_CHANGE' &&
+            recentLogs[0].summary.includes(newSubCode);
+
           const transitionLog: TaskActivityLog = {
             id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             timestamp: nowIso,
@@ -509,7 +521,7 @@ export function enrichTasksWithHierarchicalCodes(
             ...st,
             code: newSubCode,
             isSubtask: true,
-            activityLogs: [transitionLog, ...(st.activityLogs || [])],
+            activityLogs: isDuplicateLog ? recentLogs : [transitionLog, ...recentLogs],
           });
         } else {
           finalSubtasks.push({ ...st, code: newSubCode, isSubtask: true });
