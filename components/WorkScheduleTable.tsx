@@ -544,7 +544,23 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
           }
         }
 
-        if (searchQuery && !stripMarkdownForSearch(t.title).toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        if (searchQuery.trim()) {
+          const q = searchQuery.trim().toLowerCase();
+          const taskCode = (t.code || getEffectiveTaskCode(t, tasks, milestones, roles) || '').toLowerCase();
+          const taskTitle = stripMarkdownForSearch(t.title || '').toLowerCase();
+          const matchTitle = taskTitle.includes(q);
+          const matchCode = taskCode.includes(q);
+
+          // Subtasks check: nếu task cha có subtask khớp mã hoặc tên
+          const subtasks = subtasksByParentIdMap.get(t.id) || [];
+          const matchSubtask = subtasks.some((st) => {
+            const stCode = (st.code || getEffectiveTaskCode(st, tasks, milestones, roles) || '').toLowerCase();
+            const stTitle = stripMarkdownForSearch(st.title || '').toLowerCase();
+            return stCode.includes(q) || stTitle.includes(q);
+          });
+
+          if (!matchTitle && !matchCode && !matchSubtask) return false;
+        }
         if (selectedRole !== 'ALL') {
           const isTaskRole = isSpecializationMatchingRole(t.role, selectedRole);
           const isSupporterInRole = Boolean(
@@ -580,7 +596,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         return true;
       })
       .sort(sortByPriority);
-  }, [tasks, selectedWeek, selectedYear, subTab, currentUser, searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus, milestones, users]);
+  }, [tasks, selectedWeek, selectedYear, subTab, currentUser, searchQuery, selectedRole, selectedAccount, selectedMilestone, selectedStatus, milestones, users, roles, subtasksByParentIdMap]);
 
   const ROLE_ORDER: Specialization[] = useMemo(() => {
     const sortedRoles = [...roles].sort((a, b) => {
@@ -2272,7 +2288,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Tìm kiếm task..."
+                  placeholder="Tìm kiếm task, mã task..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
@@ -2314,11 +2330,20 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Tìm kiếm task..."
+                  placeholder="Tìm kiếm task, mã task..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
                 />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                    title="Xóa tìm kiếm"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Role Filter */}

@@ -784,7 +784,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setPriority(task.priority || 'Medium');
       setStartDate(initialStartDate);
       setEndDate(initialEndDate);
-      setWeekNumber(task.weekNumber);
+      if (task.assignmentRequestStatus === 'PENDING' && task.requestedWeekNumber) {
+        setWeekNumber(task.requestedWeekNumber);
+      } else {
+        setWeekNumber(task.weekNumber);
+      }
       setNotes(task.notes || '');
     } else {
       if (initialSubtaskParent) {
@@ -960,9 +964,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         ...(isApprovingRequested || (isAssigned && task.assignmentRequestedBy)
           ? { assignmentRequestStatus: 'APPROVED' }
           : {}),
-        ...(task.requestedWeekNumber
-          ? { weekNumber: task.requestedWeekNumber }
-          : { weekNumber: weekNumber }),
+        weekNumber: weekNumber,
+        requestedWeekNumber: undefined,
       });
     } else {
       addTask({
@@ -1245,7 +1248,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               <div className="p-4 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-4 min-h-0 min-w-0">
                 {/* Member Task Assignment Request Banner (Full width on top) */}
-                {task?.assignmentRequestedBy && task.assignmentRequestStatus !== 'REJECTED' && (
+                {task?.assignmentRequestedBy && task.assignmentRequestStatus === 'PENDING' && (
                   <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200 shadow-2xs animate-in fade-in duration-150">
                     <div className="w-7 h-7 rounded-xl bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-sm shrink-0 mt-0.5">
                       ✋
@@ -1684,6 +1687,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                             ...eligibleAssignees.map((u) => {
                               const isRequester =
                                 task?.assignmentRequestedBy &&
+                                task?.assignmentRequestStatus === 'PENDING' &&
                                 u.account.toLowerCase() === task.assignmentRequestedBy.toLowerCase();
                               const uRoleInTask = getUserRoleInSpec(u, role);
                               return {

@@ -451,6 +451,21 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     Boolean(currentUser?.account && task.assignmentRequestedBy?.toLowerCase() === currentUser.account.toLowerCase());
   const isOtherPendingRequest = isRequested && !isMyPendingRequest;
 
+  const isMyAssignedTask = Boolean(
+    currentUser?.account &&
+      ((task.assigneeAccount && task.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase()) ||
+       (task.supporterAccounts && task.supporterAccounts.some((s) => s.toLowerCase() === currentUser.account.toLowerCase())))
+  );
+  const isOlderWeekOrBacklog =
+    (task.weekNumber !== undefined && task.weekNumber < selectedWeek) || !task.weekNumber;
+  const isNotDone = task.status !== 'Done' && (task.completionPercentage || 0) < 100;
+  const canTransferToCurrentWeek =
+    (isMyAssignedTask || isLeaderOrAdmin) &&
+    isOlderWeekOrBacklog &&
+    isNotDone &&
+    !isWeekFinalized &&
+    !isRequested;
+
   // Metadata fallbacks
   const creatorDisplay = task.createdBy || 'QuynhNV (Leader)';
   const createdDateDisplay = formatDateTime(task.createdAt || '2026-09-14T08:30:00Z');
@@ -793,8 +808,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
         {/* Scrollable Body with custom-scrollbar */}
         <div className="p-4 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-5 min-h-0 min-w-0 bg-white dark:bg-slate-900">
-          {/* Top Pending / Claim Request Banners (Full width) */}
-          {((isLeaderOrAdmin && isRequested) || (isMember && isMyPendingRequest) || (isMember && isUnassigned && task.status !== 'Done' && !isRequested)) && (
+          {/* Top Pending / Claim Request / Transfer Banners (Full width) */}
+          {((isLeaderOrAdmin && isRequested) || (isMember && isMyPendingRequest) || (isMember && isUnassigned && task.status !== 'Done' && !isRequested) || canTransferToCurrentWeek) && (
             <div className="space-y-3">
               {/* 1. Leader View: Pending Task Assignment Request Banner */}
               {isLeaderOrAdmin && isRequested && (
@@ -881,6 +896,53 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <span>✋ Xin nhận task (Tuần {selectedWeek})</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 4. Active Assignee / Leader / Admin: Transfer Held or Past Task to Current Week */}
+              {canTransferToCurrentWeek && (
+                <div className="p-3.5 bg-gradient-to-r from-indigo-50/90 via-purple-50/80 to-blue-50/90 dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-blue-950/40 border border-indigo-200/90 dark:border-indigo-800/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-950 dark:text-indigo-200 animate-in fade-in duration-150 shadow-2xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 border border-indigo-300 dark:border-indigo-700 flex items-center justify-center text-sm shrink-0">
+                      ⏩
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                        <span>Đầu việc đang giữ từ {task.weekNumber ? `Tuần ${task.weekNumber}` : 'Kho Backlog'}</span>
+                        <span className="bg-indigo-100 dark:bg-indigo-900/80 text-indigo-800 dark:text-indigo-200 px-2 py-0.5 rounded-md text-[10px] font-semibold border border-indigo-200/80 dark:border-indigo-700">
+                          Chưa xong
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-indigo-800/80 dark:text-indigo-300/90">
+                        {isMyAssignedTask
+                          ? `Bạn đang là người phụ trách đầu việc này. Bấm để chuyển sang Tuần ${selectedWeek} (Tuần hiện tại) để tiếp tục làm và báo cáo.`
+                          : `Chuyển công việc này sang Tuần ${selectedWeek} (Tuần hiện tại) để thành viên tiếp tục thực hiện.`}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      confirmDialog({
+                        title: `Chuyển task sang Tuần ${selectedWeek}`,
+                        message: `Bạn có muốn chuyển công việc "${task.title}" từ ${task.weekNumber ? `Tuần ${task.weekNumber}` : 'Kho Backlog'} sang Tuần ${selectedWeek} (Hiện tại) để tiếp tục làm việc không?`,
+                        confirmText: `Chuyển sang Tuần ${selectedWeek}`,
+                        type: 'info',
+                        onConfirm: () => {
+                          updateTask(task.id, {
+                            weekNumber: selectedWeek,
+                            year: selectedYear,
+                            requestedWeekNumber: undefined,
+                          });
+                        },
+                      });
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-xs shrink-0 transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Chuyển sang Tuần {selectedWeek} (Hiện tại)</span>
                   </button>
                 </div>
               )}

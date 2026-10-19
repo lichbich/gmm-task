@@ -42,6 +42,8 @@ import {
   Ticket as TicketIcon,
   CornerDownRight,
   ChevronRight,
+  Search,
+  X,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
@@ -417,6 +419,9 @@ export const MilestonesView: React.FC = () => {
   const [editMsTargetDate, setEditMsTargetDate] = useState('');
   const [editMsRole, setEditMsRole] = useState<string>('BA');
 
+  // Search query state for task title, task code and milestone matching
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
   // Assignee / Member filter state
   const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
 
@@ -645,12 +650,42 @@ export const MilestonesView: React.FC = () => {
     return map;
   }, [users]);
 
+  // Task search matching logic (Search by task title or standardized task code, including child subtasks)
+  const isTaskSearchMatch = (t: Task): boolean => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    const taskCode = (t.code || getEffectiveTaskCode(t, tasks, milestones, roles) || '').toLowerCase();
+    const taskTitle = stripMarkdownForSearch(t.title || '').toLowerCase();
+    if (taskCode.includes(q) || taskTitle.includes(q)) return true;
+
+    // Subtasks check: nếu t là task cha, kiểm tra xem có subtask con nào khớp không
+    const subtasks = subtasksByParentIdMap.get(t.id) || [];
+    return subtasks.some((st) => {
+      const stCode = (st.code || getEffectiveTaskCode(st, tasks, milestones, roles) || '').toLowerCase();
+      const stTitle = stripMarkdownForSearch(st.title || '').toLowerCase();
+      return stCode.includes(q) || stTitle.includes(q);
+    });
+  };
+
   // Filtered milestones and adhoc tasks (strictly from Week 95 onwards for active operational views)
   const filteredMilestones = useMemo(() => {
     return milestones
-      .filter(isMilestoneRoleMatch)
+      .filter((ms) => {
+        if (!isMilestoneRoleMatch(ms)) return false;
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.trim().toLowerCase();
+        if (ms.title.toLowerCase().includes(q)) return true;
+        return tasks.some(
+          (t) =>
+            (t.weekNumber === undefined || t.weekNumber >= 95) &&
+            t.milestoneId === ms.id &&
+            isTaskRoleMatch(t.role) &&
+            isTaskAssigneeMatch(t) &&
+            isTaskSearchMatch(t)
+        );
+      })
       .sort((a, b) => (a.order || 0) - (b.order || 0));
-  }, [milestones]);
+  }, [milestones, searchQuery, tasks, roles, adminSelectedRole, assigneeFilter, subtasksByParentIdMap]);
 
   const filteredAdhocTasks = useMemo(() => {
     return deduplicateTasksForMilestoneView(
@@ -659,10 +694,11 @@ export const MilestonesView: React.FC = () => {
           (t.weekNumber === undefined || t.weekNumber >= 95) &&
           (!t.milestoneId || !milestones.some((m) => m.id === t.milestoneId)) &&
           isTaskRoleMatch(t.role) &&
-          isTaskAssigneeMatch(t)
+          isTaskAssigneeMatch(t) &&
+          isTaskSearchMatch(t)
       )
     );
-  }, [tasks, milestones, adminSelectedRole, roles, assigneeFilter]);
+  }, [tasks, milestones, adminSelectedRole, roles, assigneeFilter, searchQuery, subtasksByParentIdMap]);
 
   const canManageMilestone = (ms: Milestone): boolean => {
     return isPOOrAdminOrPM(currentUser);
@@ -852,7 +888,7 @@ export const MilestonesView: React.FC = () => {
     const taskSubtasks = subtasksByParentIdMap.get(t.id) || [];
     const hasSub = taskSubtasks.length > 0;
     const isParent = hasSub || Boolean(t.isParentTask);
-    const isCollapsed = collapsedParentIds.has(t.id);
+    const isCollapsed = searchQuery.trim() ? false : collapsedParentIds.has(t.id);
     const parentMetrics = hasSub ? calculateParentMetrics(t, taskSubtasks) : null;
     const isSub = Boolean(t.isSubtask || t.subtaskParentId);
     const displayEst = (hasSub && !t.isManualOverride && parentMetrics)
@@ -1135,6 +1171,33 @@ export const MilestonesView: React.FC = () => {
                   @{t.assignmentRequestedBy} xin nhận
                 </span>
               )
+            )}
+
+            {/* Quick Transfer to Current Week for Assigned Member / Leader / Admin */}
+            {!isUnassigned && !isDone && ((t.assigneeAccount && currentUser?.account && t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase()) || (t.supporterAccounts && currentUser?.account && t.supporterAccounts.some(s => s.toLowerCase() === currentUser.account.toLowerCase())) || (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser))) && ((t.weekNumber !== undefined && t.weekNumber < selectedWeek) || !t.weekNumber) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  confirmDialog({
+                    title: `Chuyển sang Tuần ${selectedWeek}`,
+                    message: `Bạn có muốn chuyển công việc "${t.title}" từ ${t.weekNumber ? `Tuần ${t.weekNumber}` : 'Kho Backlog'} sang Tuần ${selectedWeek} (Tuần hiện tại) để tiếp tục thực hiện không?`,
+                    confirmText: `Chuyển sang Tuần ${selectedWeek}`,
+                    type: 'info',
+                    onConfirm: () => {
+                      updateTask(t.id, {
+                        weekNumber: selectedWeek,
+                        year: selectedYear,
+                        requestedWeekNumber: undefined,
+                      });
+                    },
+                  });
+                }}
+                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 dark:text-indigo-300 dark:border-indigo-800 text-[11px] font-bold rounded-lg shadow-2xs transition active:scale-95 inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                title={`Chuyển đầu việc này sang Tuần ${selectedWeek} (Tuần hiện tại) để tiếp tục làm việc`}
+              >
+                <span>⏩ Tuần {selectedWeek}</span>
+              </button>
             )}
 
             {!milestoneId && (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
@@ -1432,6 +1495,33 @@ export const MilestonesView: React.FC = () => {
                   </button>
                 ) : null
               )}
+
+              {/* Quick Transfer to Current Week on mobile */}
+              {!isUnassigned && !isDone && ((t.assigneeAccount && currentUser?.account && t.assigneeAccount.toLowerCase() === currentUser.account.toLowerCase()) || (t.supporterAccounts && currentUser?.account && t.supporterAccounts.some(s => s.toLowerCase() === currentUser.account.toLowerCase())) || (currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser))) && ((t.weekNumber !== undefined && t.weekNumber < selectedWeek) || !t.weekNumber) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    confirmDialog({
+                      title: `Chuyển sang Tuần ${selectedWeek}`,
+                      message: `Bạn có muốn chuyển công việc "${t.title}" sang Tuần ${selectedWeek} để tiếp tục thực hiện không?`,
+                      confirmText: `Chuyển sang Tuần ${selectedWeek}`,
+                      type: 'info',
+                      onConfirm: () => {
+                        updateTask(t.id, {
+                          weekNumber: selectedWeek,
+                          year: selectedYear,
+                          requestedWeekNumber: undefined,
+                        });
+                      },
+                    });
+                  }}
+                  className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:hover:bg-indigo-900 dark:text-indigo-300 dark:border-indigo-800 text-[10px] font-bold rounded-md shadow-2xs transition active:scale-95 inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                  title={`Chuyển sang Tuần ${selectedWeek} để tiếp tục làm việc`}
+                >
+                  <span>⏩ Tuần {selectedWeek}</span>
+                </button>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1508,7 +1598,9 @@ export const MilestonesView: React.FC = () => {
 
         {/* NESTED SUBTASKS ACCORDION LIST */}
         {hasSub && !isCollapsed && (
-          taskSubtasks.map((st, sIdx) => renderTaskRow(st, sIdx, st.status === 'Done' || (st.completionPercentage || 0) >= 100, milestoneId, true))
+          taskSubtasks
+            .filter((st) => isTaskSearchMatch(st))
+            .map((st, sIdx) => renderTaskRow(st, sIdx, st.status === 'Done' || (st.completionPercentage || 0) >= 100, milestoneId, true))
         )}
       </React.Fragment>
     );
@@ -1557,33 +1649,57 @@ export const MilestonesView: React.FC = () => {
           </div>
         </div>
 
-        {/* Navigation Sub-Tabs Switcher & Role Filter */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-          <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 w-full sm:w-fit gap-1">
-            <button
-              onClick={() => setSubTab('MILESTONES')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
-                subTab === 'MILESTONES'
-                  ? 'bg-white text-amber-700 shadow-sm shadow-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <Flag className="w-3.5 h-3.5 text-amber-500" />
-              <span className="sm:hidden">Milestones ({filteredMilestones.length})</span>
-              <span className="hidden sm:inline">Cột Mốc Milestone ({filteredMilestones.length})</span>
-            </button>
-            <button
-              onClick={() => setSubTab('ADHOC')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
-                subTab === 'ADHOC'
-                  ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <Inbox className="w-3.5 h-3.5 text-indigo-500" />
-              <span className="sm:hidden">Task Tự Do ({filteredAdhocTasks.length})</span>
-              <span className="hidden sm:inline">Task Tự Do & Phát Sinh ({filteredAdhocTasks.length})</span>
-            </button>
+        {/* Navigation Sub-Tabs Switcher & Search & Role Filter */}
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 w-full sm:w-fit gap-1">
+              <button
+                onClick={() => setSubTab('MILESTONES')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
+                  subTab === 'MILESTONES'
+                    ? 'bg-white text-amber-700 shadow-sm shadow-slate-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <Flag className="w-3.5 h-3.5 text-amber-500" />
+                <span className="sm:hidden">Milestones ({filteredMilestones.length})</span>
+                <span className="hidden sm:inline">Cột Mốc Milestone ({filteredMilestones.length})</span>
+              </button>
+              <button
+                onClick={() => setSubTab('ADHOC')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
+                  subTab === 'ADHOC'
+                    ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <Inbox className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="sm:hidden">Task Tự Do ({filteredAdhocTasks.length})</span>
+                <span className="hidden sm:inline">Task Tự Do & Phát Sinh ({filteredAdhocTasks.length})</span>
+              </button>
+            </div>
+
+            {/* Search Input Box */}
+            <div className="relative w-full sm:w-64">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Tìm kiếm task, mã task..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-100 transition shadow-2xs font-medium"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  title="Xóa tìm kiếm"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Role & Member Filter Controls */}
@@ -1791,12 +1907,23 @@ export const MilestonesView: React.FC = () => {
             <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
               <FolderOpen className="w-8 h-8 text-slate-300" />
               <span className="font-semibold text-slate-600">
-                Chưa có cột mốc Milestone nào thuộc chuyên môn / bộ lọc này.
+                {searchQuery.trim()
+                  ? `Không tìm thấy cột mốc hoặc đầu việc nào phù hợp với từ khóa "${searchQuery}".`
+                  : 'Chưa có cột mốc Milestone nào thuộc chuyên môn / bộ lọc này.'}
               </span>
               <span className="text-slate-400">
-                {currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)
-                  ? 'Hãy bấm "Tạo Milestone Mới" để thiết lập cột mốc và break task.'
-                  : 'Cột mốc và đầu việc của chuyên môn này sẽ xuất hiện khi Leader phân bổ.'}
+                {searchQuery.trim() ? (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="mt-1 text-indigo-600 hover:text-indigo-700 font-bold underline cursor-pointer"
+                  >
+                    Xóa từ khóa tìm kiếm
+                  </button>
+                ) : currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser) ? (
+                  'Hãy bấm "Tạo Milestone Mới" để thiết lập cột mốc và break task.'
+                ) : (
+                  'Cột mốc và đầu việc của chuyên môn này sẽ xuất hiện khi Leader phân bổ.'
+                )}
               </span>
             </div>
           ) : (
@@ -1809,7 +1936,8 @@ export const MilestonesView: React.FC = () => {
                     (t.weekNumber === undefined || t.weekNumber >= 95) &&
                     t.milestoneId === ms.id &&
                     isTaskRoleMatch(t.role) &&
-                    isTaskAssigneeMatch(t)
+                    isTaskAssigneeMatch(t) &&
+                    isTaskSearchMatch(t)
                 )
               );
               const activeMsTasks = sortActiveTasks(msTasksAll.filter((t) => !isTaskDoneInMilestone(t)));
@@ -1819,8 +1947,8 @@ export const MilestonesView: React.FC = () => {
               const doneCount = doneMsTasks.length;
               const progress = msTasksAll.length > 0 ? Math.round((doneCount / msTasksAll.length) * 100) : 0;
               const isEditing = editingMilestoneId === ms.id;
-              const isCollapsed = collapsedMilestones.has(ms.id);
-              const isDoneCollapsed = !expandedDoneSections.has(ms.id);
+              const isCollapsed = searchQuery.trim() ? false : collapsedMilestones.has(ms.id);
+              const isDoneCollapsed = searchQuery.trim() ? false : !expandedDoneSections.has(ms.id);
               const deliverableItems = parseDeliverables(ms.deliverable);
               const isDeliverableExpanded = expandedDeliverables.has(ms.id);
               const visibleDeliverables = isDeliverableExpanded ? deliverableItems : deliverableItems.slice(0, 3);
@@ -2145,7 +2273,7 @@ export const MilestonesView: React.FC = () => {
       {subTab === 'ADHOC' && (() => {
         const adhocActiveTasks = sortActiveTasks(filteredAdhocTasks.filter((t) => !isTaskDoneInMilestone(t)));
         const adhocDoneTasks = filteredAdhocTasks.filter((t) => isTaskDoneInMilestone(t));
-        const isAdhocDoneCollapsed = !expandedDoneSections.has('adhoc');
+        const isAdhocDoneCollapsed = searchQuery.trim() ? false : !expandedDoneSections.has('adhoc');
 
         return (
           <div className="bg-white border-2 border-indigo-200/80 rounded-2xl overflow-hidden shadow-sm tab-content-animate">
@@ -2201,7 +2329,7 @@ export const MilestonesView: React.FC = () => {
             {/* Adhoc Tasks List */}
             <div
               className={`accordion-wrapper ${
-                isAdhocCollapsed ? 'accordion-closed' : 'accordion-open'
+                isAdhocCollapsed && !searchQuery.trim() ? 'accordion-closed' : 'accordion-open'
               }`}
             >
               <div className="accordion-content">
@@ -2258,8 +2386,23 @@ export const MilestonesView: React.FC = () => {
                   {filteredAdhocTasks.length === 0 ? (
                     <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
                       <FolderOpen className="w-8 h-8 text-slate-300" />
-                      <span className="font-medium text-slate-600">Hiện không có task phát sinh ngoài milestone nào phù hợp.</span>
-                      <span className="text-slate-400">Tất cả các đầu việc hiện tại đều đã được gán vào các Cột Mốc Milestone hoặc thuộc bộ lọc khác.</span>
+                      <span className="font-medium text-slate-600">
+                        {searchQuery.trim()
+                          ? `Không tìm thấy task tự do nào phù hợp với từ khóa "${searchQuery}".`
+                          : 'Hiện không có task phát sinh ngoài milestone nào phù hợp.'}
+                      </span>
+                      <span className="text-slate-400">
+                        {searchQuery.trim() ? (
+                          <button
+                            onClick={() => setSearchQuery('')}
+                            className="mt-1 text-indigo-600 hover:text-indigo-700 font-bold underline cursor-pointer"
+                          >
+                            Xóa từ khóa tìm kiếm
+                          </button>
+                        ) : (
+                          'Tất cả các đầu việc hiện tại đều đã được gán vào các Cột Mốc Milestone hoặc thuộc bộ lọc khác.'
+                        )}
+                      </span>
                     </div>
                   ) : adhocActiveTasks.length === 0 && adhocDoneTasks.length > 0 ? (
                     <div className="py-6 text-center text-emerald-600 font-semibold text-xs bg-emerald-50/30">

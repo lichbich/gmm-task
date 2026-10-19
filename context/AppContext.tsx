@@ -2154,6 +2154,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if ('weekNumber' in updates && (updates.weekNumber === undefined || updates.weekNumber === null)) {
           delete (targetTaskUpdated as any).weekNumber;
         }
+        if ('requestedWeekNumber' in updates && (updates.requestedWeekNumber === undefined || updates.requestedWeekNumber === null)) {
+          delete (targetTaskUpdated as any).requestedWeekNumber;
+        }
         return targetTaskUpdated;
       }
 
@@ -2234,6 +2237,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       if ('weekNumber' in updates && (updates.weekNumber === undefined || updates.weekNumber === null)) {
         delete (targetTaskUpdated as any).weekNumber;
+      }
+      if ('requestedWeekNumber' in updates && (updates.requestedWeekNumber === undefined || updates.requestedWeekNumber === null)) {
+        delete (targetTaskUpdated as any).requestedWeekNumber;
       }
       return targetTaskUpdated;
     });
@@ -2862,6 +2868,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assigneeAccount: task.assignmentRequestedBy || task.assigneeAccount,
       assignmentRequestStatus: 'APPROVED',
       weekNumber: task.requestedWeekNumber || selectedWeek,
+      requestedWeekNumber: undefined,
       updatedAt: new Date().toISOString(),
     });
 
