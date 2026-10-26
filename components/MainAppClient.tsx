@@ -14,6 +14,7 @@ import { UserManagementView } from './UserManagementView';
 import { ResourceManagerView } from './ResourceManagerView';
 import { TaskModal } from './TaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
+import { WeeklyReportModal } from './WeeklyReportModal';
 import { LoginModal } from './LoginModal';
 import { QuickResourceFloatingButton } from './QuickResourceFloatingButton';
 import { ScrollToTopButton } from './ScrollToTopButton';
@@ -75,6 +76,7 @@ function MainApp() {
   const [selectedTaskForEdit, setSelectedTaskForEdit] = useState<Task | null>(null);
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
   const [selectedTicketIdForView, setSelectedTicketIdForView] = useState<string | null>(null);
+  const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState<boolean>(false);
   const [taskModalDefaultWeek, setTaskModalDefaultWeek] = useState<number | undefined>(undefined);
   const [taskModalDefaultAssignee, setTaskModalDefaultAssignee] = useState<string | undefined>(undefined);
@@ -102,6 +104,7 @@ function MainApp() {
       setSelectedTaskForDetail(null);
       setIsTaskModalOpen(false);
       setSelectedTicketIdForView(null);
+      setReportingTask(null);
     };
     window.addEventListener('saho-close-all-modals', handleCloseAll);
     return () => window.removeEventListener('saho-close-all-modals', handleCloseAll);
@@ -383,6 +386,11 @@ function MainApp() {
             defaultAssignee={taskModalDefaultAssignee}
             initialRole={taskModalDefaultRole}
             initialSubtaskParent={taskModalInitialSubtaskParent}
+            onOpenReport={(t) => {
+              setIsTaskModalOpen(false);
+              setSelectedTaskForEdit(null);
+              setReportingTask(t);
+            }}
             onOpenCreateSubtask={(parent) => {
               handleOpenTaskModal(undefined, parent.weekNumber, undefined, parent.role, parent);
             }}
@@ -404,6 +412,10 @@ function MainApp() {
             task={selectedTaskForDetail}
             isOpen={!!selectedTaskForDetail}
             onClose={() => setSelectedTaskForDetail(null)}
+            onOpenReport={(t) => {
+              setSelectedTaskForDetail(null);
+              setReportingTask(t);
+            }}
             onEditTask={(taskToEdit) => {
               setSelectedTaskForDetail(null);
               handleOpenTaskModal(
@@ -412,6 +424,13 @@ function MainApp() {
                 taskToEdit.assignmentRequestedBy || taskToEdit.assigneeAccount
               );
             }}
+          />
+
+          {/* Weekly Report Modal */}
+          <WeeklyReportModal
+            task={reportingTask}
+            isOpen={!!reportingTask}
+            onClose={() => setReportingTask(null)}
           />
         </>
       )}

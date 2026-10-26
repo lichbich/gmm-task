@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Task, Specialization, TaskStatus, TaskActivityLog, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, isSpecializationMatchingRole } from '../types/task';
+import { Task, Specialization, TaskStatus, TaskActivityLog, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, isSpecializationMatchingRole, getEffectiveTaskStatus } from '../types/task';
 import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2, CornerDownRight, GitFork, Layers, ChevronDown, ChevronRight, ChevronUp, Check, Copy, Link2, User, Flag, FolderOpen, History, Activity, Clock, UserCheck, CheckCircle2 } from 'lucide-react';
 import { useModalAnimation } from '../hooks/useModalAnimation';
 import { Dropdown, DropdownOption } from './common/Dropdown';
@@ -18,6 +18,7 @@ import { ensureTaskTitlePrefix, getRoleTaskPrefix } from '../lib/taskPrefixHelpe
 import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
 import { generateNextTaskCode, getRolePrefix, parseTaskCode } from '../lib/taskCodeHelper';
 import { LinkExistingTasksModal } from './common/LinkExistingTasksModal';
+import { WeeklyReportModal } from './WeeklyReportModal';
 
 const formatDateTime = (isoOrStr: string) => {
   if (!isoOrStr) return '';
@@ -81,6 +82,7 @@ interface TaskModalProps {
   initialSubtaskParent?: Task | null;
   onOpenCreateSubtask?: (parentTask: Task) => void;
   onSelectTaskToEdit?: (task: Task) => void;
+  onOpenReport?: (task: Task) => void;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -94,8 +96,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   initialSubtaskParent,
   onOpenCreateSubtask,
   onSelectTaskToEdit,
+  onOpenReport,
 }) => {
-  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI, tasks } = useApp();
+  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI, tasks, canReportTask } = useApp();
 
   // AI features enabled based on permission config (Default: Admin, LichDT, QuynhNV, NhiHT)
   const canUseAI = isUserAllowedAI(currentUser, 'assistant');
@@ -179,6 +182,30 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const existingSubtasks = task ? tasks.filter((t) => t.subtaskParentId === task.id) : [];
   const hasSubtasks = existingSubtasks.length > 0;
   const parentMetrics = hasSubtasks && task ? calculateParentMetrics(task, existingSubtasks) : null;
+
+  // Internal fallback for WeeklyReportModal
+  const [isInternalReportOpen, setIsInternalReportOpen] = useState<boolean>(false);
+
+  const handleOpenReport = () => {
+    if (onOpenReport && task) {
+      forceClose();
+      onOpenReport(task);
+    } else if (task) {
+      setIsInternalReportOpen(true);
+    }
+  };
+
+  const effectiveDisplayPct = (parentMetrics && !task?.isManualOverride)
+    ? parentMetrics.completionPercentage
+    : (task?.completionPercentage ?? 0);
+
+  const effectiveDisplayStatus = (parentMetrics && !task?.isManualOverride)
+    ? parentMetrics.status
+    : task
+    ? getEffectiveTaskStatus(task)
+    : 'To do';
+
+  const canReportThisTask = Boolean(task && canReportTask(task, currentUser));
 
   // Helper to extract creation timestamp of a task
   const getTaskCreatedTime = (t: Task): number => {
@@ -683,7 +710,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         currSupporters !== origSupporters ||
         milestoneId !== origMilestone ||
         role !== origRole ||
-        status !== origStatus ||
+        (isAdminOrPM && status !== origStatus) ||
         priority !== origPriority ||
         startDate !== (task.startDate || '') ||
         endDate !== (task.endDate || '') ||
@@ -1072,7 +1099,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         : finalCompletionPercentage === 100
         ? 'Done'
         : status
-      : status;
+      : task
+      ? task.status || 'To do'
+      : 'To do';
 
     executeSave(finalActualEffort, finalCompletionPercentage, finalStatus);
   };
@@ -1917,23 +1946,56 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Status */}
-                      <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
-                        <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">
-                          Trạng Thái:
-                        </label>
-                        <Dropdown
-                          value={status}
-                          onChange={(newStatus) => handleStatusChange(newStatus as TaskStatus)}
-                          options={[
-                            { value: 'To do', label: 'To do (Cần làm)' },
-                            { value: 'In Progress', label: 'In Progress (Đang làm)' },
-                            { value: 'Done', label: 'Done (Đã hoàn thành)' },
-                          ]}
-                          className="w-full"
-                          buttonClassName="py-1.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 font-medium rounded-xl"
-                        />
-                      </div>
+                      {/* Read-only Status & Progress for Non-Admin/PM (only shown when editing existing task) */}
+                      {!isUserAdminOrPM(currentUser) && task && (
+                        <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-slate-400 dark:text-slate-400 text-[11px] font-medium flex items-center gap-1">
+                              <Activity className="w-3 h-3 text-indigo-500 shrink-0" />
+                              <span>Trạng Thái & Tiến Độ:</span>
+                            </label>
+                            {canReportThisTask && (
+                              <button
+                                type="button"
+                                onClick={handleOpenReport}
+                                className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 font-bold flex items-center gap-1 transition cursor-pointer hover:underline"
+                                title="Bấm để cập nhật % tiến độ và giờ làm thực tế"
+                              >
+                                <Clock className="w-3 h-3" />
+                                <span>Cập nhật tiến độ</span>
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${
+                                  effectiveDisplayStatus === 'Done'
+                                    ? 'bg-emerald-500'
+                                    : effectiveDisplayStatus === 'In Progress'
+                                    ? 'bg-blue-500'
+                                    : 'bg-slate-400'
+                                }`}
+                              />
+                              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                {effectiveDisplayStatus === 'Done'
+                                  ? 'Done (Đã hoàn thành)'
+                                  : effectiveDisplayStatus === 'In Progress'
+                                  ? 'In Progress (Đang làm)'
+                                  : 'To do (Cần làm)'}
+                              </span>
+                            </div>
+                            <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
+                              {effectiveDisplayPct}%
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">
+                            {canReportThisTask
+                              ? 'Bấm "Cập nhật tiến độ" để nhập % và giờ làm thực tế.'
+                              : 'Tiến độ được cập nhật qua báo cáo thực tế bởi người phụ trách.'}
+                          </p>
+                        </div>
+                      )}
 
                       {/* Start Date & End Date (2-col grid) */}
                       <div className="grid grid-cols-2 gap-2.5">
@@ -1972,8 +2034,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               👑 Admin / PM Override
                             </span>
                             <span className="text-[10px] text-purple-700 dark:text-purple-300 font-medium">
-                              Quản lý tiến độ
+                              Quản lý trạng thái & tiến độ
                             </span>
+                          </div>
+
+                          {/* Admin Status Dropdown */}
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                              Trạng Thái:
+                            </label>
+                            <Dropdown
+                              value={status}
+                              onChange={(newStatus) => handleStatusChange(newStatus as TaskStatus)}
+                              options={[
+                                { value: 'To do', label: 'To do (Cần làm)' },
+                                { value: 'In Progress', label: 'In Progress (Đang làm)' },
+                                { value: 'Done', label: 'Done (Đã hoàn thành)' },
+                              ]}
+                              className="w-full"
+                              buttonClassName="py-1.5 px-3 text-xs bg-white dark:bg-slate-900 border-purple-300/80 dark:border-purple-700 font-medium rounded-xl h-[36px]"
+                            />
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
@@ -2137,6 +2217,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           parentTask={task}
           isOpen={isLinkExistingModalOpen}
           onClose={() => setIsLinkExistingModalOpen(false)}
+        />
+      )}
+
+      {/* Internal Fallback Weekly Report Modal */}
+      {isInternalReportOpen && task && (
+        <WeeklyReportModal
+          task={task}
+          isOpen={isInternalReportOpen}
+          onClose={() => setIsInternalReportOpen(false)}
         />
       )}
     </div>
