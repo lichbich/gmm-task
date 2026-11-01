@@ -262,6 +262,7 @@ interface AppContextType {
   
   canEditTask: (task: Task, user?: User | null) => boolean;
   canReportTask: (task: Task, user?: User | null) => boolean;
+  canDeleteTask: (task: Task, user?: User | null) => boolean;
   
   simulatedTime: string;
   setSimulatedTime: (time: string) => void;
@@ -1433,6 +1434,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isAssignee = Boolean(task.assigneeAccount && task.assigneeAccount.toLowerCase() === user.account.toLowerCase());
     const isSupporter = Boolean(task.supporterAccounts && task.supporterAccounts.some((s) => s.toLowerCase() === user.account.toLowerCase()));
     return isAssignee || isSupporter;
+  };
+
+  // DELETE PERMISSION: Admin, PM, Leader/Advisor, OR the creator of the task can delete it
+  const canDeleteTask = (task: Task, user: User | null = authSession): boolean => {
+    if (!user || !task) return false;
+    if (user.role === 'Admin' || isUserPM(user)) return true;
+    if (user.role === 'Leader' || user.role === 'Advisor') return true;
+    const roleInTaskSpec = getUserRoleInSpec(user, task.role);
+    if (roleInTaskSpec === 'Leader' || roleInTaskSpec === 'Advisor') return true;
+
+    const userAccountLower = (user.account || '').trim().toLowerCase();
+    if (!userAccountLower) return false;
+
+    // 1. Check CREATE activity log authorAccount
+    if (Array.isArray(task.activityLogs) && task.activityLogs.length > 0) {
+      const createLog = task.activityLogs.find((log) => log.actionType === 'CREATE');
+      if (createLog?.authorAccount && createLog.authorAccount.trim().toLowerCase() === userAccountLower) {
+        return true;
+      }
+    }
+
+    // 2. Check task.createdBy string (e.g. "Nguyễn Thị Hằng (@HangNT)", "HangNT (Member)", "HangNT")
+    if (task.createdBy) {
+      const createdByLower = task.createdBy.trim().toLowerCase();
+      if (
+        createdByLower === userAccountLower ||
+        createdByLower.includes(`(@${userAccountLower})`) ||
+        createdByLower.includes(`@${userAccountLower}`) ||
+        createdByLower.startsWith(`${userAccountLower} (`)
+      ) {
+        return true;
+      }
+      const userNameLower = (user.name || '').trim().toLowerCase();
+      if (userNameLower && createdByLower === userNameLower) {
+        return true;
+      }
+    }
+
+    return false;
   };
 
   // Helper: remove undefined values so Firebase doesn't reject the payload
@@ -4009,6 +4049,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTaskNotes,
         canEditTask,
         canReportTask,
+        canDeleteTask,
         simulatedTime,
         setSimulatedTime,
         resetSimulatedTime,

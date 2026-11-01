@@ -98,7 +98,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onSelectTaskToEdit,
   onOpenReport,
 }) => {
-  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI, tasks, canReportTask } = useApp();
+  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI, tasks, canReportTask, canDeleteTask } = useApp();
 
   // AI features enabled based on permission config (Default: Admin, LichDT, QuynhNV, NhiHT)
   const canUseAI = isUserAllowedAI(currentUser, 'assistant');
@@ -2165,7 +2165,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
               {/* Fixed Footer */}
               <div className="p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900/60 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl">
-                {task && (userRoleInTaskSpec === 'Leader' || userRoleInTaskSpec === 'Advisor' || currentUser?.role === 'Admin') ? (
+                {task && (userRoleInTaskSpec === 'Leader' || userRoleInTaskSpec === 'Advisor' || currentUser?.role === 'Admin' || isUserAdminOrPM(currentUser) || canDeleteTask(task)) ? (
                   <button
                     type="button"
                     onClick={handleDelete}

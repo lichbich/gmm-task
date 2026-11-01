@@ -62,6 +62,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     addTask,
     updateTask,
     deleteTask,
+    canDeleteTask,
     requestTaskAssignment,
     approveTaskAssignment,
     rejectTaskAssignment,
@@ -1276,7 +1277,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                             <RotateCcw className="w-3.5 h-3.5" />
                                           </button>
                                         )}
-                                        {isLeaderOrAdmin && (
+                                        {(isLeaderOrAdmin || canDeleteTask(t)) && (
                                           <button
                                             onClick={() => {
                                               confirmDialog({
@@ -1462,7 +1463,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                                         >
                                           <Edit2 className="w-3.5 h-3.5" />
                                         </button>
-                                        {isLeaderOrAdmin && (
+                                        {(isLeaderOrAdmin || canDeleteTask(t)) && (
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();

@@ -125,6 +125,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     updateTask,
     canEditTask,
     canReportTask,
+    canDeleteTask,
     weeklyAwards,
     deleteTask,
     currentUser,
@@ -1801,7 +1802,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
         {/* Fixed Footer */}
         <div className="flex items-center justify-between gap-3 p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900 rounded-b-3xl">
-          {(userRoleInTask === 'Leader' || userRoleInTask === 'Advisor' || isUserAdminOrPM(currentUser)) ? (
+          {(userRoleInTask === 'Leader' || userRoleInTask === 'Advisor' || isUserAdminOrPM(currentUser) || (task && canDeleteTask(task))) ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"

@@ -90,6 +90,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     currentUser,
     weeklyAwards,
     canReportTask,
+    canDeleteTask,
     updateTask,
     deleteTask,
     confirmDialog,
@@ -105,11 +106,12 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     isUserAllowedAI,
   } = useApp();
 
-  // Sub-tabs state: default to 'MY_TASKS' or remembered from localStorage
+  // Sub-tabs state: default to 'MY_TASKS' or remembered from sessionStorage (resets when browser is closed)
   const [subTab, setSubTabState] = useState<'MY_TASKS' | 'ALL_TASKS' | 'DEFINE_NEXT_WEEK'>(() => {
     if (typeof window !== 'undefined') {
       try {
-        const saved = localStorage.getItem('saho_schedule_subtab');
+        localStorage.removeItem('saho_schedule_subtab');
+        const saved = sessionStorage.getItem('saho_schedule_subtab');
         if (saved === 'MY_TASKS' || saved === 'ALL_TASKS' || saved === 'DEFINE_NEXT_WEEK') return saved;
       } catch {}
     }
@@ -120,7 +122,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
     setSubTabState(newSubTab);
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('saho_schedule_subtab', newSubTab);
+        sessionStorage.setItem('saho_schedule_subtab', newSubTab);
       } catch {}
     }
   };
@@ -1673,32 +1675,34 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               </button>
             )}
 
-            {/* Leader/Advisor/Admin/PM Edit & Delete Buttons */}
+            {/* Leader/Advisor/Admin/PM Edit Button */}
             {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
-              <>
-                <button
-                  onClick={() => onOpenTaskModal?.(t)}
-                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-300 rounded-xl transition-all shadow-xs"
-                  title="Chỉnh sửa task / Giao việc"
-                >
-                  <Edit2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => {
-                    confirmDialog({
-                      title: 'Xác nhận xóa đầu việc',
-                      message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"? Thao tác này không thể hoàn tác.`,
-                      confirmText: 'Xác nhận xóa',
-                      type: 'danger',
-                      onConfirm: () => deleteTask(t.id),
-                    });
-                  }}
-                  className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/60 hover:text-red-600 dark:hover:text-red-400 text-slate-400 dark:text-slate-400 rounded-xl transition-all shadow-xs"
-                  title="Xóa đầu việc này"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </>
+              <button
+                onClick={() => onOpenTaskModal?.(t)}
+                className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-300 rounded-xl transition-all shadow-xs"
+                title="Chỉnh sửa task / Giao việc"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Delete Button (Leader/Advisor/Admin/PM or Task Creator) */}
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser) || canDeleteTask(t)) && (
+              <button
+                onClick={() => {
+                  confirmDialog({
+                    title: 'Xác nhận xóa đầu việc',
+                    message: `Bạn có chắc chắn muốn xóa đầu việc "${t.title}"? Thao tác này không thể hoàn tác.`,
+                    confirmText: 'Xác nhận xóa',
+                    type: 'danger',
+                    onConfirm: () => deleteTask(t.id),
+                  });
+                }}
+                className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/60 hover:text-red-600 dark:hover:text-red-400 text-slate-400 dark:text-slate-400 rounded-xl transition-all shadow-xs"
+                title="Xóa đầu việc này"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
         </td>
@@ -2031,7 +2035,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             )}
 
             {/* Delete Button */}
-            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
+            {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser) || canDeleteTask(t)) && (
               <button
                 onClick={() => {
                   confirmDialog({
