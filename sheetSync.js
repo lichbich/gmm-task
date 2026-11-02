@@ -17,12 +17,94 @@
 const FIREBASE_URL = "https://docugen-676bf-default-rtdb.asia-southeast1.firebasedatabase.app/gmm-task";
 const SHEET_NAME = "Work Schedules";
 
-// Thứ tự sắp xếp các Role theo chuẩn ưu tiên
-const ROLE_ORDER = ['BA', 'Design', 'Designer', 'FE', 'BE', 'Dev', 'SA', 'QA', 'DevOps', 'PO', 'PM'];
+// Thứ tự sắp xếp các Role theo chuẩn ưu tiên: BA, Design, FE, BE, SA, QA, QC, ...
+const ROLE_ORDER = [
+    'BA',
+    'Design',
+    'FE',
+    'BE',
+    'SA',
+    'QA',
+    'QC',
+    'DevOps',
+    'AI',
+    'PO',
+    'PM',
+    'Back Office'
+];
+
+/**
+ * Chuẩn hóa tên Role hiển thị trên hàng Banner Vàng (Cột A) và gom nhóm Role
+ */
+function normalizeRoleBannerName(roleName) {
+    const raw = String(roleName || 'BA').trim();
+    const lower = raw.toLowerCase();
+
+    if (lower === 'ba' || lower.includes('business analyst') || lower.includes('nghiệp vụ')) return 'BA';
+    if (lower === 'des' || lower === 'design' || lower === 'designer' || lower.includes('ui/ux') || lower.includes('thiết kế')) return 'Design';
+    if (lower === 'fe' || lower === 'frontend' || lower === 'front-end') return 'FE';
+    if (lower === 'be' || lower === 'backend' || lower === 'back-end' || lower === 'dev') return 'BE';
+    if (lower === 'sa' || lower.includes('solution architect') || lower.includes('kiến trúc')) return 'SA';
+    if (lower === 'qa') return 'QA';
+    if (lower === 'qc' || lower === 'qc / tester' || lower.includes('tester') || lower.includes('kiểm thử')) return 'QC';
+    if (lower === 'ops' || lower === 'devops' || lower.includes('hạ tầng')) return 'DevOps';
+    if (lower === 'ai' || lower.includes('trí tuệ')) return 'AI';
+    if (lower === 'po' || lower.includes('product owner')) return 'PO';
+    if (lower === 'pm' || lower.includes('project manager')) return 'PM';
+    if (lower === 'bof' || lower === 'back office' || lower === 'back-office') return 'Back Office';
+
+    return raw || 'BA';
+}
+
+/**
+ * Chuẩn hóa giá trị Role ghi vào Cột C trên dòng Task để khớp với Dropdown Chip của Google Sheet
+ */
+function formatTaskRoleForCell(rawRole, bannerName, allowedRoleChipValues) {
+    const raw = String(rawRole || bannerName || 'BA').trim();
+    const lower = raw.toLowerCase();
+    const hasOption = (opt) =>
+        Array.isArray(allowedRoleChipValues) &&
+        allowedRoleChipValues.some(v => String(v).trim().toLowerCase() === opt.toLowerCase());
+
+    if (lower === 'des' || lower === 'design' || lower === 'designer') {
+        if (hasOption('Designer')) return 'Designer';
+        if (hasOption('Design')) return 'Design';
+        if (hasOption('DES')) return 'DES';
+        return 'Designer';
+    }
+    if (lower === 'ops' || lower === 'devops') {
+        if (hasOption('DevOps')) return 'DevOps';
+        if (hasOption('OPS')) return 'OPS';
+        return 'DevOps';
+    }
+    if (lower === 'qc' || lower === 'qc / tester' || lower.includes('tester')) {
+        if (hasOption('QC')) return 'QC';
+        if (hasOption('QA')) return 'QA';
+        return 'QC';
+    }
+    if (lower === 'bof' || lower === 'back office') {
+        if (hasOption('Back Office')) return 'Back Office';
+        if (hasOption('BOF')) return 'BOF';
+        return 'Back Office';
+    }
+    return raw;
+}
 
 function getRoleOrderIndex(roleName) {
-    const index = ROLE_ORDER.findIndex(r => r.toLowerCase() === String(roleName || '').trim().toLowerCase());
+    const normalized = normalizeRoleBannerName(roleName);
+    const index = ROLE_ORDER.findIndex(r => r.toLowerCase() === normalized.toLowerCase());
     return index !== -1 ? index : 999;
+}
+
+/**
+ * Hiển thị thông báo an toàn (không bị crash khi chạy ngầm qua Trigger tự động 5 phút)
+ */
+function safeAlert(message) {
+    try {
+        SpreadsheetApp.getUi().alert(message);
+    } catch (e) {
+        Logger.log(message);
+    }
 }
 
 /**
@@ -87,21 +169,44 @@ function syncTasksFormattedToSheet() {
     const sheet = spreadsheet.getSheetByName(SHEET_NAME) || spreadsheet.getSheets()[0];
 
     if (!sheet) {
-        SpreadsheetApp.getUi().alert(`Không tìm thấy sheet "${SHEET_NAME}". Vui lòng kiểm tra lại tên sheet.`);
+        safeAlert(`Không tìm thấy sheet "${SHEET_NAME}". Vui lòng kiểm tra lại tên sheet.`);
         return;
     }
 
-    // A. Lấy danh sách Staff Code (Account) TRỰC TIẾP DỘNG từ Firebase DB /users.json
+    // Đảm bảo ô tiêu đề A1 hiển thị "Role" đúng format chuẩn nếu đang bị trống
+    try {
+        const a1Cell = sheet.getRange(1, 1);
+        if (!String(a1Cell.getValue() || '').trim()) {
+            a1Cell.setValue("Role").setFontColor("#CC0000").setFontWeight("bold").setFontSize(16).setFontFamily("Arial");
+        }
+    } catch (e) {}
+
+    // A. Lấy danh sách Staff Code (Account) TRỰC TIẾP ĐỘNG từ Firebase DB /users.json (Lấy cả user đang hoạt động và user cũ để đồng bộ đầy đủ vào Dropdown)
+    let allDbUsers = [];
     let usersList = [];
     try {
         const userRes = UrlFetchApp.fetch(`${FIREBASE_URL}/users.json`);
         const userContent = userRes.getContentText();
         if (userContent && userContent !== 'null') {
             const usersData = JSON.parse(userContent);
-            usersList = Object.values(usersData).filter(u => u && !u.disabled && u.status !== 'disabled');
+            allDbUsers = Object.values(usersData).filter(Boolean);
+            usersList = allDbUsers.filter(u => !u.disabled && u.status !== 'disabled');
         }
     } catch (err) {
         Logger.log("Chưa lấy được danh sách user: " + err.toString());
+    }
+
+    // A2. Lấy danh sách Roles động từ Firebase DB /roles.json
+    let allDbRoles = [];
+    try {
+        const roleRes = UrlFetchApp.fetch(`${FIREBASE_URL}/roles.json`);
+        const roleContent = roleRes.getContentText();
+        if (roleContent && roleContent !== 'null') {
+            const rolesData = JSON.parse(roleContent);
+            allDbRoles = Object.values(rolesData).filter(Boolean);
+        }
+    } catch (err) {
+        Logger.log("Chưa lấy được danh sách roles: " + err.toString());
     }
 
     // B. Lấy dữ liệu Task từ Firebase RTDB /tasks.json
@@ -113,13 +218,13 @@ function syncTasksFormattedToSheet() {
             firebaseTasks = JSON.parse(content);
         }
     } catch (err) {
-        SpreadsheetApp.getUi().alert("❌ Lỗi kết nối tới Firebase: " + err.toString());
+        safeAlert("❌ Lỗi kết nối tới Firebase: " + err.toString());
         return;
     }
 
     const taskList = Object.values(firebaseTasks);
     if (taskList.length === 0) {
-        SpreadsheetApp.getUi().alert("ℹ️ Chưa có Task nào trên Hệ thống.");
+        safeAlert("ℹ️ Chưa có Task nào trên Hệ thống.");
         return;
     }
 
@@ -150,8 +255,7 @@ function syncTasksFormattedToSheet() {
         }
 
         const pushTask = (roleName, taskItem) => {
-            let r = (roleName || 'BA').trim();
-            if (r.toLowerCase() === 'designer') r = 'Design';
+            const r = normalizeRoleBannerName(roleName);
             if (!tasksByWeekAndRole[weekHeaderKey].roles[r]) {
                 tasksByWeekAndRole[weekHeaderKey].roles[r] = [];
             }
@@ -182,13 +286,15 @@ function syncTasksFormattedToSheet() {
                         ? [supUser.role]
                         : [t.role];
 
-                // Xác định role phù hợp cho thành viên Collab này
-                let targetRole = t.role;
+                // Xác định role phù hợp cho thành viên Collab này theo thứ tự ưu tiên ROLE_ORDER
+                let targetRole = normalizeRoleBannerName(t.role);
+                let bestOrderIdx = 9999;
                 for (let r of supRoles) {
-                    const matched = ROLE_ORDER.find(ro => ro.toLowerCase() === r.toLowerCase() || (ro === 'Design' && r.toLowerCase() === 'designer'));
-                    if (matched) {
-                        targetRole = matched;
-                        break;
+                    const normR = normalizeRoleBannerName(r);
+                    const idx = getRoleOrderIndex(normR);
+                    if (idx < bestOrderIdx) {
+                        bestOrderIdx = idx;
+                        targetRole = normR;
                     }
                 }
 
@@ -207,7 +313,7 @@ function syncTasksFormattedToSheet() {
     });
 
     if (sortedWeekKeys.length === 0) {
-        SpreadsheetApp.getUi().alert("ℹ️ Không có task nào từ Tuần 95 trở đi để đồng bộ.");
+        safeAlert("ℹ️ Không có task nào từ Tuần 95 trở đi để đồng bộ.");
         return;
     }
 
@@ -232,6 +338,130 @@ function syncTasksFormattedToSheet() {
         startRow = sheet.getLastRow() + 1;
         if (startRow === 1) startRow = 2;
     }
+
+    // Quét tìm ô mẫu có sẵn Data Validation trên Sheet cho Cột C (Role), G (Status), H (Account)
+    let chipTemplateRowC = -1;
+    let chipTemplateRowG = -1;
+    let chipTemplateRowH = -1;
+    let existingRuleC = null;
+    let existingRuleG = null;
+    let existingRuleH = null;
+    let allowedRoleChipValues = [];
+    let existingAccountChipValues = [];
+    const existingAccountCellsAboveStart = [];
+    const existingRoleCellsAboveStart = [];
+
+    if (lastRow >= 2) {
+        try {
+            const checkRows = Math.min(lastRow - 1, 2500);
+            const rulesC = sheet.getRange(2, 3, checkRows, 1).getDataValidations();
+            const rulesG = sheet.getRange(2, 7, checkRows, 1).getDataValidations();
+            const rulesH = sheet.getRange(2, 8, checkRows, 1).getDataValidations();
+
+            for (let r = 0; r < checkRows; r++) {
+                const rowNum = r + 2;
+                if (rulesC[r][0] != null) {
+                    if (rowNum < startRow) existingRoleCellsAboveStart.push(`C${rowNum}`);
+                    if (chipTemplateRowC === -1) {
+                        chipTemplateRowC = rowNum;
+                        existingRuleC = rulesC[r][0];
+                        try {
+                            const crit = existingRuleC.getCriteriaValues();
+                            if (crit && Array.isArray(crit[0])) {
+                                allowedRoleChipValues = crit[0];
+                            }
+                        } catch (e) {}
+                    }
+                }
+                if (chipTemplateRowG === -1 && rulesG[r][0] != null) {
+                    chipTemplateRowG = rowNum;
+                    existingRuleG = rulesG[r][0];
+                }
+                if (rulesH[r][0] != null) {
+                    if (rowNum < startRow) existingAccountCellsAboveStart.push(`H${rowNum}`);
+                    if (chipTemplateRowH === -1) {
+                        chipTemplateRowH = rowNum;
+                        existingRuleH = rulesH[r][0];
+                        try {
+                            const critH = existingRuleH.getCriteriaValues();
+                            if (critH && Array.isArray(critH[0])) {
+                                existingAccountChipValues = critH[0];
+                            }
+                        } catch (e) {}
+                    }
+                }
+            }
+        } catch (e) {
+            Logger.log("Không đọc được DataValidation mẫu: " + e.toString());
+        }
+    }
+
+    // Tổng hợp danh sách Account ĐỘNG từ:
+    // 1. Toàn bộ thành viên trong Firebase DB (/users.json)
+    // 2. Toàn bộ thành viên xuất hiện trong Tasks (/tasks.json - cả người nhận chính và người collab)
+    // 3. Các thành viên cũ đã có sẵn trong Dropdown của Google Sheet
+    const dynamicAccountSet = new Set();
+    existingAccountChipValues.forEach(acc => {
+        const clean = String(acc || '').trim();
+        if (clean) dynamicAccountSet.add(clean);
+    });
+    allDbUsers.forEach(u => {
+        const clean = String((u && u.account) || '').trim();
+        if (clean) dynamicAccountSet.add(clean);
+    });
+    taskList.forEach(t => {
+        if (t && t.assigneeAccount) {
+            const clean = String(t.assigneeAccount).trim();
+            if (clean) dynamicAccountSet.add(clean);
+        }
+        if (t && Array.isArray(t.supporterAccounts)) {
+            t.supporterAccounts.forEach(sup => {
+                const clean = String(sup || '').trim();
+                if (clean) dynamicAccountSet.add(clean);
+            });
+        }
+    });
+    const dynamicAccountList = Array.from(dynamicAccountSet).sort((a, b) => a.localeCompare(b));
+    if (dynamicAccountList.length === 0) {
+        dynamicAccountList.push('Chưa phân công');
+    }
+
+    // Tổng hợp danh sách Role ĐỘNG từ ROLE_ORDER + Firebase DB (/roles.json) + Tasks + Dropdown sẵn có trên Sheet
+    const dynamicRoleSet = new Set([
+        ...ROLE_ORDER,
+        'Designer',
+        'DES',
+        'OPS',
+        'BOF'
+    ]);
+    allowedRoleChipValues.forEach(r => {
+        const clean = String(r || '').trim();
+        if (clean) dynamicRoleSet.add(clean);
+    });
+    allDbRoles.forEach(r => {
+        if (r && r.code) dynamicRoleSet.add(String(r.code).trim());
+        if (r && r.name) dynamicRoleSet.add(String(r.name).trim());
+    });
+    taskList.forEach(t => {
+        if (t && t.role) dynamicRoleSet.add(String(t.role).trim());
+    });
+    const dynamicRoleList = Array.from(dynamicRoleSet).filter(Boolean);
+
+    // Tạo quy tắc DataValidation động có chứa đầy đủ thành viên & role mới từ DB, đồng thời bật setAllowInvalid(true) để không bao giờ văng lỗi chặn đồng bộ
+    const dynamicAccountValidation = (existingRuleH ? existingRuleH.copy() : SpreadsheetApp.newDataValidation())
+        .requireValueInList(dynamicAccountList, true)
+        .setAllowInvalid(true)
+        .build();
+
+    const dynamicRoleValidation = (existingRuleC ? existingRuleC.copy() : SpreadsheetApp.newDataValidation())
+        .requireValueInList(dynamicRoleList, true)
+        .setAllowInvalid(true)
+        .build();
+
+    const dynamicStatusValidation = (existingRuleG ? existingRuleG.copy() : SpreadsheetApp.newDataValidation())
+        .requireValueInList(['To do', 'In Progress', 'Done'], true)
+        .setAllowInvalid(true)
+        .build();
 
     // E. Xây dựng toàn bộ các dòng dữ liệu và định dạng cho TẤT CẢ các tuần thành một khối liền mạch
     const allRowsToInsert = [];
@@ -472,10 +702,12 @@ function syncTasksFormattedToSheet() {
                         sheetTitle = trimmedTitle.startsWith('↳') ? `   ${trimmedTitle}` : `   ↳ ${trimmedTitle}`;
                     }
 
+                    const cellRoleValue = formatTaskRoleForCell(t.role || bannerName, bannerName, allowedRoleChipValues);
+
                     allRowsToInsert.push([
                         "",                      // Col A (1): Trống (Bỏ STT)
                         sheetTitle,              // Col B (2): Tên Task (Có thụt dòng nếu là subtask)
-                        t.role || bannerName,    // Col C (3): Role
+                        cellRoleValue,           // Col C (3): Role
                         "",                      // Col D (4): Trống
                         pctStr,                  // Col E (5): Phần trăm công việc (%)
                         effortVal,               // Col F (6): Effort (Số giờ làm)
@@ -484,7 +716,7 @@ function syncTasksFormattedToSheet() {
                         "",                      // Col I (9): Trống
                         ""                       // Col J (10): Trống
                     ]);
-                    rowFormats.push({ type: 'TASK', task: t, finalStatus: finalStatus, accName: accName, role: t.role || bannerName, isParent: isParent, isSub: isSub });
+                    rowFormats.push({ type: 'TASK', task: t, finalStatus: finalStatus, accName: accName, role: cellRoleValue, isParent: isParent, isSub: isSub });
                 });
 
                 // Hàng trống phân cách 2 người khác nhau
@@ -502,55 +734,151 @@ function syncTasksFormattedToSheet() {
         }
     });
 
-    // F. Làm sạch nội dung cũ từ startRow đến cuối Sheet
-    // TUYỆT ĐỐI KHÔNG GỌI clearDataValidations() để bảo tồn nguyên vẹn quy tắc Khối (Chip) trên Google Sheet!
+    const numRows = allRowsToInsert.length;
+
+    // Nếu ô mẫu Chip Status (Cột G) nằm trong vùng sắp bị xóa (>= startRow), sao lưu tạm sang ô Z1 (ngoài vùng cột A:J)
+    let statusTemplateRange = null;
+    let usedBackupZ1 = false;
+    if (chipTemplateRowG !== -1) {
+        if (chipTemplateRowG < startRow) {
+            statusTemplateRange = sheet.getRange(chipTemplateRowG, 7);
+        } else {
+            try {
+                const backupCell = sheet.getRange(1, 26); // Ô Z1
+                sheet.getRange(chipTemplateRowG, 7).copyTo(backupCell, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+                statusTemplateRange = backupCell;
+                usedBackupZ1 = true;
+            } catch (e) {}
+        }
+    }
+
+    // F. Cập nhật trước danh sách thành viên & role mới từ DB cho các dòng phía trên startRow (ví dụ Week 95),
+    // đồng thời làm sạch toàn bộ DataValidation, nội dung và định dạng cũ từ startRow đến hết vùng dữ liệu mới (endRowNeeded).
+    // Phải xóa DataValidation tới tận endRowNeeded và flush() TRƯỚC khi setValues,
+    // vì các hàng trống bên dưới getLastRow() (ví dụ H2033) vẫn giữ DataValidation cũ chặn thành viên mới!
+    try {
+        if (existingAccountCellsAboveStart.length > 0) {
+            for (let k = 0; k < existingAccountCellsAboveStart.length; k += 50) {
+                const chunk = existingAccountCellsAboveStart.slice(k, k + 50);
+                sheet.getRangeList(chunk).setDataValidation(dynamicAccountValidation);
+            }
+        }
+        if (existingRoleCellsAboveStart.length > 0) {
+            for (let k = 0; k < existingRoleCellsAboveStart.length; k += 50) {
+                const chunk = existingRoleCellsAboveStart.slice(k, k + 50);
+                sheet.getRangeList(chunk).setDataValidation(dynamicRoleValidation);
+            }
+        }
+    } catch (e) {}
+
     lastRow = sheet.getLastRow();
+    const maxSheetRow = sheet.getMaxRows();
+    const endRowNeeded = Math.max(maxSheetRow, lastRow, startRow + Math.max(numRows, 1) - 1);
+    if (endRowNeeded >= startRow) {
+        const totalRowsToBottom = endRowNeeded - startRow + 1;
+        sheet.getRange(startRow, 1, totalRowsToBottom, 10).clearDataValidations();
+    }
     if (lastRow >= startRow) {
         const rowsToClear = lastRow - startRow + 1;
         const clearRange = sheet.getRange(startRow, 1, rowsToClear, 10);
         clearRange.clearContent();
         clearRange.clearFormat();
     }
+    SpreadsheetApp.flush();
 
     // G. Ghi toàn bộ dữ liệu liền mạch từ startRow & Áp dụng định dạng hàng loạt
-    const numRows = allRowsToInsert.length;
     if (numRows > 0) {
         const dataRange = sheet.getRange(startRow, 1, numRows, 10);
-        dataRange.setValues(allRowsToInsert);
 
-        // Chuẩn bị ma trận định dạng (2D Arrays) để cập nhật hàng loạt trong 1 lần gọi (Cực nhanh)
+        const nonTaskA1Ranges = [];
+        const weekHeaderCellA1s = [];
+        const bannerRowA1s = [];
+        const bannerCellA1s = [];
+
+        for (let i = 0; i < numRows; i++) {
+            const currRow = startRow + i;
+            const fmt = rowFormats[i];
+            if (fmt.type === 'WEEK_HEADER' || fmt.type === 'BANNER' || fmt.type === 'EMPTY') {
+                nonTaskA1Ranges.push(`A${currRow}:J${currRow}`);
+            }
+            if (fmt.type === 'WEEK_HEADER') {
+                weekHeaderCellA1s.push(`A${currRow}`);
+            } else if (fmt.type === 'BANNER') {
+                bannerRowA1s.push(`A${currRow}:J${currRow}`);
+                bannerCellA1s.push(`A${currRow}`);
+            }
+        }
+
+        // 1. Ghi dữ liệu vào Sheet (đã xóa sạch DataValidation cũ trước đó nên không bao giờ bị chặn)
+        try {
+            dataRange.setValues(allRowsToInsert);
+        } catch (valErr) {
+            Logger.log("Phát hiện xung đột DataValidation khi setValues, tự động xử lý: " + valErr.toString());
+            dataRange.clearDataValidations();
+            SpreadsheetApp.flush();
+            dataRange.setValues(allRowsToInsert);
+        }
+
+        const hasStatusChip = statusTemplateRange !== null;
+
+        // 2. Chuẩn bị ma trận định dạng (2D Arrays) để cập nhật hàng loạt trong 1 lần gọi
         const backgrounds = [];
         const fontColors = [];
         const fontWeights = [];
         const fontSizes = [];
         const fontFamilies = [];
         const horizontalAlignments = [];
+        const wraps = [];
 
         for (let i = 0; i < numRows; i++) {
             const fmt = rowFormats[i];
 
             if (fmt.type === 'WEEK_HEADER') {
+                // Hàng tiêu đề Tuần: Chữ Đỏ (#CC0000), In đậm, Cỡ 14, Không wrap để tràn ngang đẹp mắt
                 backgrounds.push(["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"]);
                 fontColors.push(["#CC0000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]);
                 fontWeights.push(["bold", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal"]);
                 fontSizes.push([14, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
                 fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
                 horizontalAlignments.push(["left", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);
+                wraps.push([false, false, false, false, false, false, false, false, false, false]);
             } else if (fmt.type === 'BANNER') {
+                // Hàng Banner Role riêng biệt: Nền Vàng (#FFE599) toàn dòng A:J, Chữ Đen In đậm ở Cột A
                 backgrounds.push(["#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599", "#FFE599"]);
                 fontColors.push(["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000"]);
                 fontWeights.push(["bold", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal", "normal"]);
                 fontSizes.push([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
                 fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
                 horizontalAlignments.push(["left", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);
+                wraps.push([false, false, false, false, false, false, false, false, false, false]);
             } else if (fmt.type === 'TASK') {
-                // Task row: Nền sạch (#FFFFFF) để Chip hiển thị dạng pill nổi bật
-                backgrounds.push(["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"]);
-                fontColors.push(["#000000", "#1E293B", "#334155", "#000000", "#0F172A", "#0F172A", "#000000", "#1E293B", "#000000", "#000000"]);
-                fontWeights.push(["normal", fmt.isParent ? "bold" : "normal", "normal", "normal", "bold", "normal", "normal", "normal", "normal", "normal"]);
+                // Task row: Nếu Sheet chưa có Chip Status thì tô màu trực tiếp cho ô Status (Cột G)
+                let statusBg = "#FFFFFF";
+                let statusColor = "#000000";
+                let statusWeight = "normal";
+                if (!hasStatusChip) {
+                    if (fmt.finalStatus === 'Done') {
+                        statusBg = "#137333";
+                        statusColor = "#FFFFFF";
+                        statusWeight = "bold";
+                    } else if (fmt.finalStatus === 'In Progress') {
+                        statusBg = "#0B57D0";
+                        statusColor = "#FFFFFF";
+                        statusWeight = "bold";
+                    } else {
+                        statusBg = "#E5E7EB";
+                        statusColor = "#374151";
+                        statusWeight = "bold";
+                    }
+                }
+
+                backgrounds.push(["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", statusBg, "#FFFFFF", "#FFFFFF", "#FFFFFF"]);
+                fontColors.push(["#000000", "#1E293B", "#334155", "#000000", "#0F172A", "#0F172A", statusColor, "#1E293B", "#000000", "#000000"]);
+                fontWeights.push(["normal", fmt.isParent ? "bold" : "normal", "normal", "normal", "bold", "normal", statusWeight, "normal", "normal", "normal"]);
                 fontSizes.push([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
                 fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
                 horizontalAlignments.push(["center", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);
+                wraps.push([false, true, false, false, false, false, false, false, false, false]);
             } else {
                 // EMPTY row
                 backgrounds.push(["#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF", "#FFFFFF"]);
@@ -559,41 +887,106 @@ function syncTasksFormattedToSheet() {
                 fontSizes.push([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
                 fontFamilies.push(["Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial", "Arial"]);
                 horizontalAlignments.push(["center", "left", "center", "center", "center", "center", "center", "center", "center", "center"]);
+                wraps.push([false, false, false, false, false, false, false, false, false, false]);
             }
         }
 
-        // Thực thi gán định dạng hàng loạt (Không can thiệp vào Data Validation)
+        // 3. Thực thi gán định dạng màu sắc & font chữ hàng loạt TRƯỚC khi gán DataValidation
         dataRange.setBackgrounds(backgrounds);
         dataRange.setFontColors(fontColors);
         dataRange.setFontWeights(fontWeights);
         dataRange.setFontSizes(fontSizes);
         dataRange.setFontFamilies(fontFamilies);
         dataRange.setHorizontalAlignments(horizontalAlignments);
-        dataRange.setWrap(true);
+        dataRange.setWraps(wraps);
 
         // Kẻ viền cho toàn bộ dữ liệu
         dataRange.setBorder(true, true, true, true, true, true, "#E2E8F0", SpreadsheetApp.BorderStyle.SOLID);
 
-        // H. Tự động dọn sạch triệt để các Dropdown/Khối thừa trên hàng Tiêu đề Tuần, Banner Role và Hàng trống
-        const nonTaskA1Ranges = [];
-        for (let i = 0; i < numRows; i++) {
-            const currRow = startRow + i;
-            const fmt = rowFormats[i];
-            if (fmt.type === 'WEEK_HEADER' || fmt.type === 'BANNER' || fmt.type === 'EMPTY') {
-                nonTaskA1Ranges.push(`A${currRow}:J${currRow}`);
+        // Ép định dạng trực tiếp lần 2 trên RangeList cho các dòng Week Header & Role Banner để đảm bảo 100% hiển thị màu chuẩn
+        if (weekHeaderCellA1s.length > 0) {
+            for (let k = 0; k < weekHeaderCellA1s.length; k += 50) {
+                const chunk = weekHeaderCellA1s.slice(k, k + 50);
+                sheet.getRangeList(chunk)
+                    .setFontColor("#CC0000")
+                    .setFontWeight("bold")
+                    .setFontSize(14)
+                    .setFontFamily("Arial")
+                    .setWrap(false);
             }
         }
 
+        if (bannerRowA1s.length > 0) {
+            for (let k = 0; k < bannerRowA1s.length; k += 50) {
+                const chunkRows = bannerRowA1s.slice(k, k + 50);
+                const chunkCells = bannerCellA1s.slice(k, k + 50);
+                sheet.getRangeList(chunkRows).setBackground("#FFE599");
+                sheet.getRangeList(chunkCells)
+                    .setFontColor("#000000")
+                    .setFontWeight("bold")
+                    .setFontSize(10)
+                    .setFontFamily("Arial")
+                    .setWrap(false);
+            }
+        }
+
+        // Flush ngay màu sắc và định dạng xuống Sheet
+        SpreadsheetApp.flush();
+
+        // 4. Gán Dropdown / Data Validation ĐỘNG (đã đồng bộ đầy đủ thành viên & role mới nhất từ Firebase DB)
+        try {
+            // Cột C (Role): Gán danh sách Role động từ DB + ROLE_ORDER
+            sheet.getRange(startRow, 3, numRows, 1).setDataValidation(dynamicRoleValidation);
+
+            // Cột G (Status): Sao chép Chip màu xanh/xám có sẵn (vì Status luôn chỉ có To do / In Progress / Done), hoặc dùng rule động
+            if (statusTemplateRange !== null) {
+                statusTemplateRange.copyTo(sheet.getRange(startRow, 7, numRows, 1), SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+            } else {
+                sheet.getRange(startRow, 7, numRows, 1).setDataValidation(dynamicStatusValidation);
+            }
+
+            // Cột H (Account): Gán danh sách Thành viên động lấy trực tiếp từ Firebase DB (/users.json + /tasks.json) + danh sách cũ trên Sheet
+            sheet.getRange(startRow, 8, numRows, 1).setDataValidation(dynamicAccountValidation);
+
+            // Cập nhật luôn danh sách thành viên & role mới từ DB cho cả các dòng phía trên startRow (ví dụ Week 95)
+            if (existingAccountCellsAboveStart.length > 0) {
+                for (let k = 0; k < existingAccountCellsAboveStart.length; k += 50) {
+                    const chunk = existingAccountCellsAboveStart.slice(k, k + 50);
+                    sheet.getRangeList(chunk).setDataValidation(dynamicAccountValidation);
+                }
+            }
+            if (existingRoleCellsAboveStart.length > 0) {
+                for (let k = 0; k < existingRoleCellsAboveStart.length; k += 50) {
+                    const chunk = existingRoleCellsAboveStart.slice(k, k + 50);
+                    sheet.getRangeList(chunk).setDataValidation(dynamicRoleValidation);
+                }
+            }
+        } catch (e) {
+            Logger.log("Lỗi khi gán DataValidation động: " + e.toString());
+        }
+
+        // 5. Dọn sạch Dropdown/Khối thừa trên hàng Tiêu đề Tuần, Banner Role và Hàng trống
         if (nonTaskA1Ranges.length > 0) {
-            // Xử lý theo từng nhóm 50 dải ô để xóa sạch Dropdown thừa ngay lập tức
             for (let k = 0; k < nonTaskA1Ranges.length; k += 50) {
                 const chunk = nonTaskA1Ranges.slice(k, k + 50);
-                sheet.getRangeList(chunk).clearDataValidations();
+                try {
+                    sheet.getRangeList(chunk).clearDataValidations();
+                } catch (e) {}
             }
         }
+
+        // Dọn ô sao lưu tạm Z1 nếu có sử dụng
+        if (usedBackupZ1) {
+            try {
+                sheet.getRange(1, 26).clearDataValidations();
+            } catch (e) {}
+        }
+
+        // Flush hoàn tất toàn bộ thay đổi
+        SpreadsheetApp.flush();
     }
 
-    SpreadsheetApp.getUi().alert(`✅ Đã đồng bộ hoàn tất! Tổng số tuần: ${sortedWeekKeys.length} tuần, tổng số dòng: ${numRows}.\nĐã tự động xóa sạch các khối thừa trên hàng Banner và hàng trống!`);
+    safeAlert(`✅ Đã đồng bộ hoàn tất! Tổng số tuần: ${sortedWeekKeys.length} tuần, tổng số dòng: ${numRows}.`);
 }
 
 /**
@@ -612,5 +1005,5 @@ function setupAutoSyncTrigger() {
         .everyMinutes(5)
         .create();
 
-    SpreadsheetApp.getUi().alert("⏰ Đã bật tự động đồng bộ ngầm mỗi 5 phút!");
+    safeAlert("⏰ Đã bật tự động đồng bộ ngầm mỗi 5 phút!");
 }
