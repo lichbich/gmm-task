@@ -79,7 +79,7 @@ import { RichDescriptionViewer } from './common/RichDescriptionViewer';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
-import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
+import { calculateTaskAccumulatedEffort, getTaskChainActivityLogs } from '../lib/taskEffortHelper';
 import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import { ensureTaskTitlePrefix } from '../lib/taskPrefixHelper';
 
@@ -378,39 +378,10 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     );
   }, [task?.assigneeAccount, users]);
 
-  // Build activity logs with fallback for legacy tasks (Hook at top level before conditional return)
+  // Build activity logs with fallback for legacy tasks and multi-week history
   const activityLogsList: TaskActivityLog[] = useMemo(() => {
-    if (!task) return [];
-    if (task.activityLogs && Array.isArray(task.activityLogs) && task.activityLogs.length > 0) {
-      return [...task.activityLogs].sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-    }
-    const logs: TaskActivityLog[] = [];
-    if (task.updatedAt && task.updatedAt !== task.createdAt) {
-      logs.push({
-        id: `legacy-update-${task.id}`,
-        timestamp: task.updatedAt,
-        authorName: assigneeUser ? assigneeUser.name : task.assigneeAccount || 'Người phụ trách',
-        authorAccount: task.assigneeAccount || 'member',
-        authorRole: 'Member',
-        actionType: 'REPORT_SUBMIT',
-        summary: `Cập nhật tiến độ: ${task.completionPercentage}%, Effort: ${task.actualEffort}h, Trạng thái: "${task.status}"`,
-      });
-    }
-    if (task.createdAt) {
-      logs.push({
-        id: `legacy-create-${task.id}`,
-        timestamp: task.createdAt,
-        authorName: task.createdBy || 'Admin',
-        authorAccount: 'Admin',
-        authorRole: 'Admin',
-        actionType: 'CREATE',
-        summary: 'Khởi tạo công việc ban đầu',
-      });
-    }
-    return logs;
-  }, [task, assigneeUser]);
+    return getTaskChainActivityLogs(task, tasks, weeklyArchives);
+  }, [task, tasks, weeklyArchives]);
 
   // Parse description for interactive checklist / sub-tasks (Hook at top level before conditional return)
   const parsedDesc = useMemo(() => parseDescription(task?.description), [task?.description]);

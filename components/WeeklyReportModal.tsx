@@ -18,11 +18,12 @@ interface WeeklyReportModalProps {
 }
 
 export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
-  task,
+  task: taskProp,
   isOpen,
   onClose,
 }) => {
   const { submitTaskReport, simulatedTime, canReportTask, users, confirmDialog, tasks, weeklyArchives, authSession } = useApp();
+  const task = useMemo(() => tasks.find((t) => t.id === taskProp?.id) || taskProp, [tasks, taskProp]);
   const [actualEffort, setActualEffort] = useState<number | string>(0);
   const [completionPercentage, setCompletionPercentage] = useState<number>(0);
   const [startDate, setStartDate] = useState<string>('');
@@ -268,11 +269,25 @@ export const WeeklyReportModal: React.FC<WeeklyReportModalProps> = ({
       return;
     }
 
-    // If progress is In Progress (> 0% and < 100%) but actual effort is 0, prompt user to enter effort
-    if (completionPercentage > 0 && completionPercentage < 100 && parsedEffort === 0) {
+    const initialPct = initialFormStateRef.current.percentage || 0;
+
+    // Rule: Khi có thêm % tiến độ (> initialPct) thì BẮT BUỘC phải có thêm effort do người dùng tự điền, KHÔNG cho phép lưu 0h!
+    if (completionPercentage < 100 && completionPercentage > initialPct && parsedEffort <= 0) {
+      confirmDialog({
+        title: 'Bắt buộc nhập số giờ thực tế',
+        message: `Bạn đang tăng tiến độ hoàn thành từ ${initialPct}% lên ${completionPercentage}%.\n\n• Theo quy định, khi có thêm tiến độ công việc thì bắt buộc phải nhập số giờ làm việc thực tế (Effort) bạn đã làm cho phần tiến độ tăng thêm này.\n• Bấm "Quay lại điền giờ" để nhập số giờ thực tế bạn đã làm trong tuần.`,
+        confirmText: 'Quay lại điền giờ',
+        type: 'warning',
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    // Nếu người dùng giữ nguyên hoặc kéo về % cũ (<= initialPct) và effort = 0, nhắc nhở nhưng vẫn cho phép lưu 0h nếu tuần này chưa làm thêm giờ
+    if (completionPercentage > 0 && completionPercentage < 100 && completionPercentage <= initialPct && parsedEffort === 0) {
       confirmDialog({
         title: 'Chưa nhập số giờ thực tế trong tuần',
-        message: `Bạn đang cập nhật tiến độ ${completionPercentage}% (In Progress) nhưng số giờ làm việc thực tế đang để 0h.\n\n• Hãy nhập số giờ thực tế bạn đã làm việc trong tuần này cho task để tính công và ghi nhận báo cáo chuẩn xác.\n• Bấm "Quay lại điền giờ" để nhập số giờ thực tế, hoặc "Vẫn lưu 0h" nếu tuần này chưa làm thêm giờ nào.`,
+        message: `Bạn đang giữ tiến độ ${completionPercentage}% nhưng số giờ làm việc thực tế tuần này đang để 0h.\n\n• Nếu tuần này chưa làm thêm giờ nào cho task, bạn có thể bấm "Vẫn lưu 0h".\n• Hoặc bấm "Quay lại điền giờ" để nhập số giờ thực tế.`,
         confirmText: 'Vẫn lưu 0h',
         cancelText: 'Quay lại điền giờ',
         type: 'warning',

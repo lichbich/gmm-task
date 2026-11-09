@@ -19,6 +19,7 @@ import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } 
 import { generateNextTaskCode, getRolePrefix, parseTaskCode } from '../lib/taskCodeHelper';
 import { LinkExistingTasksModal } from './common/LinkExistingTasksModal';
 import { WeeklyReportModal } from './WeeklyReportModal';
+import { getTaskChainActivityLogs } from '../lib/taskEffortHelper';
 
 const formatDateTime = (isoOrStr: string) => {
   if (!isoOrStr) return '';
@@ -98,7 +99,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onSelectTaskToEdit,
   onOpenReport,
 }) => {
-  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI, tasks, canReportTask, canDeleteTask } = useApp();
+  const { addTask, updateTask, deleteTask, milestones, users, currentUser, confirmDialog, roles, selectedWeek, selectedYear, simulatedTime, isUserAllowedAI, tasks, weeklyArchives, canReportTask, canDeleteTask } = useApp();
 
   // AI features enabled based on permission config (Default: Admin, LichDT, QuynhNV, NhiHT)
   const canUseAI = isUserAllowedAI(currentUser, 'assistant');
@@ -358,37 +359,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   }, [task?.assigneeAccount, users]);
 
   const activityLogsList: TaskActivityLog[] = useMemo(() => {
-    if (!task) return [];
-    if (task.activityLogs && Array.isArray(task.activityLogs) && task.activityLogs.length > 0) {
-      return [...task.activityLogs].sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
-    }
-    const logs: TaskActivityLog[] = [];
-    if (task.updatedAt && task.updatedAt !== task.createdAt) {
-      logs.push({
-        id: `legacy-update-${task.id}`,
-        timestamp: task.updatedAt,
-        authorName: assigneeUser ? assigneeUser.name : task.assigneeAccount || 'Người phụ trách',
-        authorAccount: task.assigneeAccount || 'member',
-        authorRole: 'Member',
-        actionType: 'REPORT_SUBMIT',
-        summary: `Cập nhật tiến độ: ${task.completionPercentage}%, Effort: ${task.actualEffort}h, Trạng thái: "${task.status}"`,
-      });
-    }
-    if (task.createdAt) {
-      logs.push({
-        id: `init-${task.id}`,
-        timestamp: task.createdAt,
-        authorName: task.createdBy || 'Hệ thống',
-        authorAccount: assigneeUser?.account || 'system',
-        authorRole: 'Admin',
-        actionType: 'CREATE',
-        summary: 'Khởi tạo công việc ban đầu',
-      });
-    }
-    return logs;
-  }, [task, assigneeUser]);
+    return getTaskChainActivityLogs(task, tasks, weeklyArchives);
+  }, [task, tasks, weeklyArchives]);
 
   // Mobile tab state ('form' | 'ai')
   const [activeMobileTab, setActiveMobileTab] = useState<'form' | 'ai'>('form');
@@ -983,6 +955,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           ? {
               actualEffort: safeActualEffort,
               completionPercentage: finalCompletionPercentage,
+              memberEfforts:
+                safeActualEffort === 0
+                  ? undefined
+                  : cleanSupporters.length === 0 && assigneeAccount
+                  ? { [assigneeAccount]: safeActualEffort }
+                  : task.memberEfforts,
               ...(finalCompletionPercentage === 100 || finalStatus === 'Done'
                 ? { lastSubmittedAt: task.lastSubmittedAt || new Date().toISOString() }
                 : {}),

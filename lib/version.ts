@@ -1,8 +1,8 @@
 // Application Version & Build Identification
 
-export const APP_VERSION = '2.10.1';
+export const APP_VERSION = '2.10.2';
 export const APP_RELEASE_NOTE =
-  'Hotfix v2.10.1: Cố định cứng mã task và loại bỏ hoàn toàn tự động đổi mã/ghi đè nền.';
+  'Hotfix v2.10.2: Bảo toàn nhật ký cập nhật xuyên suốt các tuần và chuẩn hóa logic nhập effort theo % tiến độ.';
 
 export const BUILD_ID = `saho-v${APP_VERSION}`;
 

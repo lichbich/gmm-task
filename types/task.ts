@@ -345,6 +345,7 @@ export interface Task {
  */
 export const getMemberTaskEffort = (task?: Task | null, account?: string): number => {
   if (!task) return 0;
+  if (!task.actualEffort || Number(task.actualEffort) <= 0 || task.completionPercentage === 0) return 0;
   if (!account || !account.trim()) return Number(task.actualEffort) || 0;
 
   const cleanAcc = account.trim().toLowerCase();

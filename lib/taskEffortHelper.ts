@@ -1,4 +1,4 @@
-import { Task, WeeklyHistoryArchive } from '../types/task';
+import { Task, WeeklyHistoryArchive, TaskActivityLog } from '../types/task';
 
 export interface WeeklyEffortItem {
   weekNumber: number;
@@ -114,4 +114,107 @@ export const calculateTaskAccumulatedEffort = (
     chainTaskCount: weeklyBreakdown.length,
     hasMultiWeekHistory: weeklyBreakdown.length > 1,
   };
+};
+
+/**
+ * Consolidates and deduplicates activity logs across the entire multi-week chain of a task
+ * (including historical archive snapshots and active tasks).
+ */
+export const getTaskChainActivityLogs = (
+  targetTask?: Task | null,
+  allTasks: Task[] = [],
+  archives: WeeklyHistoryArchive[] = []
+): TaskActivityLog[] => {
+  if (!targetTask) return [];
+
+  // 1. Gather all tasks from weekly archives snapshots
+  const allCandidatesMap = new Map<string, Task>();
+  (archives || []).forEach((archive) => {
+    (archive.tasksSnapshot || []).forEach((st) => {
+      allCandidatesMap.set(st.id, st);
+    });
+  });
+
+  // Overwrite with live tasks (live tasks have the latest real-time data)
+  (allTasks || []).forEach((t) => {
+    allCandidatesMap.set(t.id, t);
+  });
+
+  // Ensure targetTask itself is present
+  allCandidatesMap.set(targetTask.id, targetTask);
+
+  const rootId = targetTask.parentTaskId || targetTask.id;
+  const normTitle = (targetTask.title || '').trim().toLowerCase();
+  const normAssignee = (targetTask.assigneeAccount || '').trim().toLowerCase();
+  const normRole = (targetTask.role || '').trim().toLowerCase();
+
+  // 2. Filter tasks that belong to this task chain
+  const chainTasks = Array.from(allCandidatesMap.values()).filter((t) => {
+    if (t.id === targetTask.id) return true;
+    if (rootId && (t.id === rootId || t.parentTaskId === rootId)) return true;
+    if (targetTask.parentTaskId && t.id === targetTask.parentTaskId) return true;
+    if (t.parentTaskId && targetTask.parentTaskId && t.parentTaskId === targetTask.parentTaskId) return true;
+
+    // Fallback match by Title + Assignee + Role
+    const tTitle = (t.title || '').trim().toLowerCase();
+    const tAssignee = (t.assigneeAccount || '').trim().toLowerCase();
+    const tRole = (t.role || '').trim().toLowerCase();
+
+    if (tTitle === normTitle && tAssignee === normAssignee && tRole === normRole) {
+      return true;
+    }
+    return false;
+  });
+
+  // 3. Consolidate activity logs with deduplication
+  const seenLogIds = new Set<string>();
+  const seenSignatures = new Set<string>();
+  const combinedLogs: TaskActivityLog[] = [];
+
+  const addLog = (log: TaskActivityLog) => {
+    if (!log) return;
+    if (log.id && seenLogIds.has(log.id)) return;
+
+    // Signature to deduplicate identical logs that might have different generated IDs
+    const signature = `${log.timestamp}_${log.actionType}_${log.summary}_${log.authorAccount || ''}`;
+    if (seenSignatures.has(signature)) return;
+
+    if (log.id) seenLogIds.add(log.id);
+    seenSignatures.add(signature);
+    combinedLogs.push(log);
+  };
+
+  chainTasks.forEach((t) => {
+    if (Array.isArray(t.activityLogs) && t.activityLogs.length > 0) {
+      t.activityLogs.forEach((log) => addLog(log));
+    } else {
+      // Legacy fallback
+      if (t.updatedAt && t.updatedAt !== t.createdAt) {
+        addLog({
+          id: `legacy-update-${t.id}`,
+          timestamp: t.updatedAt,
+          authorName: t.assigneeAccount || 'Người phụ trách',
+          authorAccount: t.assigneeAccount || 'member',
+          authorRole: 'Member',
+          actionType: 'REPORT_SUBMIT',
+          summary: `[Tuần ${t.weekNumber || '?'}] Cập nhật tiến độ: ${t.completionPercentage}%, Effort: ${t.actualEffort}h, Trạng thái: "${t.status}"`,
+        });
+      }
+      if (t.createdAt) {
+        addLog({
+          id: `legacy-create-${t.id}`,
+          timestamp: t.createdAt,
+          authorName: t.createdBy || 'Admin',
+          authorAccount: 'Admin',
+          authorRole: 'Admin',
+          actionType: 'CREATE',
+          summary: `Khởi tạo công việc ban đầu [Tuần ${t.weekNumber || '?'}]`,
+        });
+      }
+    }
+  });
+
+  return combinedLogs.sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
 };

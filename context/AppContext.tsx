@@ -2042,7 +2042,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedBy: creatorDisplay,
       updatedAt: nowIso,
       priority: taskData.priority || 'Medium',
-      activityLogs: [initialLog],
+      activityLogs:
+        Array.isArray(taskData.activityLogs) && taskData.activityLogs.length > 0
+          ? taskData.activityLogs
+          : [initialLog],
     };
     let updated = [...tasks, newTask];
     let parentToSync: Task | null = null;
@@ -2105,8 +2108,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // If completionPercentage is explicitly set to 0 or is 0, ensure actualEffort is 0 and status is To do (cannot be Done)
       const effectivePct = updates.completionPercentage !== undefined ? updates.completionPercentage : (t.completionPercentage || 0);
       let nextStatus: TaskStatus = updates.status || t.status || 'To do';
-      if (effectivePct === 0) {
+      if (effectivePct === 0 || updates.actualEffort === 0) {
         updates.actualEffort = 0;
+        if (updates.memberEfforts === undefined && t.memberEfforts) {
+          const clearedMemberEfforts: Record<string, number> = {};
+          Object.keys(t.memberEfforts).forEach((k) => { clearedMemberEfforts[k] = 0; });
+          updates.memberEfforts = clearedMemberEfforts;
+        }
         if (nextStatus === 'Done') {
           nextStatus = 'To do';
         }
@@ -2687,7 +2695,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           0,
           actualEffort > 0
             ? actualEffort
-            : estEffort
+            : (completionPercentage === 100 ? estEffort : 0)
         )
       );
       if (reportingAccount) {
@@ -2709,7 +2717,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       finalTotalActualEffort = Math.min(
         24,
-        Math.max(0, actualEffort > 0 ? actualEffort : estEffort)
+        Math.max(0, actualEffort > 0 ? actualEffort : (completionPercentage === 100 ? estEffort : 0))
       );
     }
 
@@ -3039,6 +3047,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           weekNumber: nextWeek,
           year: selectedYear,
           actualEffort: 0,
+          memberEfforts: undefined,
           status: isProgress ? 'In Progress' : 'To do',
           completionPercentage: t.completionPercentage || 0,
           lastSubmittedAt: undefined,
