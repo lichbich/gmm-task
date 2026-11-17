@@ -12,6 +12,7 @@ interface WelcomeEmailPayload {
   role?: string;
   specializations?: string[];
   specializationRoles?: Record<string, string>;
+  specializationNames?: Record<string, string>;
   cccd?: string;
   bankAccount?: string;
   phone?: string;
@@ -21,6 +22,15 @@ interface WelcomeEmailPayload {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const ROLE_NAME_FALLBACKS: Record<string, string> = {
+  DES: 'Designer',
+  DESIGN: 'Designer',
+  OPS: 'DevOps',
+  QC: 'QC / Tester',
+  PM: 'Project Manager',
+  BOF: 'Back Office',
+};
 
 /**
  * Escape special HTML characters to prevent injection inside email templates.
@@ -35,22 +45,50 @@ function escapeHtml(value: unknown): string {
 }
 
 /**
- * Format role & specialization assignments into a readable summary string.
+ * Resolve a role code (e.g. "DES") to its display name (e.g. "Designer").
+ */
+function resolveRoleDisplayName(
+  specCode: string,
+  specializationNames?: Record<string, string>
+): string {
+  const direct = specializationNames?.[specCode]?.trim();
+  if (direct) return direct;
+
+  const upperCode = specCode.trim().toUpperCase();
+  if (specializationNames) {
+    for (const [k, v] of Object.entries(specializationNames)) {
+      if (k.trim().toUpperCase() === upperCode && v?.trim()) {
+        return v.trim();
+      }
+    }
+  }
+
+  return ROLE_NAME_FALLBACKS[upperCode] || specCode;
+}
+
+/**
+ * Format role & specialization assignments into a readable display-name summary string.
  */
 function formatRoleSummary(
   role?: string,
   specializations?: string[],
-  specializationRoles?: Record<string, string>
+  specializationRoles?: Record<string, string>,
+  specializationNames?: Record<string, string>
 ): string {
   const specs = Array.isArray(specializations) ? specializations.filter(Boolean) : [];
+  const specDisplayNames = specs.map((spec) => resolveRoleDisplayName(spec, specializationNames));
+
   if (role === 'Admin') {
-    return specs.length > 0 ? `Admin (Quản trị hệ thống) • ${specs.join(', ')}` : 'Admin (Quản trị hệ thống)';
+    return specDisplayNames.length > 0
+      ? `Admin (Quản trị hệ thống) • ${specDisplayNames.join(', ')}`
+      : 'Admin (Quản trị hệ thống)';
   }
   if (specs.length > 0) {
     return specs
       .map((spec) => {
+        const displayName = resolveRoleDisplayName(spec, specializationNames);
         const specRole = specializationRoles?.[spec] || role || 'Member';
-        return `${spec} (${specRole})`;
+        return `${displayName} (${specRole})`;
       })
       .join(', ');
   }
@@ -58,11 +96,37 @@ function formatRoleSummary(
 }
 
 /**
+ * Build a warm welcome sentence right after the greeting based on assigned team/role display names.
+ */
+function buildWelcomeLine(
+  role?: string,
+  specializations?: string[],
+  specializationNames?: Record<string, string>
+): string {
+  const specs = Array.isArray(specializations) ? specializations.filter(Boolean) : [];
+  if (role === 'Admin' || specs.length === 0) {
+    return 'Chào mừng bạn gia nhập team Saho!';
+  }
+  const specDisplayNames = specs.map((spec) => resolveRoleDisplayName(spec, specializationNames));
+  return `Chào mừng bạn gia nhập team ${specDisplayNames.join(', ')} của Saho!`;
+}
+
+/**
  * Build subject, HTML body, and plain-text body in a clean human-written format
  * to minimize spam filtering while keeping account & profile details easy to read.
  */
 function buildWelcomeEmailContent(payload: WelcomeEmailPayload, appUrl: string, senderName: string) {
-  const roleSummary = formatRoleSummary(payload.role, payload.specializations, payload.specializationRoles);
+  const roleSummary = formatRoleSummary(
+    payload.role,
+    payload.specializations,
+    payload.specializationRoles,
+    payload.specializationNames
+  );
+  const welcomeLine = buildWelcomeLine(
+    payload.role,
+    payload.specializations,
+    payload.specializationNames
+  );
   const candidateRows: Array<{ label: string; value: string }> = [
     { label: 'Họ và tên', value: payload.name.trim() },
     { label: 'Email', value: payload.email.trim() },
@@ -89,6 +153,7 @@ function buildWelcomeEmailContent(payload: WelcomeEmailPayload, appUrl: string, 
     .join('');
 
   const safeName = escapeHtml(payload.name.trim());
+  const safeWelcomeLine = escapeHtml(welcomeLine);
   const safeAccount = escapeHtml(payload.account.trim());
   const safeTempPass = escapeHtml(payload.tempPassword);
   const safeRoleSummary = escapeHtml(roleSummary);
@@ -107,6 +172,8 @@ function buildWelcomeEmailContent(payload: WelcomeEmailPayload, appUrl: string, 
 <body style="margin:0;padding:16px;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;font-size:14px;line-height:1.6;color:#1f2937;">
   <div style="max-width:580px;">
     <p style="margin:0 0 12px;">Chào ${safeName},</p>
+
+    <p style="margin:0 0 12px;">${safeWelcomeLine}</p>
 
     <p style="margin:0 0 14px;">
       Mình gửi bạn thông tin tài khoản vừa tạo trên hệ thống quản lý công việc <strong>Saho Task</strong> để bạn truy cập và nhận task cùng team:
@@ -161,6 +228,8 @@ function buildWelcomeEmailContent(payload: WelcomeEmailPayload, appUrl: string, 
 
   const text = [
     `Chào ${payload.name.trim()},`,
+    ``,
+    welcomeLine,
     ``,
     `Mình gửi bạn thông tin tài khoản vừa tạo trên hệ thống quản lý công việc Saho Task để bạn truy cập và nhận task cùng team:`,
     `- Trang truy cập: ${appUrl}`,
@@ -272,6 +341,7 @@ export async function POST(req: NextRequest) {
         role: body.role,
         specializations: body.specializations,
         specializationRoles: body.specializationRoles,
+        specializationNames: body.specializationNames,
         cccd: body.cccd,
         bankAccount: body.bankAccount,
         phone: body.phone,

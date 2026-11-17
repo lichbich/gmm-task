@@ -290,6 +290,7 @@ interface WelcomeEmailRequest {
   role?: string;
   specializations?: string[];
   specializationRoles?: Record<string, string>;
+  specializationNames?: Record<string, string>;
   cccd?: string;
   bankAccount?: string;
   phone?: string;
@@ -1008,6 +1009,13 @@ export const UserManagementView: React.FC = () => {
         if (res?.tempPassword) {
           const trimmedEmail = payload.email.trim();
           const hasValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail);
+          const specializationNames: Record<string, string> = {};
+          payload.specializations.forEach((specCode) => {
+            const matchedRole = roles.find(
+              (r) => r.code.trim().toLowerCase() === specCode.trim().toLowerCase()
+            );
+            specializationNames[specCode] = matchedRole?.name?.trim() || specCode;
+          });
           const emailPayload: WelcomeEmailRequest | undefined = hasValidEmail
             ? {
                 name: res.user.name,
@@ -1017,6 +1025,7 @@ export const UserManagementView: React.FC = () => {
                 role: payload.role,
                 specializations: payload.specializations,
                 specializationRoles: payload.specializationRoles,
+                specializationNames,
                 cccd: payload.cccd,
                 bankAccount: payload.bankAccount,
                 phone: payload.phone,
