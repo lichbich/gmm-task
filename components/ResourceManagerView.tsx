@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useSyncModalUrl, parseSahoRoute } from '../lib/sahoUrl';
 import { ProjectResource, ResourceLevel, isUserAdminOrPM } from '../types/task';
 import {
   FolderGit2,
@@ -27,6 +28,7 @@ import {
   Star,
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
+import { Modal } from './common/Modal';
 import {
   getPinnedResourceIds,
   togglePinResourceId,
@@ -246,7 +248,7 @@ export const ResourceManagerView: React.FC = () => {
     );
   };
 
-  const handleCloseResourceModal = () => {
+  const checkResourceDirtyAndConfirmClose = (): boolean => {
     if (isResourceDirty()) {
       confirmDialog({
         title: 'Nội dung chưa được lưu',
@@ -256,21 +258,43 @@ export const ResourceManagerView: React.FC = () => {
         type: 'warning',
         onConfirm: () => setIsModalOpen(false),
       });
-    } else {
+      return false;
+    }
+    return true;
+  };
+
+  const handleCloseResourceModal = () => {
+    if (checkResourceDirtyAndConfirmClose()) {
       setIsModalOpen(false);
     }
   };
 
+  const resourceModalUrl = !isModalOpen
+    ? null
+    : editingResId
+    ? `/resources/${encodeURIComponent(editingResId)}/edit`
+    : '/resources/create';
+
+  useSyncModalUrl(
+    isModalOpen,
+    resourceModalUrl,
+    () => setIsModalOpen(false),
+    editingResId ? 'Chỉnh Sửa Resource' : 'Tạo Resource Mới'
+  );
+
+  const deepLinkResourceHandledRef = React.useRef(false);
   React.useEffect(() => {
-    if (!isModalOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleCloseResourceModal();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, resName, resContent, resLevel, resTool, resPrimaryLink, resOriginLink, resPrimaryLinkLabel, resOriginLinkLabel, editingResId, resources]);
+    if (typeof window === 'undefined' || deepLinkResourceHandledRef.current) return;
+    const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+    if (parsed.modal?.kind === 'resource-create') {
+      deepLinkResourceHandledRef.current = true;
+      if (canManage) handleOpenAddModal();
+    } else if (parsed.modal?.kind === 'resource-edit' && parsed.modal.id && resources.length > 0) {
+      deepLinkResourceHandledRef.current = true;
+      const found = resources.find((r) => r.id === parsed.modal?.id);
+      if (found && canManage) handleOpenEditModal(found);
+    }
+  }, [resources, canManage]);
 
   const handleDelete = (res: ProjectResource) => {
     confirmDialog({
@@ -312,20 +336,20 @@ export const ResourceManagerView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Banner Header */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
+      <div className="saho-hero-card border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-4 sm:p-5 space-y-3.5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                <FolderGit2 className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
+              <h2 className="text-base sm:text-xl font-bold text-[#1D202A] dark:text-slate-100 tracking-tight flex items-center gap-2">
+                <FolderGit2 className="w-5 h-5 sm:w-6 sm:h-6 text-[#1890FF]" />
                 <span className="sm:hidden">Tài Liệu Dự Án</span>
                 <span className="hidden sm:inline">Quản Lý Resource & Tài Liệu Dự Án</span>
               </h2>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-300">
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-[12px] bg-[rgba(24,144,255,0.14)] text-[#1890FF]">
                 {resources.length} Hạng Mục
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-[#838899] dark:text-slate-400 mt-1">
               Kho lưu trữ tập trung toàn bộ các liên kết tài liệu, thiết kế Figma, sơ đồ kiến trúc Draw.io, SRS và tài liệu chuẩn của dự án.
             </p>
           </div>
@@ -333,7 +357,7 @@ export const ResourceManagerView: React.FC = () => {
           {canManage && (
             <button
               onClick={handleOpenAddModal}
-              className="flex items-center gap-2 px-4 py-2 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition shrink-0 active:scale-95"
+              className="flex items-center gap-2 h-[34px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition shrink-0 active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               Thêm Resource Mới
@@ -342,22 +366,22 @@ export const ResourceManagerView: React.FC = () => {
         </div>
 
         {/* Filter Toolbar & Search Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-3 border-t border-slate-100">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-3 border-t border-[#E8E9EF] dark:border-slate-800">
           {/* MOBILE SEARCH & FILTER BAR (< md) */}
           <div className="flex md:hidden items-center gap-2">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-[#838899] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Tìm kiếm tài liệu, sơ đồ..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
+                className="w-full h-[34px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] pl-9 pr-8 text-xs text-[#1D202A] font-medium focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] transition"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A2A6B4] hover:text-[#1D202A] p-0.5"
                   title="Xóa tìm kiếm"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -368,27 +392,29 @@ export const ResourceManagerView: React.FC = () => {
             {/* Mobile Round Filter Button */}
             <button
               onClick={() => setIsMobileFilterOpen(true)}
-              className={`relative w-9 h-9 rounded-xl flex items-center justify-center border transition-all shrink-0 cursor-pointer active:scale-95 ${
+              className={`relative w-[34px] h-[34px] rounded-[8px] flex items-center justify-center border transition-all shrink-0 cursor-pointer active:scale-95 ${
                 activeFilterCount > 0
-                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                  : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
+                  ? 'bg-[#1890FF] border-[#1890FF] text-white'
+                  : 'bg-white hover:border-[#A2A6B4] border-[#E8E9EF] text-[#838899]'
               }`}
               title="Mở bộ lọc tài liệu"
             >
               <SlidersHorizontal className="w-4 h-4" />
               {activeFilterCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#FF4D4F] text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
                   {activeFilterCount}
                 </span>
               )}
             </button>
 
-            {/* Mobile View Switcher (Compact Icons) */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 shrink-0">
+            {/* Mobile View Switcher (Figma group button) */}
+            <div className="flex items-center bg-white dark:bg-slate-900 rounded-[8px] border border-[#E8E9EF] dark:border-slate-700 overflow-hidden shrink-0">
               <button
                 onClick={() => setViewMode('GRID')}
-                className={`p-1.5 rounded-lg transition active:scale-95 ${
-                  viewMode === 'GRID' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                className={`w-[32px] h-[32px] flex items-center justify-center transition ${
+                  viewMode === 'GRID'
+                    ? 'bg-[rgba(64,169,255,0.16)] text-[#1890FF]'
+                    : 'text-[#838899] hover:text-[#1D202A]'
                 }`}
                 title="Dạng Card"
               >
@@ -396,8 +422,10 @@ export const ResourceManagerView: React.FC = () => {
               </button>
               <button
                 onClick={() => setViewMode('TABLE')}
-                className={`p-1.5 rounded-lg transition active:scale-95 ${
-                  viewMode === 'TABLE' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                className={`w-[32px] h-[32px] flex items-center justify-center transition ${
+                  viewMode === 'TABLE'
+                    ? 'bg-[rgba(64,169,255,0.16)] text-[#1890FF]'
+                    : 'text-[#838899] hover:text-[#1D202A]'
                 }`}
                 title="Dạng Bảng"
               >
@@ -411,13 +439,13 @@ export const ResourceManagerView: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
               {/* Search Input */}
               <div className="relative flex-1 min-w-[180px] max-w-sm">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <Search className="w-4 h-4 text-[#838899] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Tìm kiếm tài liệu, sơ đồ, Figma..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition"
+                  className="w-full h-[32px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] pl-9 pr-8 text-[13px] text-[#1D202A] font-medium placeholder:text-[#838899] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] transition"
                 />
                 {searchQuery && (
                   <button
@@ -460,29 +488,29 @@ export const ResourceManagerView: React.FC = () => {
             </div>
 
             {/* Desktop View Switcher: Card Grid vs Table View */}
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 gap-1 ml-auto">
+            <div className="flex items-center bg-white dark:bg-slate-900 rounded-[8px] border border-[#E8E9EF] dark:border-slate-700 overflow-hidden shrink-0 ml-auto">
               <button
                 onClick={() => setViewMode('GRID')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 whitespace-nowrap ${
+                className={`flex items-center gap-1.5 h-[32px] px-3 text-xs font-medium transition whitespace-nowrap cursor-pointer ${
                   viewMode === 'GRID'
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[rgba(64,169,255,0.16)] text-[#1890FF] font-semibold'
+                    : 'text-[#838899] hover:text-[#1D202A]'
                 }`}
                 title="Xem dưới dạng Card phân cấp"
               >
-                <LayoutGrid className="w-3.5 h-3.5 text-indigo-600" />
+                <LayoutGrid className={`w-3.5 h-3.5 ${viewMode === 'GRID' ? 'text-[#1890FF]' : 'text-[#838899]'}`} />
                 Dạng Card
               </button>
               <button
                 onClick={() => setViewMode('TABLE')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 whitespace-nowrap ${
+                className={`flex items-center gap-1.5 h-[32px] px-3 text-xs font-medium transition whitespace-nowrap border-l border-[#E8E9EF] dark:border-slate-700 cursor-pointer ${
                   viewMode === 'TABLE'
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[rgba(64,169,255,0.16)] text-[#1890FF] font-semibold'
+                    : 'text-[#838899] hover:text-[#1D202A]'
                 }`}
                 title="Xem dưới dạng Bảng như Google Sheet gốc"
               >
-                <TableIcon className="w-3.5 h-3.5 text-indigo-600" />
+                <TableIcon className={`w-3.5 h-3.5 ${viewMode === 'TABLE' ? 'text-[#1890FF]' : 'text-[#838899]'}`} />
                 Dạng Bảng Excel
               </button>
             </div>
@@ -755,9 +783,9 @@ export const ResourceManagerView: React.FC = () => {
 
           {/* Desktop Table (>= md) */}
           <div className="hidden md:block overflow-x-auto custom-scrollbar relative">
-            <table className="w-full text-left text-xs border-collapse min-w-[960px]">
+            <table className="w-full text-left text-[13px] border-collapse min-w-[960px]">
               <thead>
-                <tr className="bg-slate-100 text-slate-700 font-extrabold uppercase tracking-wider border-b border-slate-200 text-[10px]">
+                <tr className="h-[40px] bg-[rgba(73,82,106,0.03)] dark:bg-slate-800/80 text-[#838899] font-semibold uppercase tracking-wide border-b border-[#E8E9EF] dark:border-slate-700 text-[11px]">
                   <th className="py-3 px-3 w-10 text-center whitespace-nowrap">STT</th>
                   <th className="py-3 px-3 w-36 whitespace-nowrap">LEVEL</th>
                   <th className="py-3 px-3 min-w-[150px]">NAME (HẠNG MỤC)</th>
@@ -765,7 +793,7 @@ export const ResourceManagerView: React.FC = () => {
                   <th className="py-3 px-3 text-center w-28 whitespace-nowrap">TOOL</th>
                   <th className="py-3 px-4 min-w-[180px]">LINK (BREAK DOWN) - ƯU TIÊN</th>
                   <th className="py-3 px-4 min-w-[180px]">LINK (ORIGIN) - ĐẶC BIỆT</th>
-                  <th className="py-3 px-4 text-center w-24 sticky right-0 bg-slate-100 border-l border-slate-200 z-10 shadow-sm text-slate-800 whitespace-nowrap">
+                  <th className="py-3 px-4 text-center w-24 sticky right-0 bg-[#F8FAFB] dark:bg-slate-800 border-l border-[#E8E9EF] dark:border-slate-700 z-10 text-[#1D202A] dark:text-slate-200 whitespace-nowrap">
                     THAO TÁC
                   </th>
                 </tr>
@@ -805,12 +833,12 @@ export const ResourceManagerView: React.FC = () => {
                               href={r.primaryLink}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-indigo-600 font-bold hover:underline inline-flex items-center gap-1 truncate max-w-[220px]"
+                              className="text-[#1890FF] font-semibold hover:underline inline-flex items-center gap-1 truncate max-w-[220px]"
                               title={r.primaryLink}
                             >
-                              <Link2 className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                              <Link2 className="w-3.5 h-3.5 text-[#1890FF] shrink-0" />
                               <span className="truncate">{r.primaryLinkLabel || 'Mở tài liệu'}</span>
-                              <ExternalLink className="w-3 h-3 text-indigo-400 shrink-0" />
+                              <ExternalLink className="w-3 h-3 text-[#40A9FF] shrink-0" />
                             </a>
                           ) : (
                             <span className="text-slate-400 italic text-[11px]">Không có link</span>
@@ -879,32 +907,33 @@ export const ResourceManagerView: React.FC = () => {
       )}
 
       {/* ADD / EDIT RESOURCE MODAL */}
-      {isModalOpen && (
-        <div
-          className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              handleCloseResourceModal();
-            }
-          }}
-        >
-          <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 relative">
-            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 bg-white shrink-0">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                <FolderGit2 className="w-4 h-4 text-indigo-600" />
-                {editingResId ? 'Chỉnh Sửa Resource Dự Án' : 'Thêm Resource / Tài Liệu Mới'}
-              </div>
-              <button
-                type="button"
-                onClick={handleCloseResourceModal}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="p-4 sm:p-6 space-y-4 text-xs overflow-y-auto flex-1 min-h-0 overscroll-contain">
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onRequestClose={checkResourceDirtyAndConfirmClose}
+        size="lg"
+        icon={<FolderGit2 className="w-4 h-4 text-[#1890FF]" />}
+        title={editingResId ? 'Chỉnh Sửa Resource Dự Án' : 'Thêm Resource / Tài Liệu Mới'}
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleCloseResourceModal}
+              className="saho-modal-btn-secondary"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              form="resource-modal-form"
+              className="saho-modal-btn-primary px-5"
+            >
+              {editingResId ? 'Lưu Thay Đổi' : 'Tạo Resource'}
+            </button>
+          </div>
+        }
+      >
+        <form id="resource-modal-form" onSubmit={handleSubmit} className="space-y-4 text-xs">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1">
                     Cấp Phân Loại Level: <span className="text-red-500">*</span>
@@ -1009,116 +1038,81 @@ export const ResourceManagerView: React.FC = () => {
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-500 focus:bg-white"
                   />
                 </div>
-              </div>
+        </form>
+      </Modal>
 
-              <div className="flex items-center justify-end gap-2 p-3.5 sm:p-4 border-t border-slate-100 bg-slate-50/80 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleCloseResourceModal}
-                  className="px-3.5 sm:px-4 py-2 bg-slate-100 text-slate-600 font-semibold rounded-xl hover:bg-slate-200 transition cursor-pointer text-xs sm:text-sm"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 sm:px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition cursor-pointer text-xs sm:text-sm active:scale-95"
-                >
-                  {editingResId ? 'Lưu Thay Đổi' : 'Tạo Resource'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* MOBILE FILTER MODAL / BOTTOM SHEET */}
-      {isMobileFilterOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 dark:text-slate-100">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-800/40">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                  <SlidersHorizontal className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                    Bộ Lọc Tài Liệu & Sơ Đồ
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    {activeFilterCount > 0 ? `Đang chọn ${activeFilterCount} bộ lọc` : 'Tất cả điều kiện mặc định'}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setIsMobileFilterOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 flex items-center justify-center transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-5 space-y-4 overflow-y-auto text-xs">
-              {/* Level Filter */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-200 block">
-                  Cấp Phân Loại (Level):
-                </label>
-                <Dropdown
-                  value={selectedLevelFilter}
-                  onChange={setSelectedLevelFilter}
-                  options={[
-                    { value: 'ALL', label: 'Tất Cả Level' },
-                    ...LEVEL_OPTIONS.map((l) => ({ value: l.id, label: l.id })),
-                  ]}
-                  className="w-full"
-                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
-                />
-              </div>
-
-              {/* Tool Filter */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-200 block">
-                  Công Cụ Sử Dụng (Tool):
-                </label>
-                <Dropdown
-                  value={selectedToolFilter}
-                  onChange={setSelectedToolFilter}
-                  options={[
-                    { value: 'ALL', label: 'Tất Cả Công Cụ (Tools)' },
-                    { value: 'Draw.io', label: 'Draw.io Diagram' },
-                    { value: 'Figma', label: 'Figma Design' },
-                    { value: 'Sheet', label: 'Google Sheets' },
-                    { value: 'Doc', label: 'Google Docs' },
-                    { value: 'AI Studio', label: 'Google AI Studio' },
-                  ]}
-                  className="w-full"
-                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
-                />
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between gap-3 shrink-0">
-              <button
-                onClick={handleResetFilters}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer active:scale-95"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Đặt lại
-              </button>
-
-              <button
-                onClick={() => setIsMobileFilterOpen(false)}
-                className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition cursor-pointer active:scale-95 text-center"
-              >
-                Áp Dụng ({filteredResources.length} mục)
-              </button>
-            </div>
+      <Modal
+        isOpen={isMobileFilterOpen}
+        onClose={() => setIsMobileFilterOpen(false)}
+        size="md"
+        bodyClassName="space-y-4 text-xs"
+        icon={
+          <div className="w-8 h-8 rounded-[8px] bg-[rgba(24,144,255,0.12)] dark:bg-sky-950/60 text-[#1890FF] dark:text-[#40A9FF] flex items-center justify-center">
+            <SlidersHorizontal className="w-4 h-4" />
           </div>
+        }
+        title="Bộ Lọc Tài Liệu & Sơ Đồ"
+        description={activeFilterCount > 0 ? `Đang chọn ${activeFilterCount} bộ lọc` : 'Tất cả điều kiện mặc định'}
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="saho-modal-btn-secondary flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Đặt lại
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(false)}
+              className="saho-modal-btn-primary flex-1 text-center"
+            >
+              Áp Dụng ({filteredResources.length} mục)
+            </button>
+          </div>
+        }
+      >
+        {/* Level Filter */}
+        <div className="space-y-1.5">
+          <label className="font-bold text-slate-700 dark:text-slate-200 block">
+            Cấp Phân Loại (Level):
+          </label>
+          <Dropdown
+            value={selectedLevelFilter}
+            onChange={setSelectedLevelFilter}
+            options={[
+              { value: 'ALL', label: 'Tất Cả Level' },
+              ...LEVEL_OPTIONS.map((l) => ({ value: l.id, label: l.id })),
+            ]}
+            className="w-full"
+            buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+          />
         </div>
-      )}
+
+        {/* Tool Filter */}
+        <div className="space-y-1.5">
+          <label className="font-bold text-slate-700 dark:text-slate-200 block">
+            Công Cụ Sử Dụng (Tool):
+          </label>
+          <Dropdown
+            value={selectedToolFilter}
+            onChange={setSelectedToolFilter}
+            options={[
+              { value: 'ALL', label: 'Tất Cả Công Cụ (Tools)' },
+              { value: 'Draw.io', label: 'Draw.io Diagram' },
+              { value: 'Figma', label: 'Figma Design' },
+              { value: 'Sheet', label: 'Google Sheets' },
+              { value: 'Doc', label: 'Google Docs' },
+              { value: 'AI Studio', label: 'Google AI Studio' },
+            ]}
+            className="w-full"
+            buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+          />
+        </div>
+      </Modal>
     </div>
   );
 };

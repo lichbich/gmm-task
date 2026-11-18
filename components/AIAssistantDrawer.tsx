@@ -505,6 +505,17 @@ export const AIAssistantDrawer: React.FC = () => {
     }
   }, [isOpen, messages]);
 
+  useEffect(() => {
+    const handleToggle = () => setIsOpen((prev) => !prev);
+    const handleOpen = () => setIsOpen(true);
+    window.addEventListener('saho-toggle-ai-assistant', handleToggle);
+    window.addEventListener('saho-open-ai-assistant', handleOpen);
+    return () => {
+      window.removeEventListener('saho-toggle-ai-assistant', handleToggle);
+      window.removeEventListener('saho-open-ai-assistant', handleOpen);
+    };
+  }, []);
+
   const scrollSuggestions = (direction: 'left' | 'right') => {
     if (suggestionsRef.current) {
       const scrollAmount = direction === 'left' ? -220 : 220;
@@ -674,45 +685,28 @@ export const AIAssistantDrawer: React.FC = () => {
 
   return (
     <>
-      {/* Floating Action Button */}
-      <div className="fixed bottom-20 sm:bottom-6 left-4 sm:left-6 z-40">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          title="Trợ Lý AI Dự Án Saho"
-          className="group relative flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-2xl shadow-xl shadow-purple-600/30 active:scale-95 transition-all duration-200 cursor-pointer border border-white/20"
-        >
-          <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 animate-pulse" />
-          </div>
-          <span className="text-xs font-bold tracking-tight pr-1 hidden sm:inline">
-            AI Trợ Lý Dự Án
-          </span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute -top-0.5 -right-0.5" />
-        </button>
-      </div>
-
-      {/* Floating Chat Drawer / Popover */}
+      {/* Floating Chat Drawer / Popover (Triggered from Sidebar AI Assistant button) */}
       {isOpen && (
         <div
           {...hoverScrollProps}
-          className={`fixed bottom-36 sm:bottom-20 left-3 sm:left-6 z-50 w-[calc(100vw-1.5rem)] max-h-[82vh] bg-white dark:bg-slate-900 border border-purple-500/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden overscroll-contain animate-in slide-in-from-bottom-5 fade-in duration-200 transition-all ${
+          className={`fixed bottom-20 sm:bottom-4 left-3 sm:left-6 lg:left-[calc(var(--saho-sidebar-width,256px)+16px)] z-[90] w-[calc(100vw-1.5rem)] max-h-[82vh] bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-700 rounded-[16px] shadow-2xl flex flex-col overflow-hidden overscroll-contain animate-in slide-in-from-bottom-5 fade-in duration-200 transition-all ${
             isExpanded ? 'sm:w-[720px] h-[680px]' : 'sm:w-[480px] h-[580px]'
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-purple-900/95 to-indigo-900/95 text-white shrink-0">
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/10 bg-gradient-to-r from-[#096DD9] to-[#1890FF] text-white shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
+              <div className="w-8 h-8 rounded-[10px] bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
                 <Bot className="w-4 h-4" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
                   <h4 className="text-xs sm:text-sm font-bold tracking-tight">AI Trợ Lý Dự Án</h4>
-                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  <span className="px-1.5 py-0.2 rounded-[5px] text-[9px] font-bold bg-[#0AB185]/25 text-white border border-[#0AB185]/50">
                     Live Data
                   </span>
                 </div>
-                <p className="text-[10px] text-purple-200 truncate">
+                <p className="text-[10px] text-white/80 truncate">
                   Đã kết nối dữ liệu Tuần {selectedWeek}/{selectedYear}
                 </p>
               </div>
@@ -722,21 +716,21 @@ export const AIAssistantDrawer: React.FC = () => {
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
                 title={isExpanded ? 'Thu nhỏ cửa sổ' : 'Mở rộng toàn màn hình'}
-                className="p-1.5 text-purple-200 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer hidden sm:flex"
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/15 rounded-[8px] transition-colors cursor-pointer hidden sm:flex"
               >
                 {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
               </button>
               <button
                 onClick={handleClearHistory}
                 title="Xóa lịch sử chat"
-                className="p-1.5 text-purple-200 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/15 rounded-[8px] transition-colors cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => setIsOpen(false)}
                 title="Đóng cửa sổ"
-                className="p-1.5 text-purple-200 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 text-white/80 hover:text-white hover:bg-white/15 rounded-[8px] transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -744,22 +738,22 @@ export const AIAssistantDrawer: React.FC = () => {
           </div>
 
           {/* Messages Thread */}
-          <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3.5 bg-slate-50/60 dark:bg-slate-950/60 text-xs overscroll-contain">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-3.5 bg-[#F8FAFB] dark:bg-slate-950/60 text-xs overscroll-contain">
             {messages.map((msg, idx) => (
               <div
                 key={idx}
                 className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {msg.role === 'model' && (
-                  <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-xs">
+                  <div className="w-6 h-6 rounded-[8px] bg-gradient-to-tr from-[#096DD9] to-[#1890FF] flex items-center justify-center text-white shrink-0 mt-0.5 shadow-xs">
                     <Sparkles className="w-3.5 h-3.5" />
                   </div>
                 )}
                 <div
-                  className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 leading-relaxed break-words shadow-xs ${
+                  className={`max-w-[90%] rounded-[12px] px-3.5 py-2.5 leading-relaxed break-words shadow-xs ${
                     msg.role === 'user'
-                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-br-xs font-medium'
-                      : 'bg-white dark:bg-slate-800/95 text-slate-800 dark:text-slate-100 border border-slate-200/90 dark:border-slate-700/80 rounded-bl-xs'
+                      ? 'bg-[#1890FF] text-white rounded-br-xs font-medium'
+                      : 'bg-white dark:bg-slate-800/95 text-[#22293C] dark:text-slate-100 border border-[#E8E9EF] dark:border-slate-700/80 rounded-bl-xs'
                   }`}
                 >
                   {msg.role === 'user' ? (
@@ -773,11 +767,11 @@ export const AIAssistantDrawer: React.FC = () => {
 
             {isLoading && (
               <div className="flex gap-2.5 justify-start items-center">
-                <div className="w-6 h-6 rounded-lg bg-purple-600 flex items-center justify-center text-white shrink-0 shadow-xs animate-pulse">
+                <div className="w-6 h-6 rounded-[8px] bg-[#1890FF] flex items-center justify-center text-white shrink-0 shadow-xs animate-pulse">
                   <Sparkles className="w-3.5 h-3.5" />
                 </div>
-                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3.5 py-2 text-slate-500 dark:text-slate-400 flex items-center gap-1.5 shadow-xs text-xs">
-                  <div className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-ping" />
+                <div className="bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[12px] px-3.5 py-2 text-[#6A7185] dark:text-slate-400 flex items-center gap-1.5 shadow-xs text-xs">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#1890FF] animate-ping" />
                   <span>AI đang truy vấn database & phân tích...</span>
                 </div>
               </div>
@@ -786,12 +780,12 @@ export const AIAssistantDrawer: React.FC = () => {
           </div>
 
           {/* Quick Suggestions Chips with Navigation Buttons and Mouse Wheel Scrolling */}
-          <div className="relative group/suggestions px-2 py-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shrink-0 flex items-center gap-1">
+          <div className="relative group/suggestions px-2 py-2 bg-white dark:bg-slate-900 border-t border-[#E8E9EF] dark:border-slate-800 shrink-0 flex items-center gap-1">
             <button
               type="button"
               onClick={() => scrollSuggestions('left')}
               title="Cuộn sang trái"
-              className="p-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-slate-600 dark:text-slate-300 hover:text-purple-700 dark:hover:text-purple-300 border border-slate-200 dark:border-slate-700 shrink-0 transition cursor-pointer shadow-2xs"
+              className="p-1 rounded-full bg-[#F8FAFB] dark:bg-slate-800 hover:bg-[#E6F7FF] dark:hover:bg-[#1890FF]/20 text-[#6A7185] dark:text-slate-300 hover:text-[#096DD9] dark:hover:text-[#69C0FF] border border-[#E8E9EF] dark:border-slate-700 shrink-0 transition cursor-pointer shadow-2xs"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -802,7 +796,7 @@ export const AIAssistantDrawer: React.FC = () => {
               className="flex-1 overflow-x-auto flex items-center gap-1.5 py-1 px-1 scroll-smooth select-none"
               style={{
                 scrollbarWidth: 'thin',
-                scrollbarColor: 'rgba(168, 85, 247, 0.3) transparent',
+                scrollbarColor: 'rgba(24, 144, 255, 0.35) transparent',
               }}
             >
               {SUGGESTION_PROMPTS.map((promptText, i) => (
@@ -811,7 +805,7 @@ export const AIAssistantDrawer: React.FC = () => {
                   type="button"
                   disabled={isLoading}
                   onClick={() => handleSendMessage(promptText)}
-                  className="whitespace-nowrap shrink-0 px-2.5 py-1.5 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700/50 rounded-xl text-[11px] font-medium transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-2xs"
+                  className="whitespace-nowrap shrink-0 px-2.5 py-1 bg-[#E6F7FF] dark:bg-[#1890FF]/15 hover:bg-[#D2EEFF] dark:hover:bg-[#1890FF]/25 text-[#096DD9] dark:text-[#69C0FF] border border-[#B7E1FF] dark:border-[#1890FF]/30 rounded-[14px] text-[11px] font-medium transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-2xs"
                 >
                   {promptText}
                 </button>
@@ -822,7 +816,7 @@ export const AIAssistantDrawer: React.FC = () => {
               type="button"
               onClick={() => scrollSuggestions('right')}
               title="Cuộn sang phải"
-              className="p-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-purple-100 dark:hover:bg-purple-900/50 text-slate-600 dark:text-slate-300 hover:text-purple-700 dark:hover:text-purple-300 border border-slate-200 dark:border-slate-700 shrink-0 transition cursor-pointer shadow-2xs"
+              className="p-1 rounded-full bg-[#F8FAFB] dark:bg-slate-800 hover:bg-[#E6F7FF] dark:hover:bg-[#1890FF]/20 text-[#6A7185] dark:text-slate-300 hover:text-[#096DD9] dark:hover:text-[#69C0FF] border border-[#E8E9EF] dark:border-slate-700 shrink-0 transition cursor-pointer shadow-2xs"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -834,7 +828,7 @@ export const AIAssistantDrawer: React.FC = () => {
               e.preventDefault();
               handleSendMessage();
             }}
-            className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200/80 dark:border-slate-800 shrink-0 flex items-center gap-2"
+            className="p-3 bg-white dark:bg-slate-900 border-t border-[#E8E9EF] dark:border-slate-800 shrink-0 flex items-center gap-2"
           >
             <input
               ref={inputRef}
@@ -843,12 +837,12 @@ export const AIAssistantDrawer: React.FC = () => {
               onChange={(e) => setInputValue(e.target.value)}
               disabled={isLoading}
               placeholder="Hỏi về task, tiến độ, member, rủi ro..."
-              className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+              className="flex-1 h-[34px] bg-[#F8FAFB] dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3 text-xs text-[#22293C] dark:text-white placeholder:text-[#989FB0] hover:border-[#40A9FF] focus:outline-none focus:bg-white focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none disabled:opacity-50 transition"
             />
             <button
               type="submit"
               disabled={!inputValue.trim() || isLoading}
-              className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none cursor-pointer flex items-center justify-center"
+              className="h-[34px] px-3.5 bg-[#1890FF] hover:bg-[#096DD9] text-white rounded-[8px] shadow-xs transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none cursor-pointer flex items-center justify-center"
             >
               <Send className="w-3.5 h-3.5" />
             </button>

@@ -53,7 +53,12 @@ export function useHoverScrollLock(isOpen: boolean, options: UseHoverScrollLockO
 
   const handleMouseLeave = useCallback((e?: React.MouseEvent) => {
     // Prevent false unlocks when moving between child elements inside the container
-    if (e && e.currentTarget && e.relatedTarget && e.currentTarget.contains(e.relatedTarget as Node)) {
+    if (
+      e &&
+      e.currentTarget instanceof Node &&
+      e.relatedTarget instanceof Node &&
+      e.currentTarget.contains(e.relatedTarget)
+    ) {
       return;
     }
     // On small mobile screens, keep locked while open

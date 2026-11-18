@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AppProvider, useApp } from '../context/AppContext';
-import { Header, MainSectionType } from './Header';
+import { Header, MainSectionType, UserSubTabType } from './Header';
+import { Sidebar } from './Sidebar';
+import { SahoToaster } from './common/SahoToast';
 import { WorkScheduleTable } from './WorkScheduleTable';
 import { MilestonesView } from './MilestonesView';
 import { TicketsView } from './TicketsView';
@@ -22,6 +24,15 @@ import { AutoUpdateBanner } from './AutoUpdateBanner';
 import { AIAssistantDrawer } from './AIAssistantDrawer';
 import { NewFeatureTourBanner } from './common/NewFeatureTourBanner';
 import { Task } from '../types/task';
+import {
+  parseSahoRoute,
+  getPagePath,
+  getPageTitleForPath,
+  pushPageUrl,
+  replacePageUrl,
+  setCurrentBasePath,
+  findTaskByRouteIdentifier,
+} from '../lib/sahoUrl';
 
 const VALID_TASK_TABS = ['schedule', 'milestones', 'tickets', 'kanban', 'awards', 'history', 'nextweek'];
 const VALID_MAIN_SECTIONS: MainSectionType[] = ['tasks', 'resources', 'users'];
@@ -29,6 +40,10 @@ const VALID_MAIN_SECTIONS: MainSectionType[] = ['tasks', 'resources', 'users'];
 function getInitialMainSection(): MainSectionType {
   if (typeof window === 'undefined') return 'tasks';
   try {
+    const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+    if (parsed.section && VALID_MAIN_SECTIONS.includes(parsed.section)) {
+      return parsed.section;
+    }
     localStorage.removeItem('saho_active_main_section');
     const saved = sessionStorage.getItem('saho_active_main_section') as MainSectionType;
     if (saved && VALID_MAIN_SECTIONS.includes(saved)) {
@@ -41,6 +56,10 @@ function getInitialMainSection(): MainSectionType {
 function getInitialTaskTab(): string {
   if (typeof window === 'undefined') return 'schedule';
   try {
+    const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+    if (parsed.taskTab && VALID_TASK_TABS.includes(parsed.taskTab)) {
+      return parsed.taskTab;
+    }
     localStorage.removeItem('saho_active_task_tab');
     const saved = sessionStorage.getItem('saho_active_task_tab');
     if (saved && VALID_TASK_TABS.includes(saved)) {
@@ -50,11 +69,51 @@ function getInitialTaskTab(): string {
   return 'schedule';
 }
 
+function getInitialUserSubTab(): UserSubTabType {
+  if (typeof window === 'undefined') return 'USERS';
+  try {
+    const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+    if (parsed.userSubTab) {
+      return parsed.userSubTab;
+    }
+    const saved = sessionStorage.getItem('saho_active_user_tab') as UserSubTabType;
+    if (saved === 'USERS' || saved === 'ROLES' || saved === 'PERMISSIONS') {
+      return saved;
+    }
+  } catch {}
+  return 'USERS';
+}
+
 function MainApp() {
   const { authSession, tasks, weeklyArchives } = useApp();
   const [activeMainSection, setActiveMainSection] = useState<MainSectionType>(getInitialMainSection);
   const [activeTaskTab, setActiveTaskTab] = useState<string>(getInitialTaskTab);
+  const [activeUserSubTab, setActiveUserSubTab] = useState<UserSubTabType>(getInitialUserSubTab);
+  const effectiveUserSubTab: UserSubTabType =
+    authSession?.role === 'Admin' ? activeUserSubTab : 'USERS';
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(() => new Set([getInitialTaskTab()]));
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('saho_sidebar_collapsed') === 'true';
+      } catch {}
+    }
+    return false;
+  });
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [loginOverlayActive, setLoginOverlayActive] = useState(false);
+  const [workspaceRevealed, setWorkspaceRevealed] = useState(true);
+
+  const handleToggleSidebarCollapsed = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('saho_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     setVisitedTabs((prev) => {
@@ -73,19 +132,25 @@ function MainApp() {
   const [taskModalDefaultWeek, setTaskModalDefaultWeek] = useState<number | undefined>(undefined);
   const [taskModalDefaultAssignee, setTaskModalDefaultAssignee] = useState<string | undefined>(undefined);
   const [taskModalDefaultRole, setTaskModalDefaultRole] = useState<string | undefined>(undefined);
+  const [taskModalDefaultMilestoneId, setTaskModalDefaultMilestoneId] = useState<string | undefined>(undefined);
   const [taskModalInitialSubtaskParent, setTaskModalInitialSubtaskParent] = useState<Task | null>(null);
+  const deepLinkConsumedRef = React.useRef<boolean>(false);
+  const wasAuthenticatedRef = React.useRef<boolean>(Boolean(authSession));
+  const postLoginRedirectRef = React.useRef<string | null>(null);
 
   const handleOpenTaskModal = (
     task?: Task,
     defaultWeek?: number,
     defaultAssignee?: string,
     defaultRole?: string,
-    initialSubtaskParent?: Task
+    initialSubtaskParent?: Task,
+    defaultMilestoneId?: string
   ) => {
     setSelectedTaskForEdit(task || null);
     setTaskModalDefaultWeek(defaultWeek);
     setTaskModalDefaultAssignee(defaultAssignee);
     setTaskModalDefaultRole(defaultRole);
+    setTaskModalDefaultMilestoneId(defaultMilestoneId);
     setTaskModalInitialSubtaskParent(initialSubtaskParent || null);
     setIsTaskModalOpen(true);
   };
@@ -127,7 +192,8 @@ function MainApp() {
       let target = cleanId
         ? tasks.find((t) => {
             const tId = String(t.id).trim().toLowerCase();
-            return tId === rawId || tId.replace(/^tsk-/, '') === strippedId;
+            const tCode = String(t.code || '').trim().toLowerCase();
+            return tId === rawId || tId.replace(/^tsk-/, '') === strippedId || (tCode && tCode === rawId);
           })
         : undefined;
 
@@ -137,7 +203,8 @@ function MainApp() {
           if (Array.isArray(archive.tasksSnapshot)) {
             const found = archive.tasksSnapshot.find((t: Task) => {
               const tId = String(t.id).trim().toLowerCase();
-              return tId === rawId || tId.replace(/^tsk-/, '') === strippedId;
+              const tCode = String(t.code || '').trim().toLowerCase();
+              return tId === rawId || tId.replace(/^tsk-/, '') === strippedId || (tCode && tCode === rawId);
             });
             if (found) {
               target = found;
@@ -196,10 +263,10 @@ function MainApp() {
     const tab = params.get('tab');
     const sectionParam = params.get('section');
 
-    // Also support path /task/:id or /tasks/:id
+    // Also support bare /task/:id or /tasks/:id (excluding /task/create or /task/:id/edit|update|discuss)
     if (!openTaskId) {
-      const pathMatch = window.location.pathname.match(/^\/tasks?\/([^/?#]+)/i);
-      if (pathMatch && pathMatch[1]) {
+      const pathMatch = window.location.pathname.match(/^\/tasks?\/([^/?#]+)\/?$/i);
+      if (pathMatch && pathMatch[1] && pathMatch[1].toLowerCase() !== 'create') {
         openTaskId = decodeURIComponent(pathMatch[1]);
       }
     }
@@ -266,6 +333,21 @@ function MainApp() {
       try {
         sessionStorage.setItem('saho_active_task_tab', tab);
       } catch {}
+      pushPageUrl(getPagePath('tasks', tab));
+    }
+  };
+
+  const handleSetActiveUserSubTab = (subTab: UserSubTabType) => {
+    const resolved: UserSubTabType = authSession?.role === 'Admin' ? subTab : 'USERS';
+    setSelectedTicketIdForView(null);
+    setActiveMainSection('users');
+    setActiveUserSubTab(resolved);
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('saho_active_main_section', 'users');
+        sessionStorage.setItem('saho_active_user_tab', resolved);
+      } catch {}
+      pushPageUrl(getPagePath('users', activeTaskTab, resolved));
     }
   };
 
@@ -278,28 +360,227 @@ function MainApp() {
       try {
         sessionStorage.setItem('saho_active_main_section', section);
       } catch {}
+      pushPageUrl(
+        getPagePath(
+          section,
+          activeTaskTab,
+          section === 'users' ? effectiveUserSubTab : undefined
+        )
+      );
     }
   };
 
+  // Keep /login synced when unauthenticated, and base path + Browser Back/Forward URL sync active when authenticated
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!authSession) {
+      const currentFull = window.location.pathname + window.location.search;
+      if (
+        !wasAuthenticatedRef.current &&
+        window.location.pathname !== '/' &&
+        window.location.pathname !== '/login' &&
+        !postLoginRedirectRef.current
+      ) {
+        postLoginRedirectRef.current = currentFull;
+      }
+
+      if (wasAuthenticatedRef.current) {
+        wasAuthenticatedRef.current = false;
+        postLoginRedirectRef.current = null;
+      }
+
+      if (window.location.pathname !== '/login') {
+        window.history.replaceState({ sahoLogin: true }, '', '/login');
+      }
+      document.title = getPageTitleForPath('/login');
+      return;
+    }
+
+    wasAuthenticatedRef.current = true;
+    if (postLoginRedirectRef.current) {
+      window.history.replaceState({}, '', postLoginRedirectRef.current);
+      postLoginRedirectRef.current = null;
+    }
+
+    const initialParsed = parseSahoRoute(window.location.pathname, window.location.search);
+    const defaultPath = getPagePath(
+      activeMainSection,
+      activeTaskTab,
+      activeMainSection === 'users' ? effectiveUserSubTab : undefined
+    );
+
+    if (initialParsed.isRoot || initialParsed.isLogin) {
+      replacePageUrl(defaultPath, getPageTitleForPath(defaultPath));
+    } else if (!initialParsed.modal) {
+      const targetPath =
+        initialParsed.section === 'users' && authSession.role !== 'Admin'
+          ? '/users'
+          : window.location.pathname + window.location.search;
+      if (targetPath !== window.location.pathname + window.location.search) {
+        replacePageUrl(targetPath, getPageTitleForPath(targetPath));
+      } else {
+        setCurrentBasePath(targetPath, getPageTitleForPath(window.location.pathname));
+      }
+    } else {
+      setCurrentBasePath(defaultPath, getPageTitleForPath(defaultPath));
+    }
+
+    const handlePopState = () => {
+      const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+      if (parsed.modal) return;
+      if (parsed.isRoot || parsed.isLogin) {
+        const fallback = getPagePath('tasks', 'schedule');
+        setActiveMainSection('tasks');
+        setActiveTaskTab('schedule');
+        replacePageUrl(fallback, getPageTitleForPath(fallback));
+        return;
+      }
+      if (parsed.section && VALID_MAIN_SECTIONS.includes(parsed.section)) {
+        setActiveMainSection(parsed.section);
+      }
+      if (parsed.taskTab && VALID_TASK_TABS.includes(parsed.taskTab)) {
+        setActiveTaskTab(parsed.taskTab);
+      }
+      if (parsed.userSubTab) {
+        setActiveUserSubTab(authSession.role === 'Admin' ? parsed.userSubTab : 'USERS');
+      }
+      const nextPath = window.location.pathname;
+      setCurrentBasePath(nextPath, getPageTitleForPath(nextPath));
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [authSession]);
+
+  // Deep-link initial consumption for /task/* and /profile routes
+  useEffect(() => {
+    if (typeof window === 'undefined' || !authSession || deepLinkConsumedRef.current) return;
+    const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+    if (!parsed.modal) {
+      deepLinkConsumedRef.current = true;
+      return;
+    }
+
+    const m = parsed.modal;
+    if (m.kind === 'profile') {
+      deepLinkConsumedRef.current = true;
+      setIsProfileModalOpen(true);
+      return;
+    }
+
+    if (m.kind === 'task-create') {
+      if (m.parentId && tasks.length === 0) return;
+      deepLinkConsumedRef.current = true;
+      const parent = m.parentId
+        ? findTaskByRouteIdentifier(m.parentId, tasks, weeklyArchives)
+        : undefined;
+      handleOpenTaskModal(
+        undefined,
+        m.week && !Number.isNaN(m.week) ? m.week : undefined,
+        m.assignee,
+        m.role,
+        parent,
+        m.milestoneId
+      );
+      return;
+    }
+
+    if (
+      (m.kind === 'task-detail' ||
+        m.kind === 'task-edit' ||
+        m.kind === 'task-update' ||
+        m.kind === 'task-discuss') &&
+      m.id
+    ) {
+      if (tasks.length === 0 && (!weeklyArchives || weeklyArchives.length === 0)) return;
+      const target = findTaskByRouteIdentifier(m.id, tasks, weeklyArchives);
+      deepLinkConsumedRef.current = true;
+      if (!target) return;
+      if (m.kind === 'task-edit') {
+        handleOpenTaskModal(target);
+      } else if (m.kind === 'task-update') {
+        setReportingTask(target);
+      } else {
+        setSelectedTaskForDetail(target);
+      }
+    }
+  }, [authSession, tasks, weeklyArchives]);
+
   return (
-    <div suppressHydrationWarning className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col antialiased selection:bg-indigo-200 selection:text-indigo-900 relative">
-      {/* Login Modal Overlay if not logged in */}
-      {!authSession && <LoginModal />}
+    <div
+      suppressHydrationWarning
+      style={{ '--saho-sidebar-width': sidebarCollapsed ? '68px' : '256px' } as React.CSSProperties}
+      className="min-h-screen bg-[#F3F4F7] dark:bg-[#080c14] text-[#1D202A] dark:text-slate-100 font-sans antialiased selection:bg-[#E6F7FF] selection:text-[#096DD9] relative"
+    >
+      {/* Full-Screen Saho Login & Smooth Enter Transition */}
+      {(!authSession || loginOverlayActive) && (
+        <LoginModal
+          isAuthenticated={Boolean(authSession)}
+          onLoginStart={() => {
+            setLoginOverlayActive(true);
+            setWorkspaceRevealed(false);
+          }}
+          onLoginAbort={() => {
+            setLoginOverlayActive(false);
+            setWorkspaceRevealed(true);
+          }}
+          onLoginRevealStart={() => {
+            setWorkspaceRevealed(true);
+          }}
+          onLoginTransitionEnd={() => {
+            setLoginOverlayActive(false);
+            setWorkspaceRevealed(true);
+          }}
+        />
+      )}
 
       {authSession && (
-        <>
-          <Header
+        <div
+          className={`w-full min-h-screen flex flex-col transition-opacity duration-500 ease-out ${
+            workspaceRevealed ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <Sidebar
             activeMainSection={activeMainSection}
             setActiveMainSection={handleSetActiveMainSection}
             activeTaskTab={activeTaskTab}
             setActiveTaskTab={handleSetActiveTaskTab}
-            onSelectTask={handleSelectTaskFromNotification}
+            activeUserSubTab={effectiveUserSubTab}
+            setActiveUserSubTab={handleSetActiveUserSubTab}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={handleToggleSidebarCollapsed}
+            mobileOpen={mobileSidebarOpen}
+            onCloseMobile={() => setMobileSidebarOpen(false)}
+            onOpenProfile={() => setIsProfileModalOpen(true)}
           />
 
-          <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-20 sm:pb-24 md:pb-8">
+          <div
+            className={`flex-1 min-w-0 flex flex-col min-h-screen transition-[padding] duration-200 ${
+              sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-[256px]'
+            }`}
+          >
+            <Header
+              activeMainSection={activeMainSection}
+              setActiveMainSection={handleSetActiveMainSection}
+              activeTaskTab={activeTaskTab}
+              setActiveTaskTab={handleSetActiveTaskTab}
+              activeUserSubTab={effectiveUserSubTab}
+              setActiveUserSubTab={handleSetActiveUserSubTab}
+              onSelectTask={handleSelectTaskFromNotification}
+              onOpenMobileMenu={() => setMobileSidebarOpen(true)}
+              isProfileModalOpenExternal={isProfileModalOpen}
+              setIsProfileModalOpenExternal={setIsProfileModalOpen}
+            />
+
+            <main
+              className={`flex-1 max-w-[1440px] w-full mx-auto p-3 sm:p-5 lg:p-6 space-y-4 sm:space-y-5 pb-24 md:pb-8 transition-opacity duration-500 ease-out ${
+                workspaceRevealed ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
             {/* MAIN SECTION 1: TASK MANAGEMENT */}
             {activeMainSection === 'tasks' && (
-              <div className="animate-in fade-in duration-200">
+              <div>
                 {visitedTabs.has('schedule') && (
                   <div className={activeTaskTab === 'schedule' ? 'block' : 'hidden'}>
                     <WorkScheduleTable onOpenTaskModal={handleOpenTaskModal} />
@@ -343,18 +624,22 @@ function MainApp() {
 
             {/* MAIN SECTION 2: RESOURCE MANAGEMENT */}
             {activeMainSection === 'resources' && (
-              <div className="animate-in fade-in duration-200">
+              <div>
                 <ResourceManagerView />
               </div>
             )}
 
-            {/* MAIN SECTION 3: USER MANAGEMENT (ADMIN ONLY) */}
+            {/* MAIN SECTION 3: SYSTEM / USER MANAGEMENT */}
             {activeMainSection === 'users' && (
-              <div className="animate-in fade-in duration-200">
-                <UserManagementView />
+              <div>
+                <UserManagementView
+                  activeSubTab={effectiveUserSubTab}
+                  onChangeSubTab={handleSetActiveUserSubTab}
+                />
               </div>
             )}
           </main>
+          </div>
 
           {/* Quick Resource Floating Action Button */}
           <QuickResourceFloatingButton
@@ -371,6 +656,7 @@ function MainApp() {
             defaultWeek={taskModalDefaultWeek}
             defaultAssignee={taskModalDefaultAssignee}
             initialRole={taskModalDefaultRole}
+            initialMilestoneId={taskModalDefaultMilestoneId}
             initialSubtaskParent={taskModalInitialSubtaskParent}
             onOpenReport={(t) => {
               setIsTaskModalOpen(false);
@@ -389,6 +675,7 @@ function MainApp() {
               setTaskModalDefaultWeek(undefined);
               setTaskModalDefaultAssignee(undefined);
               setTaskModalDefaultRole(undefined);
+              setTaskModalDefaultMilestoneId(undefined);
               setTaskModalInitialSubtaskParent(null);
             }}
           />
@@ -418,7 +705,7 @@ function MainApp() {
             isOpen={!!reportingTask}
             onClose={() => setReportingTask(null)}
           />
-        </>
+        </div>
       )}
 
       {/* Floating Auto Update Banner */}
@@ -429,6 +716,9 @@ function MainApp() {
 
       {/* Floating AI Project Intelligence Assistant (Admin/Leader) */}
       <AIAssistantDrawer />
+
+      {/* Global Saho Toast Portal */}
+      <SahoToaster />
     </div>
   );
 }

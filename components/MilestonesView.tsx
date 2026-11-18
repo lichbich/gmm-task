@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { parseSahoRoute, pushPageUrl, useSyncModalUrl } from '../lib/sahoUrl';
 import {
   Milestone,
   Task,
@@ -47,6 +48,7 @@ import {
 } from 'lucide-react';
 import { Dropdown } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
+import { SahoCheckbox } from './common/SahoControls';
 import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
 import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import { RoleUnassignedMembersTag } from './common/RoleUnassignedMembersTag';
@@ -170,10 +172,12 @@ export const MilestonesView: React.FC = () => {
     selectedYear,
   } = useApp();
 
-  // Sub-tabs: Milestones vs Ad-hoc tasks (Default to ADHOC or remembered from localStorage)
+  // Sub-tabs: Milestones vs Ad-hoc tasks (Default to URL route -> localStorage -> ADHOC)
   const [subTab, setSubTabState] = useState<'MILESTONES' | 'ADHOC'>(() => {
     if (typeof window !== 'undefined') {
       try {
+        const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+        if (parsed.milestoneSubTab) return parsed.milestoneSubTab;
         const saved = localStorage.getItem('saho_milestones_subtab');
         if (saved === 'MILESTONES' || saved === 'ADHOC') return saved;
       } catch {}
@@ -187,8 +191,21 @@ export const MilestonesView: React.FC = () => {
       try {
         localStorage.setItem('saho_milestones_subtab', newSubTab);
       } catch {}
+      pushPageUrl(newSubTab === 'ADHOC' ? '/milestones/adhoc' : '/milestones');
     }
   };
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePop = () => {
+      const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+      if (parsed.taskTab === 'milestones' && parsed.milestoneSubTab) {
+        setSubTabState(parsed.milestoneSubTab);
+      }
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
 
   // Helper to normalize milestone title display
   const formatMilestoneTitle = (title: string, orderNumber: number): string => {
@@ -630,11 +647,30 @@ export const MilestonesView: React.FC = () => {
   // Pre-indexed lookups for instant O(1) performance in Milestones view
   const subtasksByParentIdMap = useMemo(() => {
     const map = new Map<string, Task[]>();
+    const taskById = new Map<string, Task>();
+    const parentByCode = new Map<string, Task>();
+
     tasks.forEach((t) => {
-      if (t.subtaskParentId) {
-        const list = map.get(t.subtaskParentId) || [];
+      taskById.set(t.id, t);
+      if (t.code && !t.subtaskParentId && !t.isSubtask) {
+        parentByCode.set(t.code.trim().toUpperCase(), t);
+      }
+    });
+
+    tasks.forEach((t) => {
+      if (!t.subtaskParentId && !t.isSubtask) return;
+      let resolvedParentId = t.subtaskParentId || '';
+      if ((!resolvedParentId || !taskById.has(resolvedParentId)) && t.code && t.code.includes('.')) {
+        const baseCode = t.code.split('.')[0].trim().toUpperCase();
+        const fallbackParent = parentByCode.get(baseCode);
+        if (fallbackParent) {
+          resolvedParentId = fallbackParent.id;
+        }
+      }
+      if (resolvedParentId) {
+        const list = map.get(resolvedParentId) || [];
         list.push(t);
-        map.set(t.subtaskParentId, list);
+        map.set(resolvedParentId, list);
       }
     });
     return map;
@@ -753,6 +789,41 @@ export const MilestonesView: React.FC = () => {
     setEditingMilestoneId(null);
   };
 
+  const milestoneFormUrl =
+    subTab === 'MILESTONES' && isAddMsOpen
+      ? '/milestones/create'
+      : editingMilestoneId
+      ? `/milestones/${encodeURIComponent(editingMilestoneId)}/edit`
+      : null;
+
+  useSyncModalUrl(
+    Boolean(milestoneFormUrl),
+    milestoneFormUrl,
+    () => {
+      setIsAddMsOpen(false);
+      setEditingMilestoneId(null);
+    },
+    editingMilestoneId ? 'Sửa Milestone' : isAddMsOpen ? 'Tạo Milestone Mới' : undefined
+  );
+
+  const deepLinkMsHandledRef = React.useRef(false);
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || deepLinkMsHandledRef.current) return;
+    const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+    if (parsed.modal?.kind === 'milestone-create') {
+      deepLinkMsHandledRef.current = true;
+      setSubTabState('MILESTONES');
+      setIsAddMsOpen(true);
+    } else if (parsed.modal?.kind === 'milestone-edit' && parsed.modal.id && milestones.length > 0) {
+      deepLinkMsHandledRef.current = true;
+      const found = milestones.find((m) => m.id === parsed.modal?.id);
+      if (found) {
+        setSubTabState('MILESTONES');
+        handleStartEditMilestone(found);
+      }
+    }
+  }, [milestones]);
+
   // Helper to check if a task is fully Done in Milestone/Adhoc (Must be >= 100% progress)
   const isTaskDoneInMilestone = (t: Task): boolean => {
     if (t.completionPercentage !== undefined) {
@@ -776,26 +847,20 @@ export const MilestonesView: React.FC = () => {
     }
     const isDone = isTaskDoneInMilestone(t);
     const todayStr = getTodayDateOnlyString();
-    const rootId = t.parentTaskId || t.id;
-    const relatedTasks = tasks.filter((item) => item.id === t.id || item.id === rootId || item.parentTaskId === rootId);
 
     if (isDone) {
-      relatedTasks.forEach((item) => {
-        updateTask(item.id, {
-          status: 'In Progress',
-          completionPercentage: 0,
-          endDate: undefined,
-          updatedAt: new Date().toISOString(),
-        });
+      updateTask(t.id, {
+        status: 'In Progress',
+        completionPercentage: 0,
+        endDate: undefined,
+        updatedAt: new Date().toISOString(),
       });
     } else {
-      relatedTasks.forEach((item) => {
-        updateTask(item.id, {
-          status: 'Done',
-          completionPercentage: 100,
-          endDate: item.endDate || todayStr,
-          updatedAt: new Date().toISOString(),
-        });
+      updateTask(t.id, {
+        status: 'Done',
+        completionPercentage: 100,
+        endDate: t.endDate || todayStr,
+        updatedAt: new Date().toISOString(),
       });
     }
   };
@@ -807,15 +872,7 @@ export const MilestonesView: React.FC = () => {
       confirmText: 'Xác nhận xóa',
       type: 'danger',
       onConfirm: () => {
-        const rootId = t.parentTaskId || t.id;
-        const familyIds = tasks
-          .filter((item) => item.id === t.id || item.id === rootId || item.parentTaskId === rootId)
-          .map((item) => item.id);
-        if (familyIds.length > 1) {
-          deleteTasks(familyIds);
-        } else {
-          deleteTask(t.id);
-        }
+        deleteTask(t.id);
       },
     });
   };
@@ -946,14 +1003,14 @@ export const MilestonesView: React.FC = () => {
           data-tour={hasSub || idx === 0 ? "subtask-parent-row" : undefined}
           className={`p-3.5 transition-all hidden md:flex items-center justify-between gap-4 text-xs cursor-pointer group select-none ${
             isNestedSubtask
-              ? 'pl-10 bg-slate-50/60 border-l-4 border-l-indigo-400 hover:bg-indigo-50/30'
+              ? 'pl-10 bg-[#F8FAFB] dark:bg-slate-900/40 border-l-4 border-l-[#1890FF] hover:bg-[rgba(24,144,255,0.04)]'
               : isDone
-              ? 'bg-emerald-50/30 hover:bg-emerald-50/70'
-              : 'hover:bg-slate-50/90 bg-white'
+              ? 'bg-[rgba(10,177,133,0.05)] hover:bg-[rgba(10,177,133,0.10)]'
+              : 'hover:bg-[rgba(64,169,255,0.04)] bg-white dark:bg-slate-900'
           } ${
-            isDragging ? 'opacity-35 bg-indigo-50/40 border border-dashed border-indigo-300' : ''
+            isDragging ? 'opacity-35 bg-[rgba(24,144,255,0.08)] border border-dashed border-[#1890FF]' : ''
           } ${
-            isOver ? 'border-t-2 border-indigo-500 bg-indigo-50/70' : ''
+            isOver ? 'border-t-2 border-[#1890FF] bg-[rgba(24,144,255,0.08)]' : ''
           }`}
           title={isDone ? 'Bấm để xem chi tiết task đã hoàn thành' : 'Kéo thả để sắp xếp thứ tự ưu tiên, hoặc bấm để xem chi tiết'}
         >
@@ -980,20 +1037,20 @@ export const MilestonesView: React.FC = () => {
                   handleToggleTaskDone(t);
                 }
               }}
-              className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+              className={`w-[18px] h-[18px] rounded-[5px] flex items-center justify-center transition-all shrink-0 ${
                 !milestoneId
                   ? selectedAdhocTaskIds.has(t.id)
-                    ? 'bg-indigo-600 border-2 border-indigo-600 text-white shadow-xs'
-                    : 'border-2 border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/60 text-transparent hover:text-indigo-400 cursor-pointer active:scale-90'
+                    ? 'bg-[#1890FF] border-[1.5px] border-[#1890FF] text-white shadow-[0_1px_2px_rgba(24,144,255,0.28)]'
+                    : 'border-[1.5px] border-[#D0D5DF] hover:border-[#1890FF] hover:bg-[#E6F7FF] text-transparent hover:text-[#40A9FF] cursor-pointer active:scale-90'
                   : !canToggle
                   ? 'cursor-not-allowed opacity-40 ' +
                     (isDone
-                      ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
-                      : 'border-2 border-slate-200 bg-slate-100 text-transparent')
+                      ? 'bg-[#0AB185]/70 border-[1.5px] border-[#0AB185] text-white'
+                      : 'border-[1.5px] border-[#E8E9EF] bg-[#F8FAFB] text-transparent')
                   : 'active:scale-90 cursor-pointer ' +
                     (isDone
-                      ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
-                      : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
+                      ? 'bg-[#0AB185] border-[1.5px] border-[#088E6A] text-white shadow-xs'
+                      : 'border-[1.5px] border-[#D0D5DF] hover:border-[#0AB185] hover:bg-[#E6F7F3] text-transparent hover:text-[#0AB185]')
               }`}
               title={
                 !milestoneId
@@ -1007,11 +1064,11 @@ export const MilestonesView: React.FC = () => {
                   : 'Đánh dấu đã hoàn thành'
               }
             >
-              <Check className={`w-3.5 h-3.5 ${(!milestoneId ? selectedAdhocTaskIds.has(t.id) : isDone) ? 'stroke-[3]' : 'stroke-[2]'}`} />
+              <Check className={`w-3 h-3 ${(!milestoneId ? selectedAdhocTaskIds.has(t.id) : isDone) ? 'stroke-[3]' : 'stroke-[2]'}`} />
             </button>
 
             {isNestedSubtask ? (
-              <span className="text-indigo-500 font-mono text-xs font-bold pl-1 shrink-0">↳</span>
+              <span className="text-[#1890FF] font-mono text-xs font-bold pl-1 shrink-0">↳</span>
             ) : (
               <span className="w-5 text-center font-mono text-slate-400 font-bold shrink-0 text-[11px]">
                 #{idx + 1}
@@ -1321,7 +1378,7 @@ export const MilestonesView: React.FC = () => {
         <div
           onClick={() => handleTaskClick(t)}
           className={`md:hidden p-3.5 transition-all space-y-2.5 cursor-pointer ${
-            isDone ? 'bg-emerald-50/40 border-l-4 border-emerald-400' : 'bg-white'
+            isDone ? 'bg-[#E6F7F3]/50 border-l-4 border-[#0AB185]' : 'bg-white'
           }`}
         >
           <div className="flex items-start justify-between gap-2">
@@ -1337,20 +1394,20 @@ export const MilestonesView: React.FC = () => {
                     handleToggleTaskDone(t);
                   }
                 }}
-                className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
+                className={`w-[18px] h-[18px] rounded-[5px] flex items-center justify-center transition-all shrink-0 ${
                   !milestoneId
                     ? selectedAdhocTaskIds.has(t.id)
-                      ? 'bg-indigo-600 border-2 border-indigo-600 text-white shadow-xs'
-                      : 'border-2 border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/60 text-transparent hover:text-indigo-400 cursor-pointer active:scale-90'
+                      ? 'bg-[#1890FF] border-[1.5px] border-[#1890FF] text-white shadow-[0_1px_2px_rgba(24,144,255,0.28)]'
+                      : 'border-[1.5px] border-[#D0D5DF] hover:border-[#1890FF] hover:bg-[#E6F7FF] text-transparent hover:text-[#40A9FF] cursor-pointer active:scale-90'
                     : !canToggle
                     ? 'cursor-not-allowed opacity-40 ' +
                       (isDone
-                        ? 'bg-emerald-300 border-2 border-emerald-500 text-white'
-                        : 'border-2 border-slate-200 bg-slate-100 text-transparent')
+                        ? 'bg-[#0AB185]/70 border-[1.5px] border-[#0AB185] text-white'
+                        : 'border-[1.5px] border-[#E8E9EF] bg-[#F8FAFB] text-transparent')
                     : 'active:scale-90 cursor-pointer ' +
                       (isDone
-                        ? 'bg-emerald-500 border-2 border-emerald-600 text-white shadow-xs'
-                        : 'border-2 border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/60 text-transparent hover:text-emerald-400')
+                        ? 'bg-[#0AB185] border-[1.5px] border-[#088E6A] text-white shadow-xs'
+                        : 'border-[1.5px] border-[#D0D5DF] hover:border-[#0AB185] hover:bg-[#E6F7F3] text-transparent hover:text-[#0AB185]')
                 }`}
                 title={
                   !milestoneId
@@ -1364,12 +1421,12 @@ export const MilestonesView: React.FC = () => {
                     : 'Đánh dấu đã hoàn thành'
                 }
               >
-                <Check className={`w-3.5 h-3.5 ${(!milestoneId ? selectedAdhocTaskIds.has(t.id) : isDone) ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                <Check className={`w-3 h-3 ${(!milestoneId ? selectedAdhocTaskIds.has(t.id) : isDone) ? 'stroke-[3]' : 'stroke-[2]'}`} />
               </button>
-              <span className="font-mono text-slate-400 font-bold text-xs">
+              <span className="font-mono text-[#989FB0] font-bold text-xs">
                 #{idx + 1}
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded border bg-purple-50 text-purple-700 border-purple-200 font-bold">
+              <span className="text-[10px] px-2 py-0.5 rounded-[6px] border bg-[#E6F7FF] text-[#096DD9] border-[#B7E1FF] dark:bg-[#1890FF]/15 dark:text-[#69C0FF] dark:border-[#1890FF]/30 font-bold">
                 {t.role}
               </span>
               {(() => {
@@ -1609,19 +1666,19 @@ export const MilestonesView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
+      <div className="saho-hero-card border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-4 sm:p-5 space-y-3.5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-xl font-bold text-[#1D202A] dark:text-slate-100 tracking-tight">
                 <span className="sm:hidden">Quản Lý Milestones</span>
                 <span className="hidden sm:inline">Quản Lý Milestones & Break Tasks</span>
               </h2>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-[12px] bg-[rgba(255,169,64,0.16)] text-[#D46B08]">
                 {canCreateMilestone ? 'PO, Admin & PM (Tạo Milestone)' : 'Leader & Thành viên (Break Task)'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-[#838899] dark:text-slate-400 mt-1">
               Quản lý các cột mốc Milestone chung dự án, bẻ task từ milestone cho thành viên hoặc quản lý các đầu việc phát sinh.
             </p>
           </div>
@@ -1631,7 +1688,7 @@ export const MilestonesView: React.FC = () => {
               canCreateMilestone && (
                 <button
                   onClick={() => setIsAddMsOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold rounded-xl shadow-md shadow-amber-500/20 transition active:scale-95 shrink-0 cursor-pointer"
+                  className="flex items-center gap-2 h-[34px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition active:scale-95 shrink-0 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   Tạo Milestone Mới
@@ -1640,7 +1697,7 @@ export const MilestonesView: React.FC = () => {
             ) : (
               <button
                 onClick={handleOpenCreateAdhocTask}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0 cursor-pointer"
+                className="flex items-center gap-2 h-[34px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition active:scale-95 shrink-0 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Tạo Task Tự Do Mới
@@ -1650,50 +1707,51 @@ export const MilestonesView: React.FC = () => {
         </div>
 
         {/* Navigation Sub-Tabs Switcher & Search & Role Filter */}
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 pt-2 border-t border-slate-100">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 w-full sm:w-fit gap-1">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 pt-2.5 border-t border-[#E8E9EF] dark:border-slate-800">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            {/* Saho Tab Underline Style */}
+            <div className="flex items-center gap-1 border-b border-[#E8E9EF] dark:border-slate-800 sm:border-b-0 sm:bg-white/85 dark:sm:bg-slate-900/80 sm:p-1 sm:rounded-[8px] sm:border sm:border-[#E8E9EF] w-full sm:w-fit">
               <button
                 onClick={() => setSubTab('MILESTONES')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 h-[30px] px-3 rounded-[6px] text-xs font-medium transition-all active:scale-95 cursor-pointer ${
                   subTab === 'MILESTONES'
-                    ? 'bg-white text-amber-700 shadow-sm shadow-slate-200'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                    ? 'bg-[#1890FF] text-white shadow-xs'
+                    : 'text-[#838899] hover:text-[#1890FF] hover:bg-[rgba(64,169,255,0.08)]'
                 }`}
               >
-                <Flag className="w-3.5 h-3.5 text-amber-500" />
+                <Flag className="w-3.5 h-3.5" />
                 <span className="sm:hidden">Milestones ({filteredMilestones.length})</span>
                 <span className="hidden sm:inline">Cột Mốc Milestone ({filteredMilestones.length})</span>
               </button>
               <button
                 onClick={() => setSubTab('ADHOC')}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 h-[30px] px-3 rounded-[6px] text-xs font-medium transition-all active:scale-95 cursor-pointer ${
                   subTab === 'ADHOC'
-                    ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                    ? 'bg-[#1890FF] text-white shadow-xs'
+                    : 'text-[#838899] hover:text-[#1890FF] hover:bg-[rgba(64,169,255,0.08)]'
                 }`}
               >
-                <Inbox className="w-3.5 h-3.5 text-indigo-500" />
+                <Inbox className="w-3.5 h-3.5" />
                 <span className="sm:hidden">Task Tự Do ({filteredAdhocTasks.length})</span>
                 <span className="hidden sm:inline">Task Tự Do & Phát Sinh ({filteredAdhocTasks.length})</span>
               </button>
             </div>
 
-            {/* Search Input Box */}
+            {/* Search Input Box (Figma 32px height) */}
             <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-[#838899] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Tìm kiếm task, mã task..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-100 transition shadow-2xs font-medium"
+                className="w-full h-[32px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] pl-9 pr-8 text-[13px] text-[#1D202A] dark:text-slate-100 placeholder-[#838899] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] transition font-medium"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A2A6B4] hover:text-[#1D202A] p-0.5 cursor-pointer"
                   title="Xóa tìm kiếm"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -2276,41 +2334,41 @@ export const MilestonesView: React.FC = () => {
         const isAdhocDoneCollapsed = searchQuery.trim() ? false : !expandedDoneSections.has('adhoc');
 
         return (
-          <div className="bg-white border-2 border-indigo-200/80 rounded-2xl overflow-hidden shadow-sm tab-content-animate">
+          <div className="bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] overflow-hidden shadow-xs tab-content-animate">
             {/* Adhoc Section Header (Click to Collapse / Expand) */}
             <div
               onClick={() => setIsAdhocCollapsed(!isAdhocCollapsed)}
-              className={`bg-indigo-50/70 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors cursor-pointer select-none hover:bg-indigo-100/60 ${
-                isAdhocCollapsed ? '' : 'border-b border-indigo-100'
+              className={`bg-[rgba(24,144,255,0.06)] dark:bg-sky-950/30 p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors cursor-pointer select-none hover:bg-[rgba(24,144,255,0.10)] ${
+                isAdhocCollapsed ? '' : 'border-b border-[#E8E9EF] dark:border-slate-800'
               }`}
               title={isAdhocCollapsed ? 'Bấm để mở rộng' : 'Bấm để thu gọn'}
             >
               <div className="flex items-start gap-3">
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-100 border border-indigo-300 flex items-center justify-center text-indigo-700 font-bold shadow-2xs">
+                  <div className="w-8 h-8 rounded-[8px] bg-[rgba(24,144,255,0.16)] flex items-center justify-center text-[#1890FF] font-bold">
                     <Inbox className="w-4 h-4" />
                   </div>
-                  <div className="w-6 h-6 rounded-lg text-indigo-700 hover:bg-indigo-200/60 flex items-center justify-center transition">
+                  <div className="w-6 h-6 rounded-[6px] text-[#1890FF] hover:bg-[rgba(24,144,255,0.14)] flex items-center justify-center transition">
                     <ChevronDown
                       className={`w-4 h-4 transition-transform duration-300 ease-in-out ${
-                        isAdhocCollapsed ? '-rotate-90 text-indigo-500' : 'rotate-0 text-indigo-700'
+                        isAdhocCollapsed ? '-rotate-90 text-[#40A9FF]' : 'rotate-0 text-[#1890FF]'
                       }`}
                     />
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <h3 className="text-base font-bold text-[#1D202A] dark:text-slate-100 flex items-center gap-2">
                     Task Tự Do & Phát Sinh (Ngoài Milestone)
-                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200 font-bold">
+                    <span className="text-[11px] px-2.5 py-0.5 rounded-[12px] bg-white dark:bg-slate-800 text-[#1890FF] border border-[#E8E9EF] dark:border-slate-700 font-semibold">
                       {filteredAdhocTasks.length} đầu việc
                     </span>
                     {isAdhocCollapsed && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-300 font-bold">
+                      <span className="text-[11px] px-2 py-0.5 rounded-[12px] bg-[rgba(24,144,255,0.14)] text-[#1890FF] font-semibold">
                         Đã thu gọn
                       </span>
                     )}
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className="text-xs text-[#838899] mt-0.5">
                     Các task phát sinh độc lập, chưa gắn vào cột mốc cụ thể nào. Leader có thể gán nhanh vào Milestone bất kỳ hoặc quản lý/xoá tại đây.
                   </p>
                 </div>
@@ -2318,8 +2376,8 @@ export const MilestonesView: React.FC = () => {
 
               <div className="flex items-center gap-3 text-xs shrink-0" onClick={(e) => e.stopPropagation()}>
                 <div className="text-right">
-                  <span className="text-slate-400 block text-[10px]">Tổng Effort</span>
-                  <span className="font-bold text-indigo-600 font-mono">
+                  <span className="text-[#A2A6B4] block text-[10px]">Tổng Effort</span>
+                  <span className="font-bold text-[#1890FF] font-mono">
                     {filteredAdhocTasks.reduce((acc, t) => acc + (t.estimatedEffort || 0), 0)}h
                   </span>
                 </div>
@@ -2335,33 +2393,23 @@ export const MilestonesView: React.FC = () => {
               <div className="accordion-content">
                 {/* Quick Bulk Delete Toolbar */}
                 {filteredAdhocTasks.length > 0 && (
-                  <div className="px-4 py-2.5 bg-slate-50/90 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="px-4 py-2.5 bg-[#F8FAFB] dark:bg-slate-800/50 border-b border-[#E8E9EF] dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
                     <div className="flex items-center gap-2">
                       {(() => {
                         const isAllSelected =
                           filteredAdhocTasks.length > 0 &&
                           filteredAdhocTasks.every((t) => selectedAdhocTaskIds.has(t.id));
                         return (
-                          <button
-                            type="button"
-                            onClick={() => handleToggleSelectAllAdhoc(filteredAdhocTasks)}
-                            className="flex items-center gap-2 font-bold text-slate-700 cursor-pointer select-none group"
-                          >
-                            <div
-                              className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${
-                                isAllSelected
-                                  ? 'bg-indigo-600 border-2 border-indigo-600 text-white shadow-xs'
-                                  : 'border-2 border-slate-300 group-hover:border-indigo-500 group-hover:bg-indigo-50/60 text-transparent'
-                              }`}
-                            >
-                              <Check className={`w-3.5 h-3.5 ${isAllSelected ? 'stroke-[3]' : 'stroke-[2]'}`} />
-                            </div>
-                            <span>Chọn tất cả ({filteredAdhocTasks.length} task)</span>
-                          </button>
+                          <SahoCheckbox
+                            checked={isAllSelected}
+                            onChange={() => handleToggleSelectAllAdhoc(filteredAdhocTasks)}
+                            size="lg"
+                            label={`Chọn tất cả (${filteredAdhocTasks.length} task)`}
+                          />
                         );
                       })()}
                       {selectedAdhocTaskIds.size > 0 && (
-                        <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                        <span className="text-xs font-semibold text-[#1890FF] bg-[rgba(24,144,255,0.12)] px-2.5 py-0.5 rounded-[12px]">
                           Đã chọn {selectedAdhocTaskIds.size}
                         </span>
                       )}
@@ -2372,7 +2420,7 @@ export const MilestonesView: React.FC = () => {
                         <button
                           type="button"
                           onClick={handleDeleteSelectedAdhoc}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                          className="flex items-center gap-1.5 h-[30px] px-3 bg-[#FF4D4F] hover:bg-[#ff7875] text-white rounded-[8px] font-medium text-xs transition active:scale-95 cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           Xóa {selectedAdhocTaskIds.size} task đã chọn

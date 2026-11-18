@@ -11,7 +11,9 @@ import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
 import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
+import { SahoProgressLine } from './common/SahoControls';
 import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
+import { getTaskForWeekView } from '../lib/taskEffortHelper';
 import {
   AlertTriangle,
   Award,
@@ -52,24 +54,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
   } = useApp();
 
   const currentWeekTasks = React.useMemo(() => {
-    const nextWeek = selectedWeek + 1;
-    return tasks.filter((t) => {
-      if (t.weekNumber !== selectedWeek || (t.year && t.year !== selectedYear)) return false;
-      const isZeroWork =
-        (!t.completionPercentage || t.completionPercentage === 0) &&
-        (!t.actualEffort || t.actualEffort === 0);
-      if (isZeroWork) {
-        const rootId = t.parentTaskId || t.id;
-        const alreadyTransferredToNext = tasks.some(
-          (nt) =>
-            nt.weekNumber === nextWeek &&
-            nt.year === (t.year || selectedYear) &&
-            (nt.parentTaskId === rootId || nt.id === rootId)
-        );
-        if (alreadyTransferredToNext) return false;
-      }
-      return true;
-    });
+    return tasks
+      .map((t) => getTaskForWeekView(t, selectedWeek, selectedYear))
+      .filter((t): t is Task => Boolean(t));
   }, [tasks, selectedWeek, selectedYear]);
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
@@ -389,13 +376,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
 
         {/* Title & Description Preview */}
         <div>
-          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
+          <h4 className="text-xs font-bold text-[#1D202A] dark:text-slate-100 line-clamp-2 leading-snug group-hover:text-[#1890FF] dark:group-hover:text-sky-400 transition">
             <FormattedTaskTitle title={t.title} />
           </h4>
 
           {t.description && (
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 mt-1 min-w-0">
-              <FileText className="w-3 h-3 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-1.5 text-[11px] text-[#838899] dark:text-slate-400 mt-1 min-w-0">
+              <FileText className="w-3 h-3 text-[#A2A6B4] shrink-0" />
               <span className="truncate block flex-1">
                 {t.description.replace(/\[[ xX]\]/g, '').replace(/[-*#\r\n]+/g, ' ').trim()}
               </span>
@@ -404,29 +391,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
         </div>
 
         {/* Progress bar */}
-        <div className="space-y-1">
-          <div className="flex justify-between text-[10px] text-slate-400">
-            <span>Tiến độ</span>
-            <span className="font-semibold text-slate-700 dark:text-slate-300 font-mono">{t.completionPercentage}%</span>
-          </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden border border-slate-200/60 dark:border-slate-700">
-            <div
-              className={`h-full transition-all duration-300 ${
-                t.completionPercentage === 100
-                  ? 'bg-emerald-500'
-                  : t.completionPercentage > 0
-                  ? 'bg-blue-500'
-                  : 'bg-slate-300 dark:bg-slate-700'
-              }`}
-              style={{ width: `${t.completionPercentage}%` }}
-            />
-          </div>
-        </div>
+        <SahoProgressLine
+          value={t.completionPercentage || 0}
+          size="sm"
+          status={t.completionPercentage === 100 ? 'success' : 'normal'}
+        />
 
         {/* Start / End Date Badge */}
         {(t.startDate || t.endDate) && (
-          <div className="flex items-center gap-1.5 text-[9.5px] font-mono text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60 w-fit">
-            <Calendar className="w-2.5 h-2.5 text-indigo-500 shrink-0" />
+          <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#838899] dark:text-slate-400 bg-[#F8FAFB] dark:bg-slate-800/60 px-2 py-0.5 rounded-[4px] border border-[#E8E9EF] dark:border-slate-700/60 w-fit">
+            <Calendar className="w-2.5 h-2.5 text-[#1890FF] shrink-0" />
             <span>
               {t.startDate ? formatDateOnlyDisplay(t.startDate) : '...'}
               {t.endDate ? ` ➔ ${formatDateOnlyDisplay(t.endDate)}` : ''}
@@ -542,26 +516,26 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
   return (
     <div className="space-y-4">
       {/* Header Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="saho-hero-card border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-base sm:text-lg font-bold text-slate-800 tracking-tight">
+            <h2 className="text-base sm:text-lg font-bold text-[#1D202A] dark:text-slate-100 tracking-tight">
               <span className="sm:hidden">Bảng Kanban</span>
               <span className="hidden sm:inline">Bảng Kanban Trực Quan</span>
             </h2>
-            <span className="text-[11px] font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full">
+            <span className="text-[11px] font-medium px-2.5 py-0.5 bg-[rgba(24,144,255,0.14)] text-[#1890FF] rounded-[12px]">
               <span className="sm:hidden">1 chạm</span>
               <span className="hidden sm:inline">Kéo thả chuyển trạng thái</span>
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-[#838899] dark:text-slate-400 mt-0.5">
             Kéo thả thẻ task giữa các cột để cập nhật trạng thái tức thì, hoặc bấm vào thẻ để xem chi tiết & trao đổi luồng task.
           </p>
         </div>
 
         <button
           onClick={() => onOpenTaskModal?.()}
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0 cursor-pointer"
+          className="flex items-center gap-1.5 h-[34px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-[13px] font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition active:scale-95 shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Tạo Task Mới
@@ -570,7 +544,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
 
       {/* MOBILE VIEW: Segmented Column Switcher & Card List */}
       <div className="md:hidden space-y-3">
-        <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 gap-1">
+        <div className="flex items-center bg-[#F8FAFB] dark:bg-slate-800/80 p-1 rounded-[8px] border border-[#E8E9EF] dark:border-slate-700 gap-1">
           {columns.map((col) => {
             const count = tasksByStatus[col.status]?.length || 0;
             const isActive = mobileActiveStatus === col.status;
@@ -578,15 +552,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
               <button
                 key={col.status}
                 onClick={() => setMobileActiveStatus(col.status)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-[6px] text-xs font-medium transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-sm font-extrabold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    ? 'bg-[#1890FF] text-white font-bold shadow-xs'
+                    : 'text-[#838899] dark:text-slate-400 hover:text-[#1D202A]'
                 }`}
               >
                 <span>{col.status}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                  isActive ? 'bg-indigo-700 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  isActive ? 'bg-[#096DD9] text-white' : 'bg-[#E8E9EF] dark:bg-slate-700 text-[#1D202A] dark:text-slate-300'
                 }`}>
                   {count}
                 </span>
@@ -600,8 +574,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ onOpenTaskModal }) => 
           const colTasks = tasksByStatus[mobileActiveStatus] || [];
           if (colTasks.length === 0) {
             return (
-              <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-1.5">
-                <FolderOpen className="w-6 h-6 text-slate-300" />
+              <div className="bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-8 text-center text-xs text-[#A2A6B4] flex flex-col items-center justify-center gap-1.5">
+                <FolderOpen className="w-6 h-6 text-[#A2A6B4]" />
                 <span>Chưa có task nào ở trạng thái {mobileActiveStatus}.</span>
               </div>
             );

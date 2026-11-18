@@ -1,24 +1,42 @@
 import { Task } from '../types/task';
 
 /**
+ * Lấy mã định danh công khai của task (ưu tiên task.code, fallback về task.id)
+ */
+export function getTaskPublicIdentifier(
+  taskOrId: string | (Partial<Task> & { id: string; code?: string })
+): string {
+  if (typeof taskOrId === 'string') {
+    return taskOrId.trim().replace(/^tsk-/, '');
+  }
+  const code = taskOrId.code?.trim();
+  if (code) return code;
+  return String(taskOrId.id || '').trim().replace(/^tsk-/, '');
+}
+
+/**
  * Lấy URL đầy đủ để trỏ trực tiếp tới task trong hệ thống
  */
-export function getTaskShareUrl(taskId: string): string {
+export function getTaskShareUrl(
+  taskOrId: string | (Partial<Task> & { id: string; code?: string })
+): string {
   if (typeof window === 'undefined') return '';
-  const cleanId = taskId.replace(/^tsk-/, '');
+  const identifier = getTaskPublicIdentifier(taskOrId);
   const origin = window.location.origin;
-  return `${origin}/?taskId=${encodeURIComponent(cleanId)}`;
+  return `${origin}/task/${encodeURIComponent(identifier)}`;
 }
 
 /**
  * Tạo cú pháp chuẩn định dạng Merge Request theo quy chuẩn:
  * Refs: #[Mã Task] - [Tên Task](URL Task)
  */
-export function getTaskMRTemplateText(task: Partial<Task> & { id: string; title: string }): string {
-  const cleanId = task.id.replace(/^tsk-/, '');
-  const url = getTaskShareUrl(task.id);
+export function getTaskMRTemplateText(
+  task: Partial<Task> & { id: string; title: string; code?: string }
+): string {
+  const identifier = getTaskPublicIdentifier(task);
+  const url = getTaskShareUrl(task);
   const title = (task.title || '').trim();
-  return `Refs: #${cleanId} - [${title}](${url})`;
+  return `Refs: #${identifier} - [${title}](${url})`;
 }
 
 /**

@@ -269,30 +269,33 @@ export const LinkExistingTasksModal: React.FC<LinkExistingTasksModalProps> = ({
                 <div
                   key={t.id}
                   onClick={() => toggleSelectTask(t.id)}
-                  className={`p-3 rounded-xl border transition cursor-pointer flex items-center justify-between gap-3 text-xs select-none ${
+                  className={`p-3 rounded-[8px] border transition cursor-pointer flex items-center justify-between gap-3 text-xs select-none ${
                     isSelected
-                      ? 'bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-300 dark:border-indigo-700 shadow-2xs'
-                      : 'bg-white dark:bg-slate-850 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                      ? 'bg-[rgba(24,144,255,0.08)] dark:bg-sky-950/60 border-[#1890FF]/40 dark:border-sky-700'
+                      : 'bg-white dark:bg-slate-850 border-[#E8E9EF] dark:border-slate-800 hover:border-[#A2A6B4] dark:hover:border-slate-700'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelectTask(t.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600 shrink-0 cursor-pointer"
-                    />
+                    <span
+                      aria-hidden="true"
+                      className={`w-4 h-4 rounded-[4px] border-[1.5px] flex items-center justify-center shrink-0 transition ${
+                        isSelected
+                          ? 'bg-[#1890FF] border-[#1890FF] text-white'
+                          : 'bg-white dark:bg-slate-900 border-[#A2A6B4]'
+                      }`}
+                    >
+                      {isSelected && <svg viewBox="0 0 12 10" className="w-2.5 h-2.5 stroke-current fill-none" strokeWidth="2"><path d="M1 5l3 3 7-7" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </span>
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                      <div className="font-semibold text-[#1D202A] dark:text-slate-100 truncate">
                         <FormattedTaskTitle title={t.title} />
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-0.5 flex-wrap">
-                        <span className="font-bold text-slate-600 dark:text-slate-300">{t.role}</span>
+                      <div className="flex items-center gap-2 text-[10px] text-[#838899] mt-0.5 flex-wrap">
+                        <span className="font-bold text-[#1D202A] dark:text-slate-300">{t.role}</span>
                         <span>•</span>
                         <span>Tuần: <strong className="font-mono">{t.weekNumber || 'Backlog'}</strong></span>
                         <span>•</span>
-                        <span>Effort: <strong className="font-mono text-indigo-600 dark:text-indigo-400">{t.estimatedEffort}h</strong></span>
+                        <span>Effort: <strong className="font-mono text-[#1890FF] dark:text-sky-400">{t.estimatedEffort}h</strong></span>
                         {t.isSubtask && (
                           <>
                             <span>•</span>

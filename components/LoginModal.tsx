@@ -1,17 +1,150 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { Lock, User as UserIcon, CheckCircle, Key, LogIn, Sparkles, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import {
+  CheckCircle,
+  CheckCircle2,
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  Loader2,
+  Sparkles,
+} from 'lucide-react';
+import { ShaderEffect } from '@figma/expressive-components';
+import {
+  setup as setupMovingBlobs,
+  render as renderMovingBlobs,
+  manifest as manifestMovingBlobs,
+} from '../lib/custom-effects/CodeComponentId_01bf77d94add74e8222115e4eed761cb294d1f8e_624';
+import { SahoCheckbox } from './common/SahoControls';
 import { GMMLogo } from './common/GMMLogo';
 import { lockBodyScroll, unlockBodyScroll } from '../hooks/useModalAnimation';
 
-export const LoginModal: React.FC = () => {
+const REMEMBER_ACCOUNT_KEY = 'saho_remember_account';
+
+// Module-level constant shader configs & memoized backdrop prevent WebGPU shader
+// re-initialization / animation resets when form inputs re-render.
+const PRIMARY_GLOW_SHADERS = [
+  {
+    setup: setupMovingBlobs,
+    render: renderMovingBlobs,
+    params: {
+      threshold: 46.29999923706055,
+      strength: -72,
+      chromaticAberration: 83.80000305175781,
+      detail: 88,
+      shadow: 0,
+      mode: 'Refraction',
+      speed: 26.100000381469727,
+      region: 'Whole Area',
+      softness: 100,
+      scale: 93,
+    },
+    manifest: manifestMovingBlobs,
+  },
+];
+
+const SECONDARY_GLOW_SHADERS = [
+  {
+    setup: setupMovingBlobs,
+    render: renderMovingBlobs,
+    params: {
+      threshold: 60,
+      strength: 100,
+      chromaticAberration: 71.0999984741211,
+      detail: 10,
+      shadow: 0,
+      mode: 'Refraction',
+      speed: 70.30000305175781,
+      region: 'Whole Area',
+      softness: 84,
+      scale: 100,
+    },
+    manifest: manifestMovingBlobs,
+  },
+];
+
+const LoginAmbientBackdrop = React.memo(function LoginAmbientBackdrop() {
+  return (
+    <div
+      aria-hidden="true"
+      className="fixed inset-0 overflow-hidden pointer-events-none select-none flex items-center justify-center"
+    >
+      <div className="relative w-full h-full flex items-center justify-center dark:opacity-25">
+        {/* Primary Glow Layer */}
+        <div className="absolute flex items-center justify-center">
+          <ShaderEffect className="h-[1080px] w-[1227px]" shaders={PRIMARY_GLOW_SHADERS}>
+            <div className="relative h-[1080px] w-[1227px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                alt=""
+                src="/saho-login/bg-glow-1.png"
+                className="block h-full w-full object-contain pointer-events-none"
+              />
+            </div>
+          </ShaderEffect>
+        </div>
+
+        {/* Secondary Sculpted Blob Layer */}
+        <div className="absolute flex items-center justify-center translate-y-[18px] -translate-x-[36px]">
+          <ShaderEffect className="h-[876px] w-[1031px]" shaders={SECONDARY_GLOW_SHADERS}>
+            <div className="relative h-[876px] w-[1031px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                alt=""
+                src="/saho-login/bg-glow-2.png"
+                className="block h-full w-full object-contain object-bottom pointer-events-none"
+              />
+            </div>
+          </ShaderEffect>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+export interface LoginModalProps {
+  isAuthenticated?: boolean;
+  onLoginStart?: () => void;
+  onLoginAbort?: () => void;
+  onLoginRevealStart?: () => void;
+  onLoginTransitionEnd?: () => void;
+}
+
+type SubmitPhase = 'idle' | 'loading' | 'success';
+
+export const LoginModal: React.FC<LoginModalProps> = ({
+  isAuthenticated = false,
+  onLoginStart,
+  onLoginAbort,
+  onLoginRevealStart,
+  onLoginTransitionEnd,
+}) => {
   const { authSession, login, setupFirstTimePassword } = useApp();
 
-  const [accountInput, setAccountInput] = useState('');
+  const [accountInput, setAccountInput] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem(REMEMBER_ACCOUNT_KEY) || '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  });
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberAccount, setRememberAccount] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return Boolean(localStorage.getItem(REMEMBER_ACCOUNT_KEY));
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
   const [errorMsg, setErrorMsg] = useState('');
 
   // First-time setup state
@@ -22,46 +155,101 @@ export const LoginModal: React.FC = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  useEffect(() => {
-    if (!authSession) {
-      lockBodyScroll();
-      return () => {
-        unlockBodyScroll();
-      };
-    }
-  }, [authSession]);
+  // Loading & smooth transition state
+  const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
+  const [isExiting, setIsExiting] = useState(false);
+  const timersRef = useRef<number[]>([]);
 
-  if (authSession) return null; // Already logged in
+  const activeSession = isAuthenticated || Boolean(authSession);
+  const shouldRender = !(activeSession && submitPhase === 'idle' && !isExiting);
+
+  useEffect(() => {
+    if (!shouldRender) return;
+    lockBodyScroll();
+    return () => {
+      unlockBodyScroll();
+    };
+  }, [shouldRender]);
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((id) => window.clearTimeout(id));
+    };
+  }, []);
+
+  if (!shouldRender) {
+    return null;
+  }
+
+  const runSuccessEntrance = () => {
+    setSubmitPhase('success');
+    const tReveal = window.setTimeout(() => {
+      onLoginRevealStart?.();
+      setIsExiting(true);
+    }, 360);
+    const tDone = window.setTimeout(() => {
+      onLoginTransitionEnd?.();
+    }, 820);
+    timersRef.current.push(tReveal, tDone);
+  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitPhase !== 'idle') return;
     setErrorMsg('');
 
-    if (!accountInput.trim()) {
-      setErrorMsg('Vui lòng nhập tên tài khoản.');
+    const trimmedAccount = accountInput.trim();
+    if (!trimmedAccount) {
+      setErrorMsg('Vui lòng nhập Staff Code hoặc tên tài khoản.');
       return;
     }
 
-    const res = await login(accountInput, passwordInput);
+    onLoginStart?.();
+    setSubmitPhase('loading');
+
+    try {
+      if (typeof window !== 'undefined') {
+        if (rememberAccount) {
+          localStorage.setItem(REMEMBER_ACCOUNT_KEY, trimmedAccount);
+        } else {
+          localStorage.removeItem(REMEMBER_ACCOUNT_KEY);
+        }
+      }
+    } catch {}
+
+    const minFeedbackDelay = new Promise((resolve) => window.setTimeout(resolve, 420));
+    const [res] = await Promise.all([
+      login(trimmedAccount, passwordInput),
+      minFeedbackDelay,
+    ]);
 
     if (!res.success) {
+      setSubmitPhase('idle');
       setErrorMsg(res.error || 'Đăng nhập thất bại.');
+      onLoginAbort?.();
       return;
     }
 
     if (res.firstTime && res.user) {
+      setSubmitPhase('idle');
       setIsFirstTimeSetup(true);
       setTargetUserId(res.user.id);
       setErrorMsg('');
+      onLoginAbort?.();
+      return;
     }
+
+    runSuccessEntrance();
   };
 
   const handleFirstTimeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitPhase !== 'idle') return;
     setErrorMsg('');
 
     if (!newPassword || newPassword.length < 4) {
-      setErrorMsg('Mật khẩu phải có ít nhất 4 ký tự.');
+      setErrorMsg('Mật khẩu mới phải có ít nhất 4 ký tự.');
       return;
     }
 
@@ -70,182 +258,270 @@ export const LoginModal: React.FC = () => {
       return;
     }
 
-    const success = await setupFirstTimePassword(targetUserId, newPassword);
+    onLoginStart?.();
+    setSubmitPhase('loading');
+
+    const minFeedbackDelay = new Promise((resolve) => window.setTimeout(resolve, 420));
+    const [success] = await Promise.all([
+      setupFirstTimePassword(targetUserId, newPassword),
+      minFeedbackDelay,
+    ]);
+
     if (!success) {
-      setErrorMsg('Không thể lưu mật khẩu. Vui lòng thử lại.');
+      setSubmitPhase('idle');
+      setErrorMsg('Không thể lưu mật khẩu mới. Vui lòng thử lại.');
+      onLoginAbort?.();
+      return;
     }
+
+    runSuccessEntrance();
   };
 
+  const isBusy = submitPhase !== 'idle';
+
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 modal-backdrop-animate overflow-y-auto">
-      <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl w-full max-w-md p-5 sm:p-8 shadow-2xl text-slate-800 space-y-5 sm:space-y-6 relative overflow-y-auto max-h-[92vh] modal-content-animate">
-        {/* Top Glow Background */}
-        <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-200/40 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-violet-200/40 rounded-full blur-3xl pointer-events-none" />
+    <div
+      className={`fixed inset-0 z-50 bg-[#F3F4F7] dark:bg-[#080c14] overflow-y-auto transition-all duration-500 ease-out ${
+        isExiting
+          ? 'opacity-0 scale-[1.03] pointer-events-none'
+          : 'opacity-100 scale-100 animate-in fade-in duration-300'
+      }`}
+    >
+      {/* Ambient Saho Fluid Backdrop (Memoized to keep 60fps shader uninterrupted) */}
+      <LoginAmbientBackdrop />
 
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="flex justify-center mb-1">
-            <GMMLogo size={56} />
-          </div>
-          <h2 className="text-xl font-bold text-slate-800 tracking-tight">
-            {isFirstTimeSetup ? 'Đổi Mật Khẩu Lần Đầu' : 'Đăng Nhập Saho Task System'}
-          </h2>
-          <p className="text-xs text-slate-500">
-            {isFirstTimeSetup
-              ? 'Bạn đang đăng nhập bằng mật khẩu tạm thời. Vui lòng thiết lập mật khẩu mới chính thức để tiếp tục.'
-              : 'Nhập Staff Code & Mật khẩu được Admin cấp để đăng nhập vào hệ thống.'}
-          </p>
-        </div>
-
-        {errorMsg && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 text-center font-medium">
-            {errorMsg}
-          </div>
-        )}
-
-        {/* Login Form */}
-        {!isFirstTimeSetup ? (
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                Staff Code (Username Đăng Nhập):
-              </label>
-              <div className="relative">
-                <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="VD: QuynhNV, ThanhNDT, LichDT, NhiHT..."
-                  value={accountInput}
-                  onChange={(e) => setAccountInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 font-semibold"
-                  required
-                />
-              </div>
+      {/* Centered Single-Viewport Layout (Zero Internal Card Scroll) */}
+      <div className="min-h-full w-full flex items-center justify-center p-4 sm:p-6 relative z-10">
+        <div
+          className={`w-full max-w-[368px] backdrop-blur-[25px] bg-[rgba(248,250,251,0.68)] dark:bg-slate-900/80 border border-white/80 dark:border-slate-800 rounded-[12px] p-5 sm:p-6 shadow-[0_16px_44px_rgba(29,32,42,0.06)] text-[#1D202A] dark:text-slate-100 flex flex-col gap-6 relative transition-all duration-400 ease-out ${
+            isExiting
+              ? 'opacity-0 -translate-y-2 scale-[0.98]'
+              : 'opacity-100 translate-y-0 scale-100 animate-in fade-in zoom-in-95 duration-300'
+          }`}
+        >
+          {/* Header Block (System Task Logo + Heading + Subtitle) */}
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div className="flex items-center justify-center shrink-0">
+              <GMMLogo size={54} />
             </div>
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                Mật Khẩu (Password):
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Nhập mật khẩu (Mật khẩu tạm thời hoặc chính thức)..."
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-10 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
-                  title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1">
-                💡 Nếu là lần đầu tiên đăng nhập, nhập Mật khẩu tạm thời do Admin cấp để đổi mật khẩu chính thức.
+            <div className="space-y-1.5">
+              <h1 className="text-[18px] leading-[26px] font-bold text-[#1D202A] dark:text-slate-100 tracking-tight">
+                {isFirstTimeSetup ? 'Thiết lập mật khẩu mới' : 'Đăng nhập tài khoản'}
+              </h1>
+              <p className="text-[13px] leading-[19px] font-normal text-[#838899] dark:text-slate-400">
+                {isFirstTimeSetup
+                  ? 'Bạn đang đăng nhập bằng mật khẩu tạm. Hãy đổi sang mật khẩu chính thức để tiếp tục.'
+                  : 'Sử dụng tài khoản nội bộ hoặc Staff Code do Admin cấp để truy cập không gian làm việc.'}
               </p>
             </div>
+          </div>
 
-            <button
-              type="submit"
-              className="group w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-indigo-600/30 hover:shadow-indigo-500/50 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <LogIn className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-200" />
-              <span>Đăng Nhập</span>
-            </button>
-          </form>
-        ) : (
-          /* First Time Password Setup Form */
-          <form onSubmit={handleFirstTimeSubmit} className="space-y-4">
-            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-700 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
-              <span>
-                Xin chào <strong>{accountInput}</strong>! Bạn đang đăng nhập bằng mật khẩu tạm. Vui lòng thiết lập mật khẩu mới chính thức.
-              </span>
+          {errorMsg && (
+            <div className="px-3 py-2.5 bg-[rgba(255,77,79,0.10)] border border-[#FF4D4F]/30 rounded-[8px] text-[12.5px] text-[#FF4D4F] text-center font-medium animate-in fade-in duration-150">
+              {errorMsg}
             </div>
+          )}
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                Mật Khẩu Mới:
-              </label>
-              <div className="relative">
-                <Key className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+          {/* Form Section */}
+          {!isFirstTimeSetup ? (
+            <form onSubmit={handleLoginSubmit} className="px-1 flex flex-col gap-4">
+              <div className="space-y-3">
+                {/* Username / Staff Code Input */}
                 <input
-                  type={showNewPassword ? 'text' : 'password'}
-                  placeholder="Nhập mật khẩu mới..."
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-10 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  type="text"
+                  autoComplete="username"
+                  disabled={isBusy}
+                  placeholder="Nhập Staff Code (VD: Admin, QuynhNV...)"
+                  value={accountInput}
+                  onChange={(e) => setAccountInput(e.target.value)}
+                  className="w-full h-[36px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] rounded-[8px] px-3 text-[13.5px] text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] transition disabled:opacity-65"
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword(!showNewPassword)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
-                  title={showNewPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                >
-                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5">
-                Xác Nhận Mật Khẩu Mới:
-              </label>
-              <div className="relative">
-                <CheckCircle className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                <input
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  placeholder="Nhập lại mật khẩu mới..."
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-10 py-2.5 text-slate-700 text-xs focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
-                  title={showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-                >
-                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
+                {/* Password Input + Eye Toggle */}
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    disabled={isBusy}
+                    placeholder="Nhập mật khẩu"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    className="w-full h-[36px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] rounded-[8px] pl-3 pr-9 text-[13.5px] text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] transition disabled:opacity-65"
+                    required
+                  />
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[#838899] hover:text-[#1D202A] dark:hover:text-slate-200 rounded-[6px] transition cursor-pointer disabled:pointer-events-none"
+                    title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsFirstTimeSetup(false);
-                  setNewPassword('');
-                  setConfirmPassword('');
-                  setShowNewPassword(false);
-                  setShowConfirmPassword(false);
-                  setErrorMsg('');
-                }}
-                className="group flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-all duration-200 flex items-center justify-center gap-2 border border-slate-200 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] cursor-pointer"
-              >
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform duration-200" />
-                <span>Quay Lại</span>
-              </button>
+                {/* Remember Account Checkbox */}
+                <div className="pt-0.5 flex items-center">
+                  <SahoCheckbox
+                    size="md"
+                    checked={rememberAccount}
+                    onChange={(next) => !isBusy && setRememberAccount(next)}
+                    disabled={isBusy}
+                    label={
+                      <span className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200">
+                        Ghi nhớ tài khoản
+                      </span>
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Primary Log In Button + Loading & Entering Animation */}
               <button
                 type="submit"
-                className="group flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-600/30 hover:shadow-emerald-500/50 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+                disabled={isBusy}
+                className={`w-full h-[40px] rounded-[12px] font-medium text-[14px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed ${
+                  submitPhase === 'success'
+                    ? 'bg-[#0AB185] text-white shadow-[0_6px_16px_rgba(10,177,133,0.28)]'
+                    : submitPhase === 'loading'
+                    ? 'bg-[#1890FF]/90 text-white shadow-[0_6px_16px_rgba(24,144,255,0.22)]'
+                    : 'bg-[#1890FF] hover:bg-[#40A9FF] active:bg-[#096DD9] text-white shadow-[0_6px_16px_rgba(24,144,255,0.28)] active:scale-[0.985]'
+                }`}
               >
-                <CheckCircle className="w-4 h-4 group-hover:scale-110 transition-transform duration-200" />
-                <span>Hoàn Tất & Đăng Nhập</span>
+                {submitPhase === 'loading' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Đang xác thực...</span>
+                  </>
+                ) : submitPhase === 'success' ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Đang vào không gian làm việc...</span>
+                  </>
+                ) : (
+                  <span>Đăng nhập</span>
+                )}
               </button>
+            </form>
+          ) : (
+            /* First-Time Password Setup Flow */
+            <form onSubmit={handleFirstTimeSubmit} className="px-1 flex flex-col gap-4">
+              <div className="p-2.5 bg-[rgba(24,144,255,0.08)] border border-[#1890FF]/25 rounded-[8px] text-[12px] text-[#096DD9] dark:text-sky-300 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#1890FF] shrink-0" />
+                <span>
+                  Xin chào <strong>{accountInput}</strong>, hãy đổi mật khẩu chính thức cho tài khoản của bạn.
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    disabled={isBusy}
+                    placeholder="Mật khẩu mới (ít nhất 4 ký tự)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full h-[36px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] rounded-[8px] pl-3 pr-9 text-[13.5px] text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] transition disabled:opacity-65"
+                    required
+                  />
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[#838899] hover:text-[#1D202A] dark:hover:text-slate-200 rounded-[6px] transition cursor-pointer"
+                    title={showNewPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    disabled={isBusy}
+                    placeholder="Xác nhận mật khẩu mới"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full h-[36px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] rounded-[8px] pl-3 pr-9 text-[13.5px] text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] transition disabled:opacity-65"
+                    required
+                  />
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[#838899] hover:text-[#1D202A] dark:hover:text-slate-200 rounded-[6px] transition cursor-pointer"
+                    title={showConfirmPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-1">
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => {
+                    setIsFirstTimeSetup(false);
+                    setNewPassword('');
+                    setConfirmPassword('');
+                    setShowNewPassword(false);
+                    setShowConfirmPassword(false);
+                    setErrorMsg('');
+                  }}
+                  className="h-[40px] px-3.5 bg-white dark:bg-slate-800 hover:bg-[#F8FAFB] dark:hover:bg-slate-700 text-[#1D202A] dark:text-slate-200 font-medium text-[13px] rounded-[12px] transition flex items-center justify-center gap-1.5 border border-[#E8E9EF] dark:border-slate-700 hover:border-[#A2A6B4] cursor-pointer disabled:opacity-50"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Quay lại</span>
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isBusy}
+                  className={`flex-1 h-[40px] font-medium text-[13.5px] rounded-[12px] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed ${
+                    submitPhase === 'success'
+                      ? 'bg-[#0AB185] text-white shadow-[0_6px_16px_rgba(10,177,133,0.28)]'
+                      : 'bg-[#0AB185] hover:bg-[#088E6A] text-white shadow-[0_6px_16px_rgba(10,177,133,0.28)] active:scale-[0.985]'
+                  }`}
+                >
+                  {submitPhase === 'loading' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Đang lưu mật khẩu...</span>
+                    </>
+                  ) : submitPhase === 'success' ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Đang vào hệ thống...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Hoàn tất & Đăng nhập</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Footer Mark (System Logo Sync) */}
+          <div className="flex items-center justify-center gap-1.5 text-[12px] leading-[18px] text-[#A2A6B4] pt-1">
+            <span>Secured by</span>
+            <GMMLogo size={16} />
+            <span className="font-medium text-[#838899]">Saho Task</span>
+          </div>
+
+          {/* Subtle progress indicator bar along bottom edge when entering */}
+          {submitPhase === 'success' && (
+            <div className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full overflow-hidden bg-[#E6F7F3]">
+              <div className="h-full w-full bg-[#0AB185] animate-pulse" />
             </div>
-          </form>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

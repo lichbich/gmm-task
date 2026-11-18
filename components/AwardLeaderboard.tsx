@@ -65,21 +65,21 @@ export const AwardLeaderboard: React.FC = () => {
   return (
     <div className="space-y-3 sm:space-y-5">
       {/* Top Banner Card */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xs">
+      <div className="saho-hero-card border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-4 sm:p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base md:text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-1.5 sm:gap-2">
-                <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 shrink-0" />
+              <h2 className="text-base sm:text-lg font-bold text-[#1D202A] dark:text-slate-100 tracking-tight flex items-center gap-1.5 sm:gap-2">
+                <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFA940] shrink-0" />
                 <span className="sm:hidden">Thưởng & Cảnh Báo</span>
                 <span className="hidden sm:inline">Bảng Tổng Kết Thưởng & Cảnh Báo (Thưởng / Phạt)</span>
               </h2>
-              <span className="text-[10px] sm:text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shrink-0">
+              <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-[12px] bg-[rgba(255,169,64,0.16)] text-[#D46B08] dark:text-amber-300 shrink-0">
                 Deadline CN 22:00
               </span>
             </div>
-            <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Tổng hợp danh hiệu <strong className="text-emerald-600 dark:text-emerald-400">Thưởng (Top Effort)</strong> và danh sách <strong className="text-red-600 dark:text-red-400">Cảnh Báo Phạt (sau 22:00 CN)</strong>.
+            <p className="hidden sm:block text-xs text-[#838899] dark:text-slate-400 mt-1">
+              Tổng hợp danh hiệu <strong className="text-[#0AB185]">Thưởng (Top Effort)</strong> và danh sách <strong className="text-[#FF4D4F]">Cảnh Báo Phạt (sau 22:00 CN)</strong>.
             </p>
           </div>
 
@@ -96,7 +96,7 @@ export const AwardLeaderboard: React.FC = () => {
                     label: `Tuần ${w} (${range.startDate.slice(0, 5)}-${range.endDate.slice(0, 5)})`,
                   };
                 })}
-                buttonClassName="py-1.5 px-2.5 text-xs bg-slate-50 dark:bg-slate-800 border-slate-300 dark:border-slate-700 font-semibold w-full sm:w-auto"
+                buttonClassName="w-full sm:w-auto font-medium"
               />
             </div>
 
@@ -104,7 +104,7 @@ export const AwardLeaderboard: React.FC = () => {
             {canFinalizeWeek && (
               <button
                 onClick={handleRollover}
-                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
+                className="flex items-center justify-center gap-1.5 h-[32px] px-3.5 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] transition active:scale-95 shrink-0 cursor-pointer"
                 title="Lưu lịch sử tuần hiện tại và chuyển các task làm dở sang tuần tiếp theo"
               >
                 <RefreshCw className="w-3.5 h-3.5 shrink-0" />
@@ -252,25 +252,25 @@ export const AwardLeaderboard: React.FC = () => {
       </div>
 
       {/* Member Ranking Section */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs p-3 sm:p-4 md:p-5 space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-          <h3 className="text-xs sm:text-sm md:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-500" />
+      <div className="bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] overflow-hidden p-4 sm:p-5 space-y-3">
+        <div className="flex items-center justify-between border-b border-[#E8E9EF] dark:border-slate-800 pb-2.5">
+          <h3 className="text-sm sm:text-base font-bold text-[#1D202A] dark:text-slate-100 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-[#1890FF]" />
             <span>Bảng Xếp Hạng Effort Tuần {selectedWeek}</span>
           </h3>
-          <span className="text-[10px] sm:text-[11px] text-slate-400">Xếp theo tổng giờ thực tế</span>
+          <span className="text-[11px] text-[#838899]">Xếp theo tổng giờ thực tế</span>
         </div>
 
         {/* DESKTOP VIEW: Table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        <div className="hidden md:block overflow-x-auto rounded-[8px] border border-[#E8E9EF] dark:border-slate-800">
+          <table className="w-full text-left text-[13px] border-collapse">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
+              <tr className="h-[40px] bg-[rgba(73,82,106,0.03)] dark:bg-slate-800/80 text-[#838899] dark:text-slate-400 text-[12px] font-semibold uppercase tracking-wide border-b border-[#E8E9EF] dark:border-slate-700">
                 <th className="py-2.5 px-3 w-12 text-center">Hạng</th>
                 <th className="py-2.5 px-3">Thành Viên</th>
                 <th className="py-2.5 px-3">Chuyên Môn</th>
                 <th className="py-2.5 px-3 text-center">Số Task Giao</th>
-                <th className="py-2.5 px-3 text-center font-bold text-indigo-600 dark:text-indigo-400">Tổng Effort (h)</th>
+                <th className="py-2.5 px-3 text-center font-bold text-[#1890FF] dark:text-sky-400">Tổng Effort (h)</th>
                 <th className="py-2.5 px-3 text-center">Trạng Thái Báo Cáo</th>
               </tr>
             </thead>
@@ -313,8 +313,8 @@ export const AwardLeaderboard: React.FC = () => {
                       ))}
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-center font-mono text-slate-600 dark:text-slate-300">{item.totalTasks} task</td>
-                  <td className="py-2.5 px-3 text-center font-mono font-black text-indigo-600 dark:text-indigo-400 text-sm">
+                  <td className="py-2.5 px-3 text-center font-mono text-[#838899] dark:text-slate-300">{item.totalTasks} task</td>
+                  <td className="py-2.5 px-3 text-center font-mono font-bold text-[#1890FF] dark:text-sky-400 text-sm">
                     {item.totalEffort}h
                   </td>
                   <td className="py-2.5 px-3 text-center">

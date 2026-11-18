@@ -4,6 +4,7 @@ const FIREBASE_REST_URL = 'https://docugen-676bf-default-rtdb.asia-southeast1.fi
 
 export interface TaskSummaryForMeta {
   id: string;
+  code?: string;
   title: string;
   role?: string;
   assigneeName?: string;
@@ -66,10 +67,12 @@ export async function fetchTaskForMetadata(rawTaskId: string): Promise<TaskSumma
     if (allRes.ok) {
       const allTasks = await allRes.json();
       if (allTasks && typeof allTasks === 'object') {
+        const lowerClean = cleanId.toLowerCase();
         const found = Object.values(allTasks).find((t: any) => {
           if (!t) return false;
-          const tId = String(t.id || '').trim().replace(/^tsk-/, '');
-          return tId === cleanId;
+          const tId = String(t.id || '').trim().replace(/^tsk-/, '').toLowerCase();
+          const tCode = String(t.code || '').trim().toLowerCase();
+          return tId === lowerClean || (tCode && tCode === lowerClean);
         }) as TaskSummaryForMeta | undefined;
 
         if (found && found.title) {
@@ -113,8 +116,9 @@ export function buildTaskMetadata(task: TaskSummaryForMeta | null, rawTaskId: st
   const metaTitle = `${role ? `[${role}] ` : ''}${title} | Saho Task`;
   const metaDesc = `👤 Phụ trách: ${assignee} • 📊 Trạng thái: ${statusText} (${pct}%) • ⏱️ Effort: ${effort}h${week ? ` • 📅 ${week}` : ''}${deadline ? ` • ⏰ Hạn: ${deadline}` : ''}`;
   
-  const cleanId = String(task.id || rawTaskId).replace(/^tsk-/, '');
-  const taskUrl = `${siteUrl}/?taskId=${encodeURIComponent(cleanId)}`;
+  const identifier =
+    (task.code && String(task.code).trim()) || String(task.id || rawTaskId).replace(/^tsk-/, '');
+  const taskUrl = `${siteUrl}/task/${encodeURIComponent(identifier)}`;
 
   // Construct dynamic Open Graph Image URL
   const ogImageParams = new URLSearchParams({

@@ -363,9 +363,9 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   }, [viewYear, viewMonth, value, minDate, maxDate]);
 
   const sizeClasses = {
-    sm: 'text-[11px] py-1.5 px-2.5 rounded-lg',
-    md: 'text-xs py-2 px-3 rounded-xl',
-    lg: 'text-sm py-2.5 px-3.5 rounded-xl',
+    sm: 'text-[12px] h-[28px] px-2.5 rounded-[8px]',
+    md: 'text-[13px] h-[32px] px-3 rounded-[8px]',
+    lg: 'text-[14px] h-[38px] px-3.5 rounded-[8px]',
   }[size];
 
   const formattedDisplay = value ? formatDateOnlyDisplay(value) : '';
@@ -376,7 +376,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     return (
       <div
         ref={popupRef}
-        className={`fixed z-[999999] bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-2xl p-3 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none overscroll-contain ${popupClassName}`}
+        className={`fixed z-[999999] bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] shadow-[0_12px_32px_rgba(29,32,42,0.12)] p-3 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none overscroll-contain ${popupClassName}`}
         style={{
           top: coords.top !== undefined ? `${coords.top}px` : undefined,
           bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
@@ -388,16 +388,16 @@ export const DatePicker: React.FC<DatePickerProps> = ({
       >
         {/* Month & Year Navigator */}
         <div className="flex items-center justify-between px-1">
-          <div className="font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1">
+          <div className="font-bold text-xs text-[#1D202A] dark:text-slate-100 flex items-center gap-1">
             <span>{MONTH_NAMES[viewMonth]}</span>
-            <span className="text-indigo-600 dark:text-indigo-400 font-mono">{viewYear}</span>
+            <span className="text-[#1890FF] dark:text-sky-400 font-mono">{viewYear}</span>
           </div>
 
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={handlePrevMonth}
-              className="w-6 h-6 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center justify-center transition cursor-pointer"
+              className="w-6 h-6 rounded-[6px] hover:bg-[rgba(64,169,255,0.08)] text-[#838899] hover:text-[#1890FF] dark:text-slate-400 dark:hover:text-sky-300 flex items-center justify-center transition cursor-pointer"
               title="Tháng trước"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -405,7 +405,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
             <button
               type="button"
               onClick={handleNextMonth}
-              className="w-6 h-6 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center justify-center transition cursor-pointer"
+              className="w-6 h-6 rounded-[6px] hover:bg-[rgba(64,169,255,0.08)] text-[#838899] hover:text-[#1890FF] dark:text-slate-400 dark:hover:text-sky-300 flex items-center justify-center transition cursor-pointer"
               title="Tháng sau"
             >
               <ChevronRight className="w-4 h-4" />
@@ -419,7 +419,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
             <div
               key={dw}
               className={`text-[10px] font-bold py-0.5 ${
-                i >= 5 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'
+                i >= 5 ? 'text-[#FF7A45] dark:text-amber-400' : 'text-[#838899] dark:text-slate-500'
               }`}
             >
               {dw}
@@ -435,16 +435,16 @@ export const DatePicker: React.FC<DatePickerProps> = ({
               type="button"
               disabled={cell.isDisabled}
               onClick={() => handleSelectDate(cell.year, cell.month, cell.day)}
-              className={`w-8 h-7.5 rounded-lg text-xs flex items-center justify-center font-medium transition-all duration-150 cursor-pointer ${
+              className={`w-8 h-7.5 rounded-[8px] text-xs flex items-center justify-center font-medium transition-all duration-150 cursor-pointer ${
                 cell.isDisabled
-                  ? 'opacity-20 cursor-not-allowed text-slate-400 dark:text-slate-600 line-through pointer-events-none'
+                  ? 'opacity-25 cursor-not-allowed text-[#A2A6B4] dark:text-slate-600 line-through pointer-events-none'
                   : cell.isSelected
-                  ? 'bg-indigo-600 dark:bg-indigo-500 text-white font-bold shadow-sm shadow-indigo-500/30 scale-105'
+                  ? 'bg-[#1890FF] text-white font-bold shadow-xs scale-105'
                   : cell.isToday
-                  ? 'border border-indigo-500/60 dark:border-indigo-400 text-indigo-600 dark:text-indigo-300 font-bold bg-indigo-50/60 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
+                  ? 'border border-[#1890FF] text-[#1890FF] dark:text-sky-300 font-bold bg-[rgba(24,144,255,0.08)] hover:bg-[rgba(24,144,255,0.16)]'
                   : cell.isCurrentMonth
-                  ? 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-600 dark:hover:text-indigo-400'
-                  : 'text-slate-300 dark:text-slate-600 hover:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                  ? 'text-[#1D202A] dark:text-slate-200 hover:bg-[#F3F4F7] dark:hover:bg-slate-800 hover:text-[#1890FF] dark:hover:text-sky-400'
+                  : 'text-[#A2A6B4] dark:text-slate-600 hover:text-[#838899] hover:bg-[#F8FAFB] dark:hover:bg-slate-800/40'
               }`}
             >
               {cell.day}
@@ -453,7 +453,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         </div>
 
         {/* Footer Quick Actions */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1 text-[11px]">
+        <div className="pt-2 border-t border-[#E8E9EF] dark:border-slate-800 flex items-center justify-between gap-1 text-[11px]">
           {(() => {
             const todayStr = getTodayDateOnlyString();
             const isTodayDisabled = Boolean((minDate && todayStr < minDate) || (maxDate && todayStr > maxDate));
@@ -462,10 +462,10 @@ export const DatePicker: React.FC<DatePickerProps> = ({
                 type="button"
                 disabled={isTodayDisabled}
                 onClick={handleSelectToday}
-                className={`px-2 py-1 rounded-lg font-semibold transition flex items-center gap-1.5 ${
+                className={`px-2 py-1 rounded-[6px] font-medium transition flex items-center gap-1.5 ${
                   isTodayDisabled
-                    ? 'opacity-30 text-slate-400 cursor-not-allowed'
-                    : 'text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 cursor-pointer'
+                    ? 'opacity-30 text-[#A2A6B4] cursor-not-allowed'
+                    : 'text-[#1890FF] dark:text-sky-400 hover:bg-[rgba(24,144,255,0.08)] cursor-pointer'
                 }`}
                 title={isTodayDisabled ? 'Ngày hôm nay nằm ngoài khoảng cho phép' : 'Chọn ngày hôm nay'}
               >
@@ -480,7 +480,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
               <button
                 type="button"
                 onClick={handleClear}
-                className="px-2 py-1 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg font-medium transition cursor-pointer"
+                className="px-2 py-1 text-[#FF4D4F] dark:text-rose-400 hover:bg-[rgba(255,77,79,0.10)] rounded-[6px] font-medium transition cursor-pointer"
               >
                 Xóa
               </button>
@@ -488,7 +488,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition cursor-pointer"
+              className="px-2.5 py-1 bg-[#F3F4F7] dark:bg-slate-800 hover:bg-[#E8E9EF] dark:hover:bg-slate-700 text-[#1D202A] dark:text-slate-300 rounded-[6px] font-medium transition cursor-pointer"
             >
               Đóng
             </button>
@@ -501,7 +501,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   return (
     <div className={`relative inline-block text-left w-full ${className}`} ref={containerRef}>
       {label && (
-        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+        <label className="block text-[13px] font-medium text-[#1D202A] dark:text-slate-300 mb-1">
           {label}
         </label>
       )}
@@ -512,19 +512,23 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         type="button"
         disabled={disabled}
         onClick={handleToggle}
-        className={`w-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 flex items-center justify-between gap-2 shadow-2xs transition-all duration-150 active:scale-[0.99] text-left select-none ${sizeClasses} ${
-          disabled ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-800' : 'cursor-pointer'
-        } ${isOpen ? 'ring-2 ring-indigo-500/20 border-indigo-500 z-10' : ''} ${buttonClassName}`}
+        className={`w-full border transition-all duration-150 flex items-center justify-between gap-2 active:scale-[0.99] text-left select-none focus:outline-none ${sizeClasses} ${
+          disabled
+            ? 'opacity-50 cursor-not-allowed bg-[#F8FAFB] dark:bg-slate-800 border-[#E8E9EF] dark:border-slate-700'
+            : isOpen
+            ? 'bg-[rgba(64,169,255,0.08)] dark:bg-sky-950/40 border-[#1890FF] shadow-[0_0_0_3px_#E6F7FF] dark:shadow-[0_0_0_3px_rgba(24,144,255,0.22)] z-10 cursor-pointer'
+            : 'bg-white dark:bg-slate-900 border-[#E8E9EF] dark:border-slate-700 hover:bg-[rgba(64,169,255,0.06)] hover:border-[#A2A6B4] dark:hover:border-slate-600 cursor-pointer'
+        } ${buttonClassName}`}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="shrink-0 text-slate-400 dark:text-slate-500">
-            {icon || <CalendarIcon className="w-3.5 h-3.5 text-indigo-500" />}
+          <span className="shrink-0 text-[#838899] dark:text-slate-500">
+            {icon || <CalendarIcon className="w-3.5 h-3.5 text-[#1890FF]" />}
           </span>
           <span
             className={`truncate font-medium font-mono ${
               formattedDisplay
-                ? 'text-slate-800 dark:text-slate-100 font-semibold'
-                : 'text-slate-400 dark:text-slate-500 font-normal font-sans'
+                ? 'text-[#1D202A] dark:text-slate-100 font-semibold'
+                : 'text-[#838899] dark:text-slate-500 font-normal font-sans'
             }`}
           >
             {formattedDisplay || placeholder}
@@ -535,15 +539,15 @@ export const DatePicker: React.FC<DatePickerProps> = ({
           {value && clearable && !disabled ? (
             <span
               onClick={handleClear}
-              className="p-0.5 text-slate-400 hover:text-rose-500 rounded-md transition cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="p-0.5 text-[#838899] hover:text-[#FF4D4F] rounded-[4px] transition cursor-pointer hover:bg-[#F3F4F7] dark:hover:bg-slate-800"
               title="Xóa ngày đã chọn"
             >
               <X className="w-3 h-3" />
             </span>
           ) : (
             <ChevronDown
-              className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
-                isOpen ? 'rotate-180 text-indigo-600 dark:text-indigo-400' : ''
+              className={`w-3.5 h-3.5 text-[#838899] shrink-0 transition-transform duration-200 ${
+                isOpen ? 'rotate-180 text-[#1890FF] dark:text-sky-400' : ''
               }`}
             />
           )}

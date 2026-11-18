@@ -104,7 +104,7 @@ const SIZE_CONFIGS: Record<
 function getRoleGradient(role?: string): string {
   switch (role) {
     case 'Admin':
-      return 'from-purple-600 to-indigo-600 text-white shadow-purple-500/20';
+      return 'from-[#1890FF] to-[#096DD9] text-white shadow-[#1890FF]/20';
     case 'Leader':
       return 'from-amber-500 to-orange-600 text-white shadow-amber-500/20';
     case 'Advisor':

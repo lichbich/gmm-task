@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import { useSyncModalUrl } from '../lib/sahoUrl';
 import { User, UserRole, Specialization, validateRoleQuota, calculateHighestRole, getUserRoleInSpec } from '../types/task';
 import {
   X,
@@ -31,7 +32,6 @@ import {
   Edit2,
   FileSpreadsheet,
 } from 'lucide-react';
-import { useModalAnimation } from '../hooks/useModalAnimation';
 import { UserAvatar } from './common/UserAvatar';
 import { Dropdown } from './common/Dropdown';
 import { Modal } from './common/Modal';
@@ -41,6 +41,7 @@ interface UserDetailModalProps {
   user: User | null;
   isOpen: boolean;
   onClose: () => void;
+  initialEditMode?: boolean;
 }
 
 interface SavedSnapshot {
@@ -56,7 +57,7 @@ interface SavedSnapshot {
   technologies: string;
 }
 
-export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, onClose }) => {
+export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, onClose, initialEditMode = false }) => {
   const {
     currentUser,
     users,
@@ -136,7 +137,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
         confirmText: 'Rời khỏi & Hủy',
         cancelText: 'Tiếp tục chỉnh sửa',
         type: 'warning',
-        onConfirm: () => forceClose(),
+        onConfirm: () => onClose(),
       });
       return false;
     }
@@ -155,10 +156,25 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     selectedSpecs,
     specRoles,
     confirmDialog,
+    onClose,
   ]);
 
-  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
-    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
+  const handleRequestClose = useCallback(() => {
+    if (checkDirtyAndConfirmClose()) {
+      onClose();
+    }
+  }, [checkDirtyAndConfirmClose, onClose]);
+
+  useSyncModalUrl(
+    isOpen && Boolean(liveUser),
+    liveUser
+      ? `/users/${encodeURIComponent(liveUser.account)}${isEditingProfile ? '/edit' : ''}`
+      : null,
+    onClose,
+    liveUser
+      ? `${isEditingProfile ? 'Sửa ' : ''}${liveUser.name} (@${liveUser.account})`
+      : undefined
+  );
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -219,7 +235,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     setUserBirthDate(initialBirthDate);
     setUserBankAccount(initialBankAccount);
     setUserTechnologies(initialTechnologies);
-    setIsEditingProfile(false);
+    setIsEditingProfile(Boolean(initialEditMode));
     setErrorMsg('');
     setSuccessMsg('');
 
@@ -235,9 +251,9 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
       bankAccount: initialBankAccount,
       technologies: initialTechnologies,
     };
-  }, [isOpen, liveUser?.id]);
+  }, [isOpen, liveUser?.id, initialEditMode]);
 
-  if (!isRendered || !liveUser) return null;
+  if (!liveUser) return null;
 
   const isAdmin = currentUser?.role === 'Admin';
 
@@ -332,7 +348,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
       type: 'danger',
       onConfirm: () => {
         deleteUser(liveUser.id);
-        handleClose();
+        onClose();
       },
     });
   };
@@ -427,36 +443,169 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const roleTheme = getRoleTheme(userRole);
 
   return (
-    <div
-      onMouseDown={handleBackdropMouseDown}
-      onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
-        isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
-      }`}
-    >
-      <div
-        className={`bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden text-slate-800 relative max-h-[92vh] flex flex-col modal-dialog-transition ${
-          isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
-        }`}
-      >
-        {/* Top Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <UserIcon className="w-4 h-4 text-purple-600" />
-            {isAdmin ? 'Chi Tiết & Quản Lý Thông Tin Nhân Viên' : 'Thông Tin Chi Tiết Thành Viên'}
-          </div>
-          <button
-            onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      onRequestClose={checkDirtyAndConfirmClose}
+      size="2xl"
+      icon={<UserIcon className="w-4 h-4 text-[#1890FF]" />}
+      title={isAdmin ? 'Chi Tiết & Quản Lý Thông Tin Nhân Viên' : 'Thông Tin Chi Tiết Thành Viên'}
+      bodyClassName="space-y-4 sm:space-y-5"
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={handleDeleteUser}
+              className="h-[36px] px-3.5 bg-red-50 hover:bg-red-100 text-[#FF4D4F] border border-red-200 rounded-[8px] text-xs font-semibold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              Xóa Thành Viên
+            </button>
+          ) : (
+            <div />
+          )}
 
-        {/* Modal Scrollable Body */}
-        <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 flex-1 overflow-y-auto custom-scrollbar min-h-0 overscroll-contain">
-          {/* User Profile Banner Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-slate-800 rounded-2xl p-4 shadow-md gap-4">
+          <div className="flex items-center gap-2">
+            {isSaved && (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-[8px] animate-in fade-in slide-in-from-right-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Đã lưu thành công!
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              className="saho-modal-btn-secondary"
+            >
+              Đóng
+            </button>
+            {isAdmin && (
+              <button
+                type="submit"
+                form="user-detail-modal-form"
+                disabled={isSaving}
+                className={`h-[36px] px-5 text-white text-xs font-semibold rounded-[8px] shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer ${
+                  isSaved
+                    ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                    : isSaving
+                    ? 'bg-[#1890FF] opacity-80 cursor-wait'
+                    : 'bg-[#1890FF] hover:bg-[#40A9FF] shadow-[#1890FF]/25'
+                }`}
+              >
+                {isSaving ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Đang lưu...</span>
+                  </>
+                ) : isSaved ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-white" />
+                    <span>Đã Lưu!</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Lưu Thay Đổi</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      }
+      afterModal={
+        <Modal
+          isOpen={!!tempCredModal}
+          onClose={() => setTempCredModal(null)}
+          size="md"
+          zIndex="z-[150]"
+          icon={
+            <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <KeyRound className="w-5 h-5" />
+            </div>
+          }
+          title="Đặt Lại Mật Khẩu Thành Công"
+          description={
+            <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider">
+              Mật Khẩu Tạm Thời Mới
+            </span>
+          }
+          footer={
+            tempCredModal ? (
+              <div className="flex items-center gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={() => handleCopyAllInfo(tempCredModal.account, tempCredModal.name, tempCredModal.tempPassword)}
+                  className="flex-1 h-[36px] bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-[8px] shadow-md shadow-purple-600/20 transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                >
+                  {copiedField === 'all' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedField === 'all' ? 'Đã Sao Chép Toàn Bộ!' : 'Sao Chép Gửi Nhân Viên'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTempCredModal(null)}
+                  className="saho-modal-btn-secondary"
+                >
+                  Đóng
+                </button>
+              </div>
+            ) : null
+          }
+        >
+          {tempCredModal && (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Mật khẩu cũ đã bị hủy. Hãy gửi thông tin đăng nhập và mật khẩu tạm thời mới này cho nhân viên.
+              </p>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Họ &amp; Tên:</span>
+                  <span className="font-bold text-slate-800">{tempCredModal.name}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-500 font-medium">Staff Code:</span>
+                  <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
+                    {tempCredModal.account}
+                  </span>
+                </div>
+                <div className="pt-2.5 border-t border-slate-200 flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] text-amber-700 uppercase font-bold tracking-wider block">Mật Khẩu Tạm Thời Mới</span>
+                    <span className="font-mono font-black text-amber-800 text-base tracking-wider">
+                      {tempCredModal.tempPassword}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPasswordOnly(tempCredModal.tempPassword)}
+                    className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                    title="Chỉ sao chép mật khẩu"
+                  >
+                    {copiedField === 'password' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedField === 'password' ? 'Đã chép!' : 'Chép MK'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                  Cơ chế bảo mật đổi mật khẩu lần đầu
+                </div>
+                <p className="text-indigo-800 leading-snug">
+                  Khi nhân viên đăng nhập bằng mật khẩu tạm này, hệ thống sẽ yêu cầu tạo mật khẩu mới ngay lập tức.
+                </p>
+              </div>
+            </div>
+          )}
+        </Modal>
+      }
+    >
+      {/* User Profile Banner Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-gradient-to-r from-[#096DD9] via-[#1890FF] to-[#1D202A] text-white rounded-[12px] p-4 shadow-md gap-4">
             <div className="flex items-center gap-3.5">
               <UserAvatar
                 user={liveUser}
@@ -470,7 +619,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                   {userName || liveUser.name}
                 </h3>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-mono text-indigo-200 bg-white/10 px-2 py-0.5 rounded-md border border-white/15 font-bold">
+                  <span className="text-xs font-mono text-sky-100 bg-white/15 px-2 py-0.5 rounded-[4px] font-bold">
                     @{liveUser.account}
                   </span>
                   <span
@@ -612,7 +761,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
           </div>
 
           {/* Admin Edit Controls: Level & Specializations + Personal Profile Info */}
-          <form onSubmit={handleSaveUser} className="space-y-4">
+          <form id="user-detail-modal-form" onSubmit={handleSaveUser} className="space-y-4">
             <div className="border border-purple-200/80 rounded-2xl p-4 bg-purple-50/30 space-y-4 shadow-2xs">
               <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider flex items-center gap-1.5 border-b border-purple-100 pb-2">
                 <Shield className="w-4 h-4 text-purple-600" />
@@ -1098,160 +1247,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
               </div>
             )}
             </div>
-
-            {/* Submit & Footer Actions */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              {isAdmin ? (
-                <button
-                  type="button"
-                  onClick={handleDeleteUser}
-                  className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Xóa Thành Viên
-                </button>
-              ) : (
-                <div />
-              )}
-
-              <div className="flex items-center gap-2">
-                {isSaved && (
-                  <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl animate-in fade-in slide-in-from-right-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    Đã lưu thành công!
-                  </span>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition"
-                >
-                  Đóng
-                </button>
-                {isAdmin && (
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className={`px-5 py-2 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 active:scale-95 ${
-                      isSaved
-                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
-                        : isSaving
-                        ? 'bg-purple-500 opacity-80 cursor-wait'
-                        : 'bg-purple-600 hover:bg-purple-500 shadow-purple-600/20'
-                    }`}
-                  >
-                    {isSaving ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Đang lưu...</span>
-                      </>
-                    ) : isSaved ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 text-white" />
-                        <span>Đã Lưu!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>Lưu Thay Đổi</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
           </form>
-        </div>
-      </div>
-
-      {/* Temporary Password Modal upon Reset */}
-      <Modal
-        isOpen={!!tempCredModal}
-        onClose={() => setTempCredModal(null)}
-        size="md"
-        zIndex="z-[80]"
-        icon={
-          <div className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-            <KeyRound className="w-5 h-5" />
-          </div>
-        }
-        title={
-          <div>
-            <h3 className="text-sm font-bold text-slate-800">Đặt Lại Mật Khẩu Thành Công</h3>
-            <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block">Mật Khẩu Tạm Thời Mới</span>
-          </div>
-        }
-        footer={
-          tempCredModal ? (
-            <div className="flex items-center gap-2 w-full">
-              <button
-                type="button"
-                onClick={() => handleCopyAllInfo(tempCredModal.account, tempCredModal.name, tempCredModal.tempPassword)}
-                className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-md shadow-purple-600/20 transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
-              >
-                {copiedField === 'all' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedField === 'all' ? 'Đã Sao Chép Toàn Bộ!' : 'Sao Chép Gửi Nhân Viên'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTempCredModal(null)}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer"
-              >
-                Đóng
-              </button>
-            </div>
-          ) : null
-        }
-      >
-        {tempCredModal && (
-          <div className="space-y-4">
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Mật khẩu cũ đã bị hủy. Hãy gửi thông tin đăng nhập và mật khẩu tạm thời mới này cho nhân viên.
-            </p>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-500 font-medium">Họ & Tên:</span>
-                <span className="font-bold text-slate-800">{tempCredModal.name}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-slate-500 font-medium">Staff Code:</span>
-                <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200">
-                  {tempCredModal.account}
-                </span>
-              </div>
-              <div className="pt-2.5 border-t border-slate-200 flex justify-between items-center">
-                <div>
-                  <span className="text-[10px] text-amber-700 uppercase font-bold tracking-wider block">Mật Khẩu Tạm Thời Mới</span>
-                  <span className="font-mono font-black text-amber-800 text-base tracking-wider">
-                    {tempCredModal.tempPassword}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleCopyPasswordOnly(tempCredModal.tempPassword)}
-                  className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-                  title="Chỉ sao chép mật khẩu"
-                >
-                  {copiedField === 'password' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedField === 'password' ? 'Đã chép!' : 'Chép MK'}</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="p-3 bg-indigo-50/70 border border-indigo-200/70 rounded-xl text-[11px] text-indigo-900 space-y-1">
-              <div className="font-bold flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-indigo-600" />
-                Cơ chế bảo mật đổi mật khẩu lần đầu
-              </div>
-              <p className="text-indigo-800 leading-snug">
-                Khi nhân viên đăng nhập bằng mật khẩu tạm này, hệ thống sẽ yêu cầu tạo mật khẩu mới ngay lập tức.
-              </p>
-            </div>
-          </div>
-        )}
-      </Modal>
-    </div>
+    </Modal>
   );
 };

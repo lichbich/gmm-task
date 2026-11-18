@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { parseSahoRoute, useSyncModalUrl } from '../lib/sahoUrl';
 import {
   UserRole,
   Specialization,
@@ -31,6 +32,7 @@ import {
   ArrowUp,
   ArrowDown,
   RotateCcw,
+  Save,
   Eye,
   Copy,
   Check,
@@ -52,6 +54,8 @@ import { Modal } from './common/Modal';
 import { UserDetailModal } from './UserDetailModal';
 import { UserAvatar } from './common/UserAvatar';
 import { SystemPermissionsMatrixView } from './SystemPermissionsMatrixView';
+import { SahoCheckbox } from './common/SahoControls';
+import { sahoToast } from './common/SahoToast';
 
 export type SheetFieldKey =
   | 'no'
@@ -298,7 +302,15 @@ interface WelcomeEmailRequest {
   birthDate?: string | number;
 }
 
-export const UserManagementView: React.FC = () => {
+interface UserManagementViewProps {
+  activeSubTab?: 'USERS' | 'ROLES' | 'PERMISSIONS';
+  onChangeSubTab?: (tab: 'USERS' | 'ROLES' | 'PERMISSIONS') => void;
+}
+
+export const UserManagementView: React.FC<UserManagementViewProps> = ({
+  activeSubTab: activeSubTabProp,
+  onChangeSubTab,
+}) => {
   const {
     users,
     addUser,
@@ -317,18 +329,52 @@ export const UserManagementView: React.FC = () => {
     confirmDialog,
   } = useApp();
 
-  // SUB-TAB & SEARCH STATE
+  // SUB-TAB & SEARCH STATE (controlled by Sidebar/MainAppClient when props provided)
   const isAdmin = currentUser?.role === 'Admin';
-  const [activeSubTab, setActiveSubTab] = useState<'USERS' | 'ROLES' | 'PERMISSIONS'>('USERS');
+  const [internalSubTab, setInternalSubTab] = useState<'USERS' | 'ROLES' | 'PERMISSIONS'>(() => {
+    if (typeof window !== 'undefined') {
+      const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+      if (parsed.userSubTab) return parsed.userSubTab;
+    }
+    return 'USERS';
+  });
+  const activeSubTab: 'USERS' | 'ROLES' | 'PERMISSIONS' = !isAdmin
+    ? 'USERS'
+    : activeSubTabProp ?? internalSubTab;
+  const setActiveSubTab = useCallback(
+    (tab: 'USERS' | 'ROLES' | 'PERMISSIONS') => {
+      if (onChangeSubTab) {
+        onChangeSubTab(tab);
+      } else {
+        setInternalSubTab(tab);
+      }
+    },
+    [onChangeSubTab]
+  );
+  const [userDetailEditMode, setUserDetailEditMode] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [permState, setPermState] = useState({ isDirty: false, isSaving: false });
+  const permActionsRef = useRef<{ resetToDefaults: () => void; save: () => void } | null>(null);
   const isMouseDownOnBatchBackdrop = useRef(false);
 
   // Non-admin roles should only see the USERS list
   useEffect(() => {
-    if (!isAdmin && activeSubTab !== 'USERS') {
-      setActiveSubTab('USERS');
+    if (!isAdmin && internalSubTab !== 'USERS') {
+      setInternalSubTab('USERS');
     }
-  }, [isAdmin, activeSubTab]);
+  }, [isAdmin, internalSubTab]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || activeSubTabProp !== undefined) return;
+    const handlePop = () => {
+      const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+      if (parsed.section === 'users' && parsed.userSubTab && !parsed.modal) {
+        setInternalSubTab(isAdmin ? parsed.userSubTab : 'USERS');
+      }
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, [isAdmin, activeSubTabProp]);
 
   // SORT STATE FOR USER TABLE
   const [sortField, setSortField] = useState<'account' | 'name' | 'role' | 'level' | null>(null);
@@ -490,6 +536,38 @@ export const UserManagementView: React.FC = () => {
   const [userBirthDate, setUserBirthDate] = useState('');
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  useSyncModalUrl(
+    isUserFormOpen && activeSubTab === 'USERS',
+    isUserFormOpen && activeSubTab === 'USERS' ? '/users/create' : null,
+    () => setIsUserFormOpen(false),
+    'Tạo Tài Khoản Thành Viên'
+  );
+
+  const deepLinkUserHandledRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || deepLinkUserHandledRef.current) return;
+    const parsed = parseSahoRoute(window.location.pathname, window.location.search);
+    if (parsed.modal?.kind === 'user-create') {
+      deepLinkUserHandledRef.current = true;
+      if (isAdmin) {
+        setActiveSubTab('USERS');
+        setIsUserFormOpen(true);
+      }
+    } else if (
+      (parsed.modal?.kind === 'user-detail' || parsed.modal?.kind === 'user-edit') &&
+      parsed.modal.id &&
+      users.length > 0
+    ) {
+      deepLinkUserHandledRef.current = true;
+      const targetAcc = decodeURIComponent(parsed.modal.id).trim().toLowerCase();
+      const found = users.find((u) => u.account.toLowerCase() === targetAcc || u.id === parsed.modal?.id);
+      if (found) {
+        setUserDetailEditMode(parsed.modal.kind === 'user-edit' && isAdmin);
+        setSelectedUserForDetail(found);
+      }
+    }
+  }, [users, isAdmin, setSelectedUserForDetail]);
 
   // QUICK SHEET PASTE STATE
   const [sheetColumns, setSheetColumns] = useState<SheetColumnItem[]>(() => {
@@ -939,12 +1017,14 @@ export const UserManagementView: React.FC = () => {
           return prev;
         }
         if (response.ok && data?.success) {
+          sahoToast.success('Đã gửi Email kích hoạt', `Email thông tin tài khoản đã được gửi tới ${emailPayload.email}.`);
           return {
             ...prev,
             emailStatus: 'sent',
             emailMessage: `Đã gửi email thông tin tài khoản & hồ sơ cá nhân tới ${emailPayload.email}.`,
           };
         }
+        sahoToast.warning('Chưa gửi được Email', data?.error || 'Bạn vẫn có thể sao chép mật khẩu tạm cho thành viên.');
         return {
           ...prev,
           emailStatus: 'failed',
@@ -1369,57 +1449,98 @@ export const UserManagementView: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header Banner with Sub-Tabs */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
+      {/* Section Header Banner (Sub-tabs are placed in the Sidebar under "Hệ Thống") */}
+      <div className="saho-hero-card border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-4 sm:p-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                {isAdmin ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-xl font-bold text-[#1D202A] dark:text-slate-100 tracking-tight flex items-center gap-2">
+                {activeSubTab === 'ROLES' && isAdmin ? (
                   <>
-                    <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
-                    <span className="sm:hidden">Quản Trị Hệ Thống</span>
-                    <span className="hidden sm:inline">Quản Trị Hệ Thống & Phân Quyền</span>
+                    <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-[#1890FF]" />
+                    <span>Danh Mục Role & Chuyên Môn ({roles.length})</span>
+                  </>
+                ) : activeSubTab === 'PERMISSIONS' && isAdmin ? (
+                  <>
+                    <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-[#1890FF]" />
+                    <span>Phân Quyền Hệ Thống</span>
                   </>
                 ) : (
                   <>
-                    <Users className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
-                    <span className="sm:hidden">Danh Sách Thành Viên</span>
-                    <span className="hidden sm:inline">Danh Sách Thành Viên & Nhân Sự</span>
+                    <Users className="w-5 h-5 sm:w-6 sm:h-6 text-[#1890FF]" />
+                    <span>Danh Sách Thành Viên ({users.length})</span>
                   </>
                 )}
               </h2>
               {isAdmin ? (
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-300">
-                  Admin Only
-                </span>
+                <>
+                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-[12px] bg-[rgba(179,127,235,0.16)] text-[#9254DE]">
+                    Admin Only
+                  </span>
+                  {activeSubTab === 'PERMISSIONS' && permState.isDirty && (
+                    <span className="px-2.5 py-0.5 rounded-[12px] text-[11px] font-medium bg-[rgba(255,77,79,0.16)] text-[#FF4D4F] animate-pulse">
+                      Có thay đổi chưa lưu
+                    </span>
+                  )}
+                </>
               ) : (
-                <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+                <span className="text-xs font-medium px-2.5 py-0.5 rounded-[12px] bg-[rgba(24,144,255,0.14)] text-[#1890FF]">
                   {users.filter((u) => !u.disabled && u.status !== 'disabled').length} thành viên
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              {isAdmin
-                ? 'Admin tạo/sửa/xóa thành viên, phân quyền và quản lý danh mục các Role/Chuyên môn trong toàn hệ thống.'
+            <p className="text-xs text-[#838899] dark:text-slate-400 mt-1">
+              {activeSubTab === 'ROLES' && isAdmin
+                ? 'Quản lý danh mục các Role/Chuyên môn, mô tả và thứ tự hiển thị trên toàn hệ thống.'
+                : activeSubTab === 'PERMISSIONS' && isAdmin
+                ? 'Cấu hình quyền truy cập chức năng theo từng Vai trò (Role) và tùy biến quyền riêng cho từng Thành viên.'
+                : isAdmin
+                ? 'Admin tạo, sửa, khóa tài khoản thành viên và cấp mật khẩu khởi tạo trong toàn hệ thống.'
                 : 'Xem danh sách thành viên, vai trò (role), level và kỹ năng chuyên môn của các nhân sự trong dự án.'}
             </p>
           </div>
 
           {isAdmin && (
             <div className="shrink-0 flex items-center gap-2 flex-wrap">
-              {activeSubTab === 'USERS' ? (
+              {activeSubTab === 'PERMISSIONS' ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={permState.isSaving}
+                    onClick={() => permActionsRef.current?.resetToDefaults()}
+                    className="flex items-center gap-1.5 h-[34px] px-3 text-xs font-medium text-[#1D202A] dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-[#F8FAFB] dark:hover:bg-slate-700 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                    title="Khôi phục ma trận phân quyền về chuẩn mặc định"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Mặc Định Chuẩn</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={permState.isSaving || !permState.isDirty}
+                    onClick={() => permActionsRef.current?.save()}
+                    className={`flex items-center gap-1.5 h-[34px] px-4 rounded-[8px] text-xs font-medium transition-all active:scale-95 ${
+                      permState.isDirty
+                        ? 'bg-[#1890FF] hover:bg-[#40A9FF] text-white shadow-[0_2px_8px_rgba(24,144,255,0.28)] cursor-pointer'
+                        : 'bg-[#E8E9EF] dark:bg-slate-800 text-[#A2A6B4] cursor-not-allowed'
+                    }`}
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{permState.isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi'}</span>
+                  </button>
+                </>
+              ) : activeSubTab === 'USERS' ? (
                 <>
                   <button
                     onClick={handleBatchReset}
-                    className="flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-bold rounded-xl shadow-xs transition shrink-0 active:scale-95 cursor-pointer"
+                    className="flex items-center gap-1.5 h-[34px] px-3.5 bg-white dark:bg-slate-900 hover:bg-[rgba(255,169,64,0.12)] text-[#D46B08] border border-[#FFA940]/50 text-xs font-medium rounded-[8px] transition shrink-0 active:scale-95 cursor-pointer"
                     title={
                       needNewTempUsers.length > 0
                         ? `Cấp mật khẩu tạm cho ${needNewTempUsers.length} người mới chưa có (giữ nguyên người đã có)`
                         : `Xem danh sách mật khẩu tạm của ${pendingFirstLoginUsers.length} người đang chờ kích hoạt`
                     }
                   >
-                    <KeyRound className="w-4 h-4 text-amber-600" />
+                    <KeyRound className="w-4 h-4 text-[#FF7A45]" />
                     <span className="sm:hidden">
                       {needNewTempUsers.length > 0 ? `Cấp MK (${needNewTempUsers.length})` : `DS MK (${pendingFirstLoginUsers.length})`}
                     </span>
@@ -1432,7 +1553,7 @@ export const UserManagementView: React.FC = () => {
 
                   <button
                     onClick={handleOpenAddUser}
-                    className="flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-purple-600/20 transition shrink-0 active:scale-95 cursor-pointer"
+                    className="flex items-center gap-2 h-[34px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition shrink-0 active:scale-95 cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span className="sm:hidden">Thêm TK</span>
@@ -1442,7 +1563,7 @@ export const UserManagementView: React.FC = () => {
               ) : (
                 <button
                   onClick={handleOpenAddRole}
-                  className="flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition shrink-0 active:scale-95 cursor-pointer"
+                  className="flex items-center gap-2 h-[34px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition shrink-0 active:scale-95 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span className="sm:hidden">Thêm Role</span>
@@ -1452,57 +1573,6 @@ export const UserManagementView: React.FC = () => {
             </div>
           )}
         </div>
-
-        {/* Navigation Sub-Tabs Switcher (Admin Only) */}
-        {isAdmin && (
-          <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200 w-full sm:w-fit gap-1">
-            <button
-              onClick={() => {
-                setActiveSubTab('USERS');
-                setIsRoleFormOpen(false);
-              }}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
-                activeSubTab === 'USERS'
-                  ? 'bg-white text-purple-700 shadow-sm shadow-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5 text-purple-600" />
-              <span className="sm:hidden">Tài Khoản ({users.length})</span>
-              <span className="hidden sm:inline">Tài Khoản Thành Viên ({users.length})</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveSubTab('ROLES');
-                setIsUserFormOpen(false);
-              }}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
-                activeSubTab === 'ROLES'
-                  ? 'bg-white text-indigo-700 shadow-sm shadow-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5 text-indigo-600" />
-              <span className="sm:hidden">Role & Chuyên Môn ({roles.length})</span>
-              <span className="hidden sm:inline">Danh Mục Role & Chuyên Môn ({roles.length})</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveSubTab('PERMISSIONS');
-                setIsUserFormOpen(false);
-                setIsRoleFormOpen(false);
-              }}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer ${
-                activeSubTab === 'PERMISSIONS'
-                  ? 'bg-white text-purple-700 shadow-sm shadow-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
-              <span>Phân Quyền</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ========================================================================= */}
@@ -1510,603 +1580,11 @@ export const UserManagementView: React.FC = () => {
       {/* ========================================================================= */}
       {activeSubTab === 'USERS' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Add / Edit User Form */}
-          {isUserFormOpen && (
-            <form
-              onSubmit={handleSubmitUser}
-              className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-purple-500" />
-                  {editingUserId ? 'Chỉnh Sửa Tài Khoản & Thông Tin Thành Viên' : 'Tạo Tài Khoản & Phân Quyền Mới'}
-                </h3>
-                {editingUserId && (
-                  <span className="text-[11px] font-mono bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-0.5 rounded-lg font-bold">
-                    Đang sửa: @{userAccount}
-                  </span>
-                )}
-              </div>
-
-              {/* QUICK SHEET PASTE BOX */}
-              <div className="bg-gradient-to-r from-purple-50/80 via-indigo-50/50 to-purple-50/80 border border-purple-200/90 rounded-2xl p-3.5 sm:p-4 space-y-3 shadow-2xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
-                      <FileSpreadsheet className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-extrabold text-purple-900 block">
-                        Nhập Nhanh Thông Tin Thành Viên Từ Google Sheet / Excel
-                      </span>
-                      <span className="text-[11px] text-purple-700">
-                        Copy dòng nhân viên từ Sheet và dán vào đây để tự động điền & đối chiếu thông tin
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowColumnGuide(!showColumnGuide)}
-                    className="flex items-center gap-1 text-[11px] text-purple-700 hover:text-purple-900 font-bold bg-white/90 hover:bg-white border border-purple-200 px-2.5 py-1 rounded-lg transition shrink-0 cursor-pointer shadow-2xs active:scale-95"
-                  >
-                    <Info className="w-3.5 h-3.5 text-purple-600" />
-                    <span>{showColumnGuide ? 'Ẩn Cột Chuẩn' : 'Xem Thứ Tự Cột Chuẩn'}</span>
-                  </button>
-                </div>
-
-                {/* Column Structure Helper & Reorder / Add Tool */}
-                {showColumnGuide && (
-                  <div className="p-3.5 bg-white/95 rounded-xl border border-purple-200 text-[11px] space-y-3 transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-2 shadow-2xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-800">
-                          Thứ tự các cột tương thích trên Google Sheet / Excel:
-                        </span>
-                        <span className="text-[10px] font-mono font-bold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">
-                          {sheetColumns.length} cột
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleResetColumns}
-                        className="text-[10px] font-semibold text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 w-fit cursor-pointer"
-                        title="Khôi phục lại 13 cột theo mẫu Google Sheet mặc định"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Đặt lại mặc định</span>
-                      </button>
-                    </div>
-
-                    {/* Draggable Column Pills */}
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {sheetColumns.map((col, idx) => {
-                        const isKeyCol = col.key === 'account' || col.key === 'name';
-                        const isDragging = draggedColIdx === idx;
-                        const isOver = dragOverColIdx === idx;
-
-                        return (
-                          <div
-                            key={col.id || `${col.key}-${idx}`}
-                            draggable
-                            onDragStart={(e) => {
-                              setDraggedColIdx(idx);
-                              e.dataTransfer.setData('text/plain', String(idx));
-                            }}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              if (dragOverColIdx !== idx) setDragOverColIdx(idx);
-                            }}
-                            onDragLeave={() => {
-                              if (dragOverColIdx === idx) setDragOverColIdx(null);
-                            }}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              if (draggedColIdx !== null && draggedColIdx !== idx) {
-                                handleReorderColumns(draggedColIdx, idx);
-                              }
-                              setDraggedColIdx(null);
-                              setDragOverColIdx(null);
-                            }}
-                            onDragEnd={() => {
-                              setDraggedColIdx(null);
-                              setDragOverColIdx(null);
-                            }}
-                            onClick={() => handleOpenEditColumn(idx)}
-                            className={`group relative flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-lg border text-[11px] font-medium select-none cursor-pointer transition-all duration-150 ${
-                              isDragging
-                                ? 'opacity-30 scale-95 border-purple-400 bg-purple-100'
-                                : isOver
-                                ? 'border-purple-600 bg-purple-100 ring-2 ring-purple-400 shadow-md scale-105'
-                                : isKeyCol
-                                ? 'bg-purple-50 text-purple-900 border-purple-300 font-bold hover:border-purple-400 hover:bg-purple-100/70 shadow-2xs'
-                                : col.key === 'skip'
-                                ? 'bg-slate-50 text-slate-400 border-dashed border-slate-300 hover:bg-slate-100'
-                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-purple-300 hover:bg-purple-50/50'
-                            }`}
-                            title="Kéo thả để đổi thứ tự, hoặc bấm vào để sửa tên / kiểu cột"
-                          >
-                            <GripVertical className="w-3 h-3 text-slate-400 group-hover:text-purple-600 shrink-0 cursor-grab active:cursor-grabbing" />
-                            <span className="font-mono text-[10px] text-purple-700 font-bold shrink-0">
-                              {idx + 1}.
-                            </span>
-                            <span className="truncate max-w-[130px] font-medium">{col.label}</span>
-
-                            {col.key === 'skip' && (
-                              <span className="text-[9px] text-slate-400 bg-slate-200/60 px-1 py-0.2 rounded font-normal shrink-0">
-                                Bỏ qua
-                              </span>
-                            )}
-
-                            {sheetColumns.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRemoveColumn(idx);
-                                }}
-                                title="Xóa cột này khỏi mapping"
-                                className="w-3.5 h-3.5 flex items-center justify-center text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-full transition cursor-pointer shrink-0 ml-0.5"
-                              >
-                                <X className="w-2.5 h-2.5" />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-
-                      {/* Add Column Button */}
-                      <button
-                        type="button"
-                        onClick={handleOpenAddColumn}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg border-2 border-dashed border-purple-300 hover:border-purple-600 bg-purple-50/80 hover:bg-purple-100 text-purple-700 text-[11px] font-bold transition active:scale-95 cursor-pointer shadow-2xs"
-                        title="Thêm cột mới vào cuối danh sách"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Thêm Cột</span>
-                      </button>
-                    </div>
-
-                    <p className="text-[10px] text-slate-500 italic leading-snug">
-                      💡 Mẹo: <b>Kéo thả</b> các thẻ để đổi thứ tự cột, hoặc bấm vào từng thẻ để <b>đổi tên cột</b> / <b>chỉnh trường dữ liệu</b>. Bấm <b>&quot;+ Thêm Cột&quot;</b> để bổ sung cột mới. Cấu hình sẽ tự động lưu lại.
-                    </p>
-                  </div>
-                )}
-
-
-
-                {/* Paste Action Input & Button */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <div className="relative flex-1">
-                    <input
-                      id="sheet-quick-paste-input"
-                      type="text"
-                      value={quickPasteInput}
-                      onChange={(e) => {
-                        setQuickPasteInput(e.target.value);
-                        handleProcessSheetData(e.target.value);
-                      }}
-                      onPaste={(e) => {
-                        const pasted = e.clipboardData.getData('text');
-                        if (pasted) {
-                          e.preventDefault();
-                          handleProcessSheetData(pasted);
-                        }
-                      }}
-                      placeholder="👉 Dán (Ctrl + V) dòng dữ liệu copy từ Google Sheet hoặc Excel vào đây..."
-                      className="w-full bg-white border border-purple-300/90 rounded-xl px-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 font-medium focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handlePasteFromClipboard}
-                    className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 shadow-xs shrink-0 cursor-pointer"
-                    title="Đọc dữ liệu vừa copy trong Clipboard"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Dán Từ Clipboard</span>
-                  </button>
-                </div>
-
-                {/* Multi-member row switcher & Batch Action Banner if user pasted multiple rows */}
-                {multiParsedList.length > 1 && (
-                  <div className="p-3 bg-gradient-to-r from-purple-100/90 via-indigo-100/80 to-purple-100/90 border border-purple-300 rounded-2xl space-y-2.5 shadow-xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
-                          <Users className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
-                            <span>Đã nhận diện {multiParsedList.length} nhân sự từ Sheet</span>
-                            <span className="text-[10px] font-mono font-bold bg-white text-purple-700 px-1.5 py-0.2 rounded border border-purple-200">
-                              {multiParsedList.filter((x) => !x.existingUser).length} mới •{' '}
-                              {multiParsedList.filter((x) => !!x.existingUser).length} cập nhật
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-purple-800">
-                            Bạn có thể bấm nhập hàng loạt tất cả cùng lúc hoặc bấm vào từng người để kiểm tra
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setBatchSelectedIndices(new Set(multiParsedList.map((_, i) => i)));
-                          setIsBatchImportModalOpen(true);
-                        }}
-                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-purple-600/20 active:scale-95 cursor-pointer shrink-0"
-                      >
-                        <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
-                        <span>Mở Bảng Nhập Hàng Loạt ({multiParsedList.length})</span>
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 pt-1 border-t border-purple-200/80">
-                      {multiParsedList.map((item, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            setSelectedMultiIdx(idx);
-                            applyParsedMember(item.member);
-                          }}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                            selectedMultiIdx === idx
-                              ? 'bg-purple-600 text-white shadow-xs ring-2 ring-purple-300'
-                              : 'bg-white text-slate-700 border border-purple-200 hover:bg-purple-50'
-                          }`}
-                        >
-                          <span>{item.member.name || `@${item.member.account}`}</span>
-                          {item.existingUser ? (
-                            <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-mono font-medium">
-                              Sửa
-                            </span>
-                          ) : (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1 py-0.2 rounded font-mono font-medium">
-                              Mới
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Feedback Banner (Check existing vs New) */}
-                {pasteFeedback && (
-                  <div
-                    className={`p-3 rounded-xl text-xs font-semibold flex items-start gap-2 animate-in fade-in ${
-                      pasteFeedback.type === 'update'
-                        ? 'bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs'
-                        : pasteFeedback.type === 'create'
-                        ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-2xs'
-                        : 'bg-red-50 text-red-700 border border-red-200'
-                    }`}
-                  >
-                    {pasteFeedback.type === 'update' ? (
-                      <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    ) : pasteFeedback.type === 'create' ? (
-                      <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                    )}
-                    <div className="flex-1 leading-snug">
-                      <span>{pasteFeedback.message}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setPasteFeedback(null)}
-                      className="text-slate-400 hover:text-slate-600 p-0.5"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Tên Hiển Thị (Full Name): <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: Nguyễn Văn Quỳnh"
-                    value={userName}
-                    onChange={(e) => setUserName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 font-semibold"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Staff Code (Username Đăng Nhập): <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: QuynhNV, ThanhNDT..."
-                    value={userAccount}
-                    onChange={(e) => setUserAccount(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 font-mono font-bold text-indigo-700"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Cấp Phân Quyền Tổng Thể (System Level):
-                  </label>
-                  <Dropdown
-                    value={userRole}
-                    onChange={(newRole) => handleUserRoleChange(newRole as UserRole)}
-                    options={[
-                      { value: 'Leader', label: '👑 Leader (Trưởng nhóm)' },
-                      { value: 'Advisor', label: '🎖️ Advisor (Cố vấn)' },
-                      { value: 'Member', label: '👥 Member (Thành viên)' },
-                      { value: 'Admin', label: '🛡️ Admin (Quản trị)' },
-                    ]}
-                    className="w-full"
-                    buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-300 font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Số Căn Cước (CCCD):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: 001099036785"
-                    value={userCccd}
-                    onChange={(e) => setUserCccd(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Tài Khoản Ngân Hàng (Tk Bank):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: 04891636001 - TPB - NGUYEN VAN QUYNH"
-                    value={userBankAccount}
-                    onChange={(e) => setUserBankAccount(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Địa Chỉ Email (Gmail):
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="VD: nguyenvanquynh396lp@gmail.com"
-                    value={userEmail}
-                    onChange={(e) => setUserEmail(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Số Điện Thoại (Phone):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: 0388607463"
-                    value={userPhone}
-                    onChange={(e) => setUserPhone(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Công Nghệ / Kỹ Năng (Technology):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: PO, Angular, JavaSpring"
-                    value={userTechnologies}
-                    onChange={(e) => setUserTechnologies(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Năm Sinh (BirthDate):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="VD: 1999"
-                    value={userBirthDate}
-                    onChange={(e) => setUserBirthDate(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100 font-mono"
-                  />
-                </div>
-
-                {/* DYNAMIC ROLE / SPECIALIZATION CHECKBOXES */}
-                <div className="md:col-span-3">
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">
-                    Vị Trí Chuyên Môn Kiêm Nhiệm (Role):
-                  </label>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {roles.map((r) => {
-                      const isChecked = selectedSpecs.includes(r.code);
-                      const style = getRoleStyle(r.color);
-                      return (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => toggleSpec(r.code)}
-                          className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 ${
-                            isChecked
-                              ? `${style.bg} ${style.text} ${style.border} shadow-2xs`
-                              : 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100'
-                          }`}
-                        >
-                          {isChecked ? (
-                            <CheckSquare className="w-3.5 h-3.5 text-purple-600" />
-                          ) : (
-                            <Square className="w-3.5 h-3.5 text-slate-400" />
-                          )}
-                          <span>{r.code}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Granular Role per Specialization Selector Matrix */}
-                {selectedSpecs.length > 0 && userRole !== 'Admin' && (
-                  <div className="md:col-span-3 pt-3 space-y-2.5 border-t border-slate-200">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                      <label className="text-xs font-bold text-purple-950 block flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                        Phân Quyền Vai Trò Chi Tiết Theo Từng Nghiệp Vụ:
-                      </label>
-                      <span className="text-[11px] text-purple-700 font-medium italic">
-                        (Thiết lập riêng Leader / Advisor / Member cho từng team, ví dụ: Leader PM & Advisor BA)
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-                      {selectedSpecs.map((spec) => {
-                        const currentSpecRole = specRoles[spec] || userRole || 'Member';
-                        const rObj = roles.find((r) => r.code === spec);
-                        return (
-                          <div
-                            key={spec}
-                            className="bg-purple-50/40 border border-purple-200/90 rounded-xl p-3 shadow-2xs space-y-2"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                                <span className="font-mono text-purple-800 bg-purple-100 px-2 py-0.5 rounded text-xs font-black">
-                                  {spec}
-                                </span>
-                                {rObj?.name && rObj.name !== spec && (
-                                  <span className="text-[11px] text-slate-500 font-normal truncate max-w-[120px]">
-                                    ({rObj.name})
-                                  </span>
-                                )}
-                              </span>
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                  currentSpecRole === 'Leader'
-                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
-                                    : currentSpecRole === 'Advisor'
-                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                                    : 'bg-blue-100 text-blue-800 border-blue-300'
-                                }`}
-                              >
-                                {currentSpecRole === 'Leader'
-                                  ? '👑 Leader'
-                                  : currentSpecRole === 'Advisor'
-                                  ? '🎖️ Advisor'
-                                  : '👥 Member'}
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-1">
-                              {(['Leader', 'Advisor', 'Member'] as UserRole[]).map((rOption) => {
-                                const isSelected = currentSpecRole === rOption;
-                                const optColor =
-                                  rOption === 'Leader'
-                                    ? isSelected
-                                      ? 'bg-amber-500 text-white font-bold border-amber-500 shadow-xs'
-                                      : 'bg-amber-50/80 text-amber-800 hover:bg-amber-100 border-amber-200'
-                                    : rOption === 'Advisor'
-                                    ? isSelected
-                                      ? 'bg-emerald-600 text-white font-bold border-emerald-600 shadow-xs'
-                                      : 'bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100 border-emerald-200'
-                                    : isSelected
-                                    ? 'bg-blue-600 text-white font-bold border-blue-600 shadow-xs'
-                                    : 'bg-blue-50/80 text-blue-800 hover:bg-blue-100 border-blue-200';
-
-                                return (
-                                  <button
-                                    key={rOption}
-                                    type="button"
-                                    onClick={() => handleSpecRoleChange(spec, rOption)}
-                                    className={`py-1 px-1 rounded-lg text-[11px] border transition flex items-center justify-center gap-1 cursor-pointer active:scale-95 font-semibold ${optColor}`}
-                                  >
-                                    <span>
-                                      {rOption === 'Leader'
-                                        ? '👑 Leader'
-                                        : rOption === 'Advisor'
-                                        ? '🎖️ Advisor'
-                                        : '👥 Member'}
-                                    </span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {!editingUserId && (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2.5 bg-indigo-50/60 border border-indigo-200/80 rounded-xl">
-                  <label className="flex items-center gap-2 text-xs text-slate-700 font-medium cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={sendWelcomeEmail}
-                      onChange={(e) => setSendWelcomeEmail(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
-                    />
-                    <Mail className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>Tự động gửi Email thông tin tài khoản &amp; hồ sơ cá nhân cho thành viên</span>
-                  </label>
-                  {sendWelcomeEmail && !userEmail.trim() && (
-                    <span className="text-[11px] text-amber-700 font-medium">
-                      * Vui lòng nhập Địa Chỉ Email (Gmail) ở trên để gửi mail
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleCloseUserForm}
-                  disabled={isCreatingUser}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 text-xs rounded-xl hover:bg-slate-200 transition cursor-pointer disabled:opacity-50"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingUser}
-                  className="px-5 py-2 bg-purple-600 text-white text-xs font-semibold rounded-xl hover:bg-purple-500 shadow-md shadow-purple-600/20 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                >
-                  {isCreatingUser && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>
-                    {editingUserId
-                      ? 'Lưu Thay Đổi'
-                      : isCreatingUser
-                      ? 'Đang Tạo Tài Khoản...'
-                      : 'Tạo Account'}
-                  </span>
-                </button>
-              </div>
-            </form>
-          )}
-
           {/* Users Table */}
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm p-5 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
+          <div className="bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] overflow-hidden p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E8E9EF] dark:border-slate-800 pb-3 gap-3">
               <div>
-                <h3 className="text-base font-bold text-slate-800">
+                <h3 className="text-base font-bold text-[#1D202A] dark:text-slate-100">
                   {isAdmin
                     ? `Danh Sách Nhân Viên (${users.filter((u) => !u.disabled && u.status !== 'disabled').length} nhân sự hoạt động)`
                     : `Danh Sách Nhân Sự Dự Án (${users.filter((u) => !u.disabled && u.status !== 'disabled').length} thành viên)`}
@@ -2120,28 +1598,28 @@ export const UserManagementView: React.FC = () => {
                       setLockedUsersSearchQuery('');
                       setIsLockedUsersModalOpen(true);
                     }}
-                    className="text-xs px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition flex items-center gap-1.5 font-semibold cursor-pointer shadow-2xs"
+                    className="h-[32px] text-xs px-3 rounded-[8px] border border-[#FF4D4F]/30 bg-[rgba(255,77,79,0.08)] text-[#FF4D4F] hover:bg-[rgba(255,77,79,0.16)] transition flex items-center gap-1.5 font-medium cursor-pointer"
                     title="Xem danh sách tài khoản đã khóa trong DB"
                   >
-                    <Lock className="w-3.5 h-3.5 text-rose-600" />
+                    <Lock className="w-3.5 h-3.5 text-[#FF4D4F]" />
                     <span>Tài khoản đã khóa ({users.filter((u) => u.disabled || u.status === 'disabled').length})</span>
                   </button>
                 )}
 
                 {/* Search Bar Input */}
                 <div className="relative min-w-[200px] sm:w-64">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <Search className="w-4 h-4 text-[#838899] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
                     placeholder="Tìm kiếm tên, staff code, email..."
                     value={userSearchQuery}
                     onChange={(e) => setUserSearchQuery(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 font-medium focus:outline-none focus:border-purple-400 focus:bg-white focus:ring-2 focus:ring-purple-100 transition"
+                    className="w-full h-[32px] bg-[#F8FAFB] dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] pl-9 pr-8 text-xs text-[#1D202A] dark:text-slate-100 font-medium placeholder:text-[#838899] focus:outline-none focus:border-[#1890FF] focus:bg-white focus:shadow-[0_0_0_3px_#E6F7FF] transition"
                   />
                   {userSearchQuery && (
                     <button
                       onClick={() => setUserSearchQuery('')}
-                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A2A6B4] hover:text-[#1D202A] p-0.5 cursor-pointer"
                       title="Xóa tìm kiếm"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -2152,28 +1630,28 @@ export const UserManagementView: React.FC = () => {
             </div>
 
             {/* DESKTOP TABLE VIEW */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="hidden md:block overflow-x-auto rounded-[8px] border border-[#E8E9EF] dark:border-slate-800">
+              <table className="w-full text-left text-[13px] border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
+                  <tr className="h-[40px] bg-[rgba(73,82,106,0.03)] dark:bg-slate-800/80 text-[#838899] font-semibold uppercase tracking-wide border-b border-[#E8E9EF] dark:border-slate-700 text-[11px]">
                     <th className="py-3 px-3 w-10 text-center">STT</th>
 
                     {/* STAFF CODE Header */}
                     <th
                       onClick={() => handleSort('account')}
-                      className="py-3 px-3 cursor-pointer select-none hover:text-purple-600 transition group"
+                      className="py-3 px-3 cursor-pointer select-none hover:text-[#1890FF] transition group"
                       title="Bấm để sắp xếp theo Staff Code (A-Z / Z-A)"
                     >
                       <div className="flex items-center gap-1.5">
                         <span>STAFF CODE (USERNAME)</span>
                         {sortField === 'account' ? (
                           sortOrder === 'asc' ? (
-                            <ArrowUp className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <ArrowUp className="w-3.5 h-3.5 text-[#1890FF] shrink-0" />
                           ) : (
-                            <ArrowDown className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            <ArrowDown className="w-3.5 h-3.5 text-[#1890FF] shrink-0" />
                           )
                         ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-50 group-hover:opacity-100 shrink-0" />
+                          <ArrowUpDown className="w-3 h-3 text-[#A2A6B4] opacity-60 group-hover:opacity-100 shrink-0" />
                         )}
                       </div>
                     </th>
@@ -2181,7 +1659,7 @@ export const UserManagementView: React.FC = () => {
                     {/* FULL NAME Header */}
                     <th
                       onClick={() => handleSort('name')}
-                      className="py-3 px-4 cursor-pointer select-none hover:text-purple-600 transition group"
+                      className="py-3 px-4 cursor-pointer select-none hover:text-[#1890FF] transition group"
                       title="Bấm để sắp xếp theo Họ và Tên (A-Z / Z-A)"
                     >
                       <div className="flex items-center gap-1.5">
@@ -2566,13 +2044,13 @@ export const UserManagementView: React.FC = () => {
       {activeSubTab === 'ROLES' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Roles Table */}
-          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] overflow-hidden p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E8E9EF] dark:border-slate-800 pb-3">
               <div>
-                <h3 className="text-base font-bold text-slate-800">
+                <h3 className="text-base font-bold text-[#1D202A] dark:text-slate-100">
                   Danh Mục Role & Chuyên Môn Dự Án ({roles.length} role)
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-[#838899] mt-0.5">
                   {isAdmin
                     ? 'Kéo thả (drag & drop) các dòng từ trên xuống dưới để sắp xếp thứ tự hiển thị của các role trên toàn bộ hệ thống.'
                     : 'Các role dùng để phân nhóm công việc, giao task và theo dõi cột mốc milestone.'}
@@ -2580,10 +2058,10 @@ export const UserManagementView: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto rounded-[8px] border border-[#E8E9EF] dark:border-slate-800">
+              <table className="w-full text-left text-[13px] border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-200">
+                  <tr className="h-[40px] bg-[rgba(73,82,106,0.03)] dark:bg-slate-800/80 text-[#838899] text-[11px] font-semibold uppercase tracking-wide border-b border-[#E8E9EF] dark:border-slate-700">
                     {isAdmin && <th className="py-3 px-2 w-10 text-center">#</th>}
                     <th className="py-3 px-4">Mã Role</th>
                     <th className="py-3 px-4">Tên Hiển Thị & Mô Tả</th>
@@ -3313,12 +2791,624 @@ export const UserManagementView: React.FC = () => {
           </div>
         )}
       </Modal>
+      {/* MODAL: TẠO / CHỈNH SỬA TÀI KHOẢN THÀNH VIÊN (Saho Figma Design) */}
+      <Modal
+        isOpen={isUserFormOpen}
+        onClose={handleCloseUserForm}
+        onRequestClose={checkUserDirtyAndConfirmClose}
+        size="2xl"
+        bodyClassName="space-y-5"
+        title={
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>
+              {editingUserId
+                ? 'Chỉnh sửa thông tin thành viên'
+                : 'Tạo tài khoản & phân quyền mới'}
+            </span>
+            {editingUserId && (
+              <span className="text-[11px] font-mono bg-[rgba(24,144,255,0.12)] text-[#1890FF] border border-[rgba(24,144,255,0.28)] px-2 py-0.5 rounded-[6px] font-bold">
+                @{userAccount}
+              </span>
+            )}
+          </div>
+        }
+        description={
+          editingUserId
+            ? `Đang cập nhật • @${userAccount}`
+            : 'Thông tin cá nhân • Phân quyền hệ thống'
+        }
+        footer={
+          <div className="flex items-center justify-between w-full gap-3">
+            <button
+              type="button"
+              onClick={handleCloseUserForm}
+              disabled={isCreatingUser}
+              className="h-[36px] px-5 bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 hover:bg-[#F8FAFB] dark:hover:bg-slate-700 hover:border-[#A2A6B4] text-[#1D202A] dark:text-slate-200 text-xs font-medium rounded-[8px] transition cursor-pointer active:scale-95 disabled:opacity-50"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              form="user-account-modal-form"
+              disabled={isCreatingUser}
+              className="h-[36px] px-5 bg-[#1890FF] hover:bg-[#40A9FF] active:bg-[#096DD9] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-60"
+            >
+              {isCreatingUser && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              <span>
+                {editingUserId
+                  ? 'Lưu Thay Đổi'
+                  : isCreatingUser
+                  ? 'Đang Tạo Tài Khoản...'
+                  : 'Tạo Account'}
+              </span>
+            </button>
+          </div>
+        }
+      >
+        <form
+          id="user-account-modal-form"
+          onSubmit={handleSubmitUser}
+          className="space-y-5"
+        >
+          {/* 2-Column Figma Form Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+            {/* Row 1: Full Name | Staff Code */}
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Tên Hiển Thị (Full Name): <span className="text-[#FF4D4F]">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="VD: Nguyễn Văn Quỳnh"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none font-medium transition"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Staff Code (Username Đăng Nhập): <span className="text-[#FF4D4F]">*</span>
+              </label>
+              <input
+                type="text"
+                placeholder="VD: QuynhNV, ThanhNDT..."
+                value={userAccount}
+                onChange={(e) => setUserAccount(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#096DD9] dark:text-[#69C0FF] placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none font-mono font-bold transition"
+                required
+              />
+            </div>
+
+            {/* Row 2: Email | Phone */}
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Địa Chỉ Email (Gmail):
+              </label>
+              <input
+                type="email"
+                placeholder="VD: nguyenvanquynh396lp@gmail.com"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Số Điện Thoại (Phone):
+              </label>
+              <input
+                type="text"
+                placeholder="VD: 0388607463"
+                value={userPhone}
+                onChange={(e) => setUserPhone(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none font-mono transition"
+              />
+            </div>
+
+            {/* Row 3: System Level | BirthDate */}
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Cấp Phân Quyền Tổng Thể (System Level):
+              </label>
+              <Dropdown
+                value={userRole}
+                onChange={(newRole) => handleUserRoleChange(newRole as UserRole)}
+                options={[
+                  { value: 'Leader', label: '👑 Leader (Trưởng nhóm)' },
+                  { value: 'Advisor', label: '🎖️ Advisor (Cố vấn)' },
+                  { value: 'Member', label: '👥 Member (Thành viên)' },
+                  { value: 'Admin', label: '🛡️ Admin (Quản trị)' },
+                ]}
+                className="w-full"
+                buttonClassName="h-[38px] px-3.5 text-xs font-semibold bg-white dark:bg-slate-800/90"
+              />
+            </div>
+
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Năm Sinh (BirthDate):
+              </label>
+              <input
+                type="text"
+                placeholder="VD: 1999"
+                value={userBirthDate}
+                onChange={(e) => setUserBirthDate(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none font-mono transition"
+              />
+            </div>
+
+            {/* Row 4: CCCD | Technology */}
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Số Căn Cước (CCCD):
+              </label>
+              <input
+                type="text"
+                placeholder="VD: 001099036785"
+                value={userCccd}
+                onChange={(e) => setUserCccd(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none font-mono transition"
+              />
+            </div>
+
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Công Nghệ / Kỹ Năng (Technology):
+              </label>
+              <input
+                type="text"
+                placeholder="VD: PO, Angular, JavaSpring"
+                value={userTechnologies}
+                onChange={(e) => setUserTechnologies(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none transition"
+              />
+            </div>
+
+            {/* Row 5: Bank Account (Full width in 2-col layout) */}
+            <div className="sm:col-span-2">
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Tài Khoản Ngân Hàng (Tk Bank):
+              </label>
+              <input
+                type="text"
+                placeholder="VD: 04891636001 - TPB - NGUYEN VAN QUYNH"
+                value={userBankAccount}
+                onChange={(e) => setUserBankAccount(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none transition"
+              />
+            </div>
+
+                {/* Row 6: Specializations (Role) */}
+                <div className="sm:col-span-2 pt-1">
+                  <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                    Vị Trí Chuyên Môn Kiêm Nhiệm (Role):
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {roles.map((r) => {
+                      const isChecked = selectedSpecs.includes(r.code);
+                      return (
+                        <div
+                          key={r.id}
+                          onClick={() => toggleSpec(r.code)}
+                          className={`px-2.5 py-1.5 rounded-[8px] border text-xs font-medium transition flex items-center gap-2 cursor-pointer select-none ${
+                            isChecked
+                              ? 'bg-[rgba(24,144,255,0.10)] text-[#1890FF] border-[#1890FF]'
+                              : 'bg-white dark:bg-slate-800/90 text-[#838899] dark:text-slate-300 border-[#E8E9EF] dark:border-slate-700 hover:border-[#A2A6B4] hover:text-[#1D202A]'
+                          }`}
+                        >
+                          <SahoCheckbox
+                            checked={isChecked}
+                            onChange={() => toggleSpec(r.code)}
+                            stopPropagation
+                          />
+                          <span>{r.code}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Row 7: Per-Specialization Role Matrix (Figma Segmented Control Style) */}
+                {selectedSpecs.length > 0 && userRole !== 'Admin' && (
+                  <div className="sm:col-span-2 pt-2 space-y-2 border-t border-[var(--saho-modal-divider)]">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 flex items-center gap-1.5">
+                        <Shield className="w-3.5 h-3.5 text-[#1890FF]" />
+                        <span>Phân Quyền Vai Trò Chi Tiết Theo Từng Nghiệp Vụ:</span>
+                      </label>
+                      <span className="text-[11px] text-[#838899] dark:text-slate-400">
+                        Leader / Advisor / Member theo từng team
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {selectedSpecs.map((spec) => {
+                        const currentSpecRole = specRoles[spec] || userRole || 'Member';
+                        const rObj = roles.find((r) => r.code === spec);
+                        return (
+                          <div
+                            key={spec}
+                            className="bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[10px] p-2.5 space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-xs text-[#1D202A] dark:text-slate-100 flex items-center gap-1.5 min-w-0">
+                                <span className="font-mono text-[#1890FF] bg-[rgba(24,144,255,0.10)] px-2 py-0.5 rounded-[6px] text-[11px] font-bold shrink-0">
+                                  {spec}
+                                </span>
+                                {rObj?.name && rObj.name !== spec && (
+                                  <span className="text-[11px] text-[#838899] font-normal truncate">
+                                    ({rObj.name})
+                                  </span>
+                                )}
+                              </span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
+                                  currentSpecRole === 'Leader'
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                                    : currentSpecRole === 'Advisor'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                                    : 'bg-[rgba(24,144,255,0.10)] text-[#1890FF] border-[rgba(24,144,255,0.28)]'
+                                }`}
+                              >
+                                {currentSpecRole}
+                              </span>
+                            </div>
+
+                            {/* Figma Segmented Control Track */}
+                            <div className="bg-[rgba(73,82,106,0.05)] dark:bg-slate-900 p-1 rounded-[8px] grid grid-cols-3 gap-1">
+                              {(['Leader', 'Advisor', 'Member'] as UserRole[]).map((rOption) => {
+                                const isSelected = currentSpecRole === rOption;
+                                return (
+                                  <button
+                                    key={rOption}
+                                    type="button"
+                                    onClick={() => handleSpecRoleChange(spec, rOption)}
+                                    className={`py-1 px-1.5 rounded-[6px] text-[11px] transition flex items-center justify-center cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-white dark:bg-slate-800 text-[#1D202A] dark:text-white font-semibold shadow-2xs'
+                                        : 'text-[#838899] hover:text-[#1D202A] dark:hover:text-slate-200 font-medium'
+                                    }`}
+                                  >
+                                    <span>
+                                      {rOption === 'Leader'
+                                        ? '👑 Leader'
+                                        : rOption === 'Advisor'
+                                        ? '🎖️ Advisor'
+                                        : '👥 Member'}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Figma Dashed Upload-Style Section: Quick Google Sheet / Excel Import */}
+              <div className="bg-[rgba(73,82,106,0.03)] dark:bg-slate-800/40 border border-dashed border-[#A2A6B4] dark:border-slate-600 rounded-[12px] p-3.5 sm:p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className="w-[42px] h-[42px] rounded-full border border-[#ECF1FF] dark:border-sky-800/70 flex items-center justify-center shrink-0 relative overflow-hidden"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(180deg, rgba(201, 229, 255, 0.35) 0%, rgba(24, 144, 255, 0.16) 100%)',
+                        boxShadow:
+                          'inset 0px -4px 5px 0px rgba(255,255,255,0.6), inset 0px 3px 8px 0px rgba(57,121,223,0.22)',
+                      }}
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-[#1890FF] dark:text-[#40A9FF]" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[13px] font-medium text-[#1D202A] dark:text-slate-100 block">
+                        Nhập Nhanh Thông Tin Thành Viên Từ Google Sheet / Excel
+                      </span>
+                      <span className="text-[11px] text-[#838899] dark:text-slate-400 block">
+                        Copy dòng nhân viên từ Sheet và dán vào ô bên dưới để tự động điền thông tin
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnGuide(!showColumnGuide)}
+                    className="flex items-center gap-1 text-[11px] text-[#1890FF] hover:text-[#40A9FF] font-semibold bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 px-2.5 py-1.5 rounded-[8px] transition shrink-0 cursor-pointer active:scale-95"
+                  >
+                    <Info className="w-3.5 h-3.5 text-[#1890FF]" />
+                    <span>{showColumnGuide ? 'Ẩn Cột Chuẩn' : 'Xem Thứ Tự Cột Chuẩn'}</span>
+                  </button>
+                </div>
+
+                {/* Column Structure Helper & Reorder / Add Tool */}
+                {showColumnGuide && (
+                  <div className="p-3 bg-white/95 dark:bg-slate-900/90 rounded-[10px] border border-[#E8E9EF] dark:border-slate-700 text-[11px] space-y-2.5 transition-all duration-300 ease-out animate-in fade-in slide-in-from-top-2 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-[#1D202A] dark:text-slate-100">
+                          Thứ tự các cột tương thích trên Google Sheet / Excel:
+                        </span>
+                        <span className="text-[10px] font-mono font-bold bg-[rgba(24,144,255,0.12)] text-[#1890FF] px-1.5 py-0.5 rounded-full">
+                          {sheetColumns.length} cột
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetColumns}
+                        className="text-[10px] font-semibold text-[#1890FF] hover:text-[#096DD9] hover:underline flex items-center gap-1 w-fit cursor-pointer"
+                        title="Khôi phục lại 13 cột theo mẫu Google Sheet mặc định"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Đặt lại mặc định</span>
+                      </button>
+                    </div>
+
+                    {/* Draggable Column Pills */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {sheetColumns.map((col, idx) => {
+                        const isKeyCol = col.key === 'account' || col.key === 'name';
+                        const isDragging = draggedColIdx === idx;
+                        const isOver = dragOverColIdx === idx;
+
+                        return (
+                          <div
+                            key={col.id || `${col.key}-${idx}`}
+                            draggable
+                            onDragStart={(e) => {
+                              setDraggedColIdx(idx);
+                              e.dataTransfer.setData('text/plain', String(idx));
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              if (dragOverColIdx !== idx) setDragOverColIdx(idx);
+                            }}
+                            onDragLeave={() => {
+                              if (dragOverColIdx === idx) setDragOverColIdx(null);
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              if (draggedColIdx !== null && draggedColIdx !== idx) {
+                                handleReorderColumns(draggedColIdx, idx);
+                              }
+                              setDraggedColIdx(null);
+                              setDragOverColIdx(null);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedColIdx(null);
+                              setDragOverColIdx(null);
+                            }}
+                            onClick={() => handleOpenEditColumn(idx)}
+                            className={`group relative flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-[6px] border text-[11px] font-medium select-none cursor-pointer transition-all duration-150 ${
+                              isDragging
+                                ? 'opacity-30 scale-95 border-[#1890FF] bg-[rgba(24,144,255,0.12)]'
+                                : isOver
+                                ? 'border-[#1890FF] bg-[rgba(24,144,255,0.12)] ring-2 ring-[#1890FF]/40 shadow-md scale-105'
+                                : isKeyCol
+                                ? 'bg-[rgba(24,144,255,0.08)] text-[#096DD9] dark:text-[#69C0FF] border-[#1890FF]/35 font-bold hover:border-[#1890FF]'
+                                : col.key === 'skip'
+                                ? 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-dashed border-slate-300 dark:border-slate-600'
+                                : 'bg-[#F8FAFB] dark:bg-slate-800 text-[#1D202A] dark:text-slate-200 border-[#E8E9EF] dark:border-slate-700 hover:border-[#40A9FF]'
+                            }`}
+                            title="Kéo thả để đổi thứ tự, hoặc bấm vào để sửa tên / kiểu cột"
+                          >
+                            <GripVertical className="w-3 h-3 text-slate-400 group-hover:text-[#1890FF] shrink-0 cursor-grab active:cursor-grabbing" />
+                            <span className="font-mono text-[10px] text-[#1890FF] font-bold shrink-0">
+                              {idx + 1}.
+                            </span>
+                            <span className="truncate max-w-[120px] font-medium">{col.label}</span>
+
+                            {col.key === 'skip' && (
+                              <span className="text-[9px] text-slate-400 bg-slate-200/60 dark:bg-slate-700 px-1 py-0.2 rounded font-normal shrink-0">
+                                Bỏ qua
+                              </span>
+                            )}
+
+                            {sheetColumns.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRemoveColumn(idx);
+                                }}
+                                title="Xóa cột này khỏi mapping"
+                                className="w-3.5 h-3.5 flex items-center justify-center text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-full transition cursor-pointer shrink-0 ml-0.5"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Add Column Button */}
+                      <button
+                        type="button"
+                        onClick={handleOpenAddColumn}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-[6px] border border-dashed border-[#1890FF]/50 hover:border-[#1890FF] bg-[rgba(24,144,255,0.06)] hover:bg-[rgba(24,144,255,0.12)] text-[#1890FF] text-[11px] font-bold transition active:scale-95 cursor-pointer"
+                        title="Thêm cột mới vào cuối danh sách"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Thêm Cột</span>
+                      </button>
+                    </div>
+
+                    <p className="text-[10px] text-[#838899] italic leading-snug">
+                      💡 Mẹo: <b>Kéo thả</b> các thẻ để đổi thứ tự cột, hoặc bấm vào từng thẻ để <b>đổi tên cột</b> / <b>chỉnh trường dữ liệu</b>. Bấm <b>&quot;+ Thêm Cột&quot;</b> để bổ sung cột mới.
+                    </p>
+                  </div>
+                )}
+
+                {/* Paste Action Input & Button */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      id="sheet-quick-paste-input"
+                      type="text"
+                      value={quickPasteInput}
+                      onChange={(e) => {
+                        setQuickPasteInput(e.target.value);
+                        handleProcessSheetData(e.target.value);
+                      }}
+                      onPaste={(e) => {
+                        const pasted = e.clipboardData.getData('text');
+                        if (pasted) {
+                          e.preventDefault();
+                          handleProcessSheetData(pasted);
+                        }
+                      }}
+                      placeholder="👉 Dán (Ctrl + V) dòng dữ liệu copy từ Google Sheet hoặc Excel vào đây..."
+                      className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] font-medium hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none transition"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePasteFromClipboard}
+                    className="h-[38px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] active:bg-[#096DD9] text-white rounded-[8px] text-xs font-medium transition flex items-center justify-center gap-1.5 active:scale-95 shadow-sm shadow-[#1890FF]/20 shrink-0 cursor-pointer"
+                    title="Đọc dữ liệu vừa copy trong Clipboard"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Dán Từ Clipboard</span>
+                  </button>
+                </div>
+
+                {/* Multi-member row switcher & Batch Action Banner if user pasted multiple rows */}
+                {multiParsedList.length > 1 && (
+                  <div className="p-3 bg-[rgba(24,144,255,0.08)] dark:bg-sky-950/50 border border-[#1890FF]/30 rounded-[10px] space-y-2.5 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-[8px] bg-[#1890FF] text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-[#1D202A] dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
+                            <span>Đã nhận diện {multiParsedList.length} nhân sự từ Sheet</span>
+                            <span className="text-[10px] font-mono font-bold bg-white dark:bg-slate-800 text-[#1890FF] px-1.5 py-0.2 rounded border border-[#1890FF]/25">
+                              {multiParsedList.filter((x) => !x.existingUser).length} mới •{' '}
+                              {multiParsedList.filter((x) => !!x.existingUser).length} cập nhật
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-[#838899] dark:text-slate-300">
+                            Bạn có thể mở bảng nhập hàng loạt hoặc bấm vào từng người để kiểm tra
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBatchSelectedIndices(new Set(multiParsedList.map((_, i) => i)));
+                          setIsBatchImportModalOpen(true);
+                        }}
+                        className="px-3.5 py-2 bg-[#1890FF] hover:bg-[#40A9FF] text-white rounded-[8px] text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm shadow-[#1890FF]/20 active:scale-95 cursor-pointer shrink-0"
+                      >
+                        <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                        <span>Mở Bảng Nhập Hàng Loạt ({multiParsedList.length})</span>
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-[#1890FF]/20">
+                      {multiParsedList.map((item, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedMultiIdx(idx);
+                            applyParsedMember(item.member);
+                          }}
+                          className={`px-2.5 py-1 rounded-[6px] text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+                            selectedMultiIdx === idx
+                              ? 'bg-[#1890FF] text-white shadow-xs'
+                              : 'bg-white dark:bg-slate-800 text-[#1D202A] dark:text-slate-200 border border-[#E8E9EF] dark:border-slate-700 hover:border-[#40A9FF]'
+                          }`}
+                        >
+                          <span>{item.member.name || `@${item.member.account}`}</span>
+                          {item.existingUser ? (
+                            <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1 py-0.2 rounded font-mono font-medium">
+                              Sửa
+                            </span>
+                          ) : (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1 py-0.2 rounded font-mono font-medium">
+                              Mới
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Feedback Banner (Check existing vs New) */}
+                {pasteFeedback && (
+                  <div
+                    className={`p-2.5 rounded-[8px] text-xs font-semibold flex items-start gap-2 animate-in fade-in ${
+                      pasteFeedback.type === 'update'
+                        ? 'bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs'
+                        : pasteFeedback.type === 'create'
+                        ? 'bg-emerald-50 text-emerald-900 border border-emerald-300 shadow-2xs'
+                        : 'bg-red-50 text-red-700 border border-red-200'
+                    }`}
+                  >
+                    {pasteFeedback.type === 'update' ? (
+                      <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    ) : pasteFeedback.type === 'create' ? (
+                      <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 leading-snug">
+                      <span>{pasteFeedback.message}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPasteFeedback(null)}
+                      className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Welcome Email Option */}
+              {!editingUserId && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 bg-[rgba(24,144,255,0.06)] border border-[#1890FF]/25 rounded-[8px]">
+                  <div className="flex items-center gap-2.5">
+                    <SahoCheckbox
+                      checked={sendWelcomeEmail}
+                      onChange={setSendWelcomeEmail}
+                      size="md"
+                    />
+                    <Mail className="w-3.5 h-3.5 text-[#1890FF] shrink-0" />
+                    <span
+                      onClick={() => setSendWelcomeEmail(!sendWelcomeEmail)}
+                      className="text-xs text-[#1D202A] dark:text-slate-200 font-medium cursor-pointer select-none"
+                    >
+                      Tự động gửi Email thông tin tài khoản &amp; hồ sơ cá nhân cho thành viên
+                    </span>
+                  </div>
+                  {sendWelcomeEmail && !userEmail.trim() && (
+                    <span className="text-[11px] text-[#FF7A45] font-medium">
+                      * Vui lòng nhập Địa Chỉ Email (Gmail) ở trên để gửi mail
+                    </span>
+                  )}
+                </div>
+              )}
+        </form>
+      </Modal>
+
       {/* MODAL: THÊM CỘT MỚI VÀO SHEET MAPPING */}
       <Modal
         isOpen={isAddColumnOpen}
         onClose={() => setIsAddColumnOpen(false)}
         onRequestClose={checkAddColDirtyAndConfirmClose}
         size="md"
+        zIndex="z-[150]"
         icon={
           <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shadow-xs shrink-0">
             <Plus className="w-4 h-4" />
@@ -3412,6 +3502,7 @@ export const UserManagementView: React.FC = () => {
         onClose={() => setEditingColIdx(null)}
         onRequestClose={checkEditColDirtyAndConfirmClose}
         size="md"
+        zIndex="z-[150]"
         icon={
           <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shadow-xs shrink-0">
             <Edit2 className="w-4 h-4" />
@@ -3512,6 +3603,7 @@ export const UserManagementView: React.FC = () => {
         onClose={() => setIsBatchImportModalOpen(false)}
         onRequestClose={checkBatchImportDirtyAndConfirmClose}
         size="full"
+        zIndex="z-[150]"
         className="max-w-5xl"
         icon={
           <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-600/20 shrink-0">
@@ -3694,16 +3786,14 @@ export const UserManagementView: React.FC = () => {
                       }`}
                     >
                       <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
+                        <SahoCheckbox
                           checked={isChecked}
-                          onChange={(e) => {
+                          onChange={(checked) => {
                             const next = new Set(batchSelectedIndices);
-                            if (e.target.checked) next.add(idx);
+                            if (checked) next.add(idx);
                             else next.delete(idx);
                             setBatchSelectedIndices(next);
                           }}
-                          className="rounded text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
                         />
                       </td>
                       <td className="px-2 py-2 text-center font-mono text-[11px] text-slate-500">
@@ -3774,7 +3864,7 @@ export const UserManagementView: React.FC = () => {
         onRequestClose={checkRoleDirtyAndConfirmClose}
         size="xl"
         className="max-w-xl sm:max-w-2xl min-h-[480px] sm:min-h-[500px]"
-        bodyClassName="overflow-visible py-2"
+        bodyClassName="overflow-visible"
         icon={
           <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-xs border border-indigo-100">
             <Tag className="w-5 h-5" />
@@ -3899,14 +3989,21 @@ export const UserManagementView: React.FC = () => {
       {/* SUB-TAB 3: SYSTEM PERMISSIONS MATRIX                                     */}
       {/* ========================================================================= */}
       {activeSubTab === 'PERMISSIONS' && (
-        <SystemPermissionsMatrixView />
+        <SystemPermissionsMatrixView
+          actionsRef={permActionsRef}
+          onStateChange={setPermState}
+        />
       )}
 
       {/* User Detail & Edit Modal */}
       <UserDetailModal
         user={selectedUserForDetail}
         isOpen={!!selectedUserForDetail}
-        onClose={() => setSelectedUserForDetail(null)}
+        initialEditMode={userDetailEditMode}
+        onClose={() => {
+          setSelectedUserForDetail(null);
+          setUserDetailEditMode(false);
+        }}
       />
     </div>
   );

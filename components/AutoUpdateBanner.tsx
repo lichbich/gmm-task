@@ -45,14 +45,14 @@ export const AutoUpdateBanner: React.FC = () => {
       aria-live="polite"
       className="fixed bottom-4 right-4 z-[9999] max-w-sm sm:max-w-md w-[calc(100vw-2rem)] animate-in slide-in-from-bottom-5 fade-in duration-300 pointer-events-auto"
     >
-      <div className="relative overflow-hidden rounded-2xl bg-slate-900/90 dark:bg-slate-900/95 backdrop-blur-xl border border-blue-500/30 shadow-2xl shadow-blue-500/10 p-4 text-white">
+      <div className="relative overflow-hidden rounded-[12px] bg-slate-900/92 dark:bg-slate-900/95 backdrop-blur-xl border border-[#1890FF]/35 shadow-2xl shadow-[#1890FF]/15 p-4 text-white">
         {/* Glow backdrop accent */}
-        <div className="absolute -top-10 -right-10 w-28 h-28 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-28 h-28 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -top-10 -right-10 w-28 h-28 bg-[#1890FF]/20 rounded-full blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-28 h-28 bg-[#40A9FF]/20 rounded-full blur-2xl pointer-events-none" />
 
         <div className="relative flex items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className={`w-9 h-9 rounded-xl ${isSundayReload ? 'bg-gradient-to-tr from-amber-500 to-indigo-600' : 'bg-gradient-to-tr from-blue-600 to-indigo-500'} flex items-center justify-center shrink-0 shadow-md shadow-blue-500/30`}>
+            <div className={`w-9 h-9 rounded-[8px] ${isSundayReload ? 'bg-gradient-to-tr from-[#FFA940] to-[#1890FF]' : 'bg-gradient-to-tr from-[#1890FF] to-[#096DD9]'} flex items-center justify-center shrink-0 shadow-md shadow-[#1890FF]/30`}>
               {isSundayReload ? (
                 <Clock className="w-5 h-5 text-white animate-pulse" />
               ) : (
@@ -101,7 +101,7 @@ export const AutoUpdateBanner: React.FC = () => {
             </button>
             <button
               onClick={reloadNow}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-lg shadow-md shadow-blue-600/30 active:scale-95 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-md shadow-[#1890FF]/25 active:scale-95 transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>{isSundayReload ? 'Làm mới ngay' : 'Cập nhật ngay'}</span>
