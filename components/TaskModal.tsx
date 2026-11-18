@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import { useSyncModalUrl, getTaskRouteIdentifier } from '../lib/sahoUrl';
 import { Task, Specialization, TaskStatus, TaskActivityLog, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, isSpecializationMatchingRole, getEffectiveTaskStatus } from '../types/task';
 import { X, Save, Plus, Edit2, ShieldAlert, MessageSquare, FileText, CheckSquare, Image as ImageIcon, Loader2, AlertTriangle, Sparkles, Calendar, Users, UserPlus, Trash2, CornerDownRight, GitFork, Layers, ChevronDown, ChevronRight, ChevronUp, Check, Copy, Link2, User, Flag, FolderOpen, History, Activity, Clock, UserCheck, CheckCircle2 } from 'lucide-react';
-import { useModalAnimation } from '../hooks/useModalAnimation';
+import { Modal } from './common/Modal';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
 import { UserAvatar } from './common/UserAvatar';
@@ -189,7 +190,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleOpenReport = () => {
     if (onOpenReport && task) {
-      forceClose();
+      onClose();
       onOpenReport(task);
     } else if (task) {
       setIsInternalReportOpen(true);
@@ -494,7 +495,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             year: selectedYear,
           });
         }
-        forceClose();
+        onClose();
       },
     });
   };
@@ -698,7 +699,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         cancelText: 'Tiếp tục điền',
         type: 'warning',
         onConfirm: () => {
-          forceClose();
+          onClose();
         },
       });
       return false;
@@ -725,10 +726,31 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     defaultRole,
     currentUser,
     confirmDialog,
+    onClose,
   ]);
 
-  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
-    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
+  const handleRequestClose = useCallback(() => {
+    if (checkDirtyAndConfirmClose()) {
+      onClose();
+    }
+  }, [checkDirtyAndConfirmClose, onClose]);
+
+  const taskModalUrl = !isOpen
+    ? null
+    : task
+    ? `/task/${getTaskRouteIdentifier(task)}/edit`
+    : initialSubtaskParent?.id
+    ? `/task/create?parent=${encodeURIComponent(initialSubtaskParent.id)}`
+    : initialMilestoneId
+    ? `/task/create?milestone=${encodeURIComponent(initialMilestoneId)}`
+    : '/task/create';
+
+  useSyncModalUrl(
+    isOpen,
+    taskModalUrl,
+    onClose,
+    task ? `Sửa Task ${task.code || task.title}` : 'Tạo Task Mới'
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -1005,7 +1027,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         updateTask(subtaskParentId, { isParentTask: true }, { skipLog: true });
       }
     }
-    forceClose();
+    onClose();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1093,106 +1115,86 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       type: 'danger',
       onConfirm: () => {
         deleteTask(task.id);
-        forceClose();
+        onClose();
       },
     });
   };
 
-  if (!isRendered) return null;
-
   return (
-    <div
-      onMouseDown={handleBackdropMouseDown}
-      onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[120] flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
-        isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
-      }`}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full shadow-2xl text-slate-800 dark:text-slate-100 relative h-[90vh] sm:h-[92vh] max-h-[92vh] flex flex-col overflow-hidden modal-dialog-transition ${
-          showAIChat ? 'max-w-7xl' : 'w-full max-w-5xl xl:max-w-6xl'
-        } ${isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'}`}
-      >
-        {/* Fixed Header */}
-        <div className="flex items-center justify-between p-4 sm:px-6 sm:py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold shadow-xs shrink-0">
-              {task ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
-                  {task
-                    ? 'Chỉnh Sửa & Phân Công Task'
-                    : milestoneId
-                    ? 'Break Task Mới từ Milestone'
-                    : 'Tạo Task Tự Do Mới'}
-                </h3>
-                {task?.code && previewCode === task.code ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(task.code!);
-                      setCopiedCode(true);
-                      setTimeout(() => setCopiedCode(false), 2000);
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-mono text-xs font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition cursor-pointer active:scale-95"
-                    title="Bấm để sao chép mã task"
-                  >
-                    <span>{task.code}</span>
-                    {copiedCode ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3 opacity-60" />}
-                  </button>
-                ) : (
-                  previewCode && (
-                    <span
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-mono text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
-                      title={task ? 'Mã task mới dự kiến khi lưu thay đổi' : 'Mã định danh dự kiến khi khởi tạo'}
-                    >
-                      {task ? `Mã mới: ${previewCode}` : `Mã: ${previewCode}`}
-                    </span>
-                  )
-                )}
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">Thiết lập đầu việc, số giờ ước tính, phân công và ghi chú luồng task</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {canUseAI && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAIChat((prev) => !prev);
-                  if (activeMobileTab === 'form') setActiveMobileTab('ai');
-                  else setActiveMobileTab('form');
-                }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer active:scale-95 ${
-                  showAIChat || activeMobileTab === 'ai'
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-xs'
-                    : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200/80 dark:border-indigo-800'
-                }`}
-                title={showAIChat ? 'Thu gọn AI Co-pilot Chat' : 'Mở AI Co-pilot trợ lý phân tích task'}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">AI Co-pilot</span>
-                {(showAIChat || activeMobileTab === 'ai') && <span className="text-[10px] bg-white/20 px-1 rounded">Bật</span>}
-              </button>
-            )}
-
-            <button
-              onClick={handleClose}
-              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition active:scale-95 cursor-pointer"
-              title="Đóng cửa sổ"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      onRequestClose={checkDirtyAndConfirmClose}
+      size={showAIChat ? '7xl' : '6xl'}
+      className="h-[90vh] sm:h-[92vh]"
+      noBodyPadding
+      noBodyScroll
+      icon={
+        <div className="w-9 h-9 rounded-[8px] bg-[rgba(24,144,255,0.14)] dark:bg-sky-950/80 flex items-center justify-center text-[#1890FF] dark:text-sky-400 font-bold shrink-0">
+          {task ? <Edit2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
         </div>
-
-        {/* Mobile Tab Switcher (Visible only when AI features are available on small screens) */}
-        {canUseAI && (
-          <div className="md:hidden flex items-center border-b border-slate-200 dark:border-slate-800 px-4 py-2 bg-slate-50 dark:bg-slate-900 gap-2 shrink-0">
+      }
+      title={
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="truncate">
+            {task
+              ? 'Chỉnh Sửa & Phân Công Task'
+              : milestoneId
+              ? 'Break Task Mới từ Milestone'
+              : 'Tạo Task Tự Do Mới'}
+          </span>
+          {task?.code && previewCode === task.code ? (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(task.code!);
+                setCopiedCode(true);
+                setTimeout(() => setCopiedCode(false), 2000);
+              }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] font-mono text-xs font-bold bg-[rgba(24,144,255,0.12)] dark:bg-sky-950/80 text-[#1890FF] dark:text-sky-300 hover:bg-[rgba(24,144,255,0.2)] transition cursor-pointer active:scale-95"
+              title="Bấm để sao chép mã task"
+            >
+              <span>{task.code}</span>
+              {copiedCode ? <Check className="w-3 h-3 text-[#0AB185]" /> : <Copy className="w-3 h-3 opacity-60" />}
+            </button>
+          ) : (
+            previewCode && (
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] font-mono text-[11px] font-bold bg-[rgba(24,144,255,0.12)] dark:bg-sky-950/80 text-[#1890FF] dark:text-sky-300"
+                title={task ? 'Mã task mới dự kiến khi lưu thay đổi' : 'Mã định danh dự kiến khi khởi tạo'}
+              >
+                {task ? `Mã mới: ${previewCode}` : `Mã: ${previewCode}`}
+              </span>
+            )
+          )}
+        </div>
+      }
+      description="Thiết lập đầu việc, số giờ ước tính, phân công và ghi chú luồng task"
+      headerExtra={
+        canUseAI ? (
+          <button
+            type="button"
+            onClick={() => {
+              setShowAIChat((prev) => !prev);
+              if (activeMobileTab === 'form') setActiveMobileTab('ai');
+              else setActiveMobileTab('form');
+            }}
+            className={`h-[32px] px-3 rounded-[8px] text-xs font-medium flex items-center gap-1.5 transition cursor-pointer active:scale-95 ${
+              showAIChat || activeMobileTab === 'ai'
+                ? 'bg-[#1890FF] text-white'
+                : 'bg-[rgba(24,144,255,0.10)] dark:bg-sky-950/80 text-[#1890FF] dark:text-sky-300 hover:bg-[rgba(24,144,255,0.18)]'
+            }`}
+            title={showAIChat ? 'Thu gọn AI Co-pilot Chat' : 'Mở AI Co-pilot trợ lý phân tích task'}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">AI Co-pilot</span>
+            {(showAIChat || activeMobileTab === 'ai') && <span className="text-[10px] bg-white/20 px-1 rounded">Bật</span>}
+          </button>
+        ) : undefined
+      }
+      subHeader={
+        canUseAI ? (
+          <div className="md:hidden flex items-center border-b saho-modal-header px-4 py-2 gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setActiveMobileTab('form')}
@@ -1217,14 +1219,43 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <span>✨ AI Co-pilot Chat</span>
             </button>
           </div>
-        )}
+        ) : undefined
+      }
+      afterModal={
+        <>
+          {/* Image Lightbox preview */}
+          <ImageLightbox
+            isOpen={!!lightboxUrl}
+            imageUrl={lightboxUrl}
+            onClose={() => setLightboxUrl(null)}
+          />
 
-        {/* Body Container */}
-        <div className="flex-1 overflow-hidden min-h-0 flex flex-col md:flex-row">
+          {/* Link Existing Tasks Modal */}
+          {task && (
+            <LinkExistingTasksModal
+              parentTask={task}
+              isOpen={isLinkExistingModalOpen}
+              onClose={() => setIsLinkExistingModalOpen(false)}
+            />
+          )}
+
+          {/* Internal Fallback Weekly Report Modal */}
+          {isInternalReportOpen && task && (
+            <WeeklyReportModal
+              task={task}
+              isOpen={isInternalReportOpen}
+              onClose={() => setIsInternalReportOpen(false)}
+            />
+          )}
+        </>
+      }
+    >
+      {/* Body Container */}
+      <div className="flex-1 overflow-hidden min-h-0 flex flex-col md:flex-row">
           {/* Optional Left Panel: Multi-turn AI Co-pilot Chatbox (Expandable/Collapsible) */}
           {canUseAI && (
             <div
-              className={`w-full md:w-80 lg:w-96 shrink-0 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden bg-slate-50/50 dark:bg-slate-900/50 ${
+              className={`w-full md:w-80 lg:w-96 shrink-0 border-b md:border-b-0 md:border-r border-[var(--saho-modal-divider)] flex flex-col h-full overflow-hidden saho-modal-subtle ${
                 activeMobileTab === 'ai' ? 'flex' : showAIChat ? 'hidden md:flex' : 'hidden'
               }`}
             >
@@ -1253,7 +1284,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             }`}
           >
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              <div className="p-4 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-4 min-h-0 min-w-0">
+              <div className="px-5 py-5 sm:px-6 sm:py-6 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-4 min-h-0 min-w-0">
                 {/* Member Task Assignment Request Banner (Full width on top) */}
                 {task?.assignmentRequestedBy && task.assignmentRequestStatus === 'PENDING' && (
                   <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/80 rounded-2xl flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200 shadow-2xs animate-in fade-in duration-150">
@@ -1284,7 +1315,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   {/* LEFT COLUMN: Main Content Flow (Task Title, Description & Checklist, Subtasks, Notes) */}
                   <div className="lg:col-span-7 xl:col-span-7 space-y-4 min-w-0">
                     {/* Task Title */}
-                    <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-1.5 min-w-0">
+                    <div className="saho-modal-card border rounded-[12px] p-3.5 sm:p-4 space-y-1.5 min-w-0">
                       <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
                         Tên Đầu Việc (Task Name): <span className="text-red-500">*</span>
                       </label>
@@ -1297,7 +1328,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     </div>
 
                     {/* Chi Tiết Task (Mô tả & Checklist việc con) */}
-                    <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-2 min-w-0">
+                    <div className="saho-modal-card border rounded-[12px] p-3.5 sm:p-4 space-y-2 min-w-0">
                       <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                         <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                         <span>Chi Tiết Task (Mô tả & Checklist việc con):</span>
@@ -1313,7 +1344,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
                     {/* Subtask Parent Linking Selector (Option 1: When task does not have subtasks) */}
                     {!hasSubtasks && (
-                      <div className="p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-2 text-xs min-w-0">
+                      <div className="p-3.5 sm:p-4 saho-modal-card border rounded-[12px] space-y-2 text-xs min-w-0">
                         <div className="flex items-center justify-between">
                           <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
                             <span className="text-indigo-600 dark:text-indigo-400 font-mono text-sm font-bold">↳</span>
@@ -1392,7 +1423,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
                     {/* Parent Task Subtasks Management Panel (Option 2: When task is parent / has subtasks) */}
                     {hasSubtasks && (
-                      <div className="p-3.5 sm:p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl space-y-3 shadow-2xs min-w-0">
+                      <div className="p-3.5 sm:p-4 saho-modal-card border rounded-[12px] space-y-3 shadow-2xs min-w-0">
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <div className="flex items-center gap-2">
                             <span className="w-7 h-7 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold flex items-center justify-center text-xs shadow-2xs">
@@ -1439,7 +1470,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  forceClose();
+                                  onClose();
                                   onOpenCreateSubtask(task);
                                 }}
                                 className="text-[11px] px-2.5 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
@@ -1480,7 +1511,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                               key={st.id}
                               onClick={() => {
                                 if (onSelectTaskToEdit) {
-                                  forceClose();
+                                  onClose();
                                   onSelectTaskToEdit(st);
                                 }
                               }}
@@ -1517,7 +1548,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     )}
 
                     {/* Dedicated Note & Discussion Field */}
-                    <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-2 min-w-0">
+                    <div className="saho-modal-card border rounded-[12px] p-3.5 sm:p-4 space-y-2 min-w-0">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                           <MessageSquare className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -1536,7 +1567,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
                     {/* SECTION: Lịch Sử & Nhật Ký Cập Nhật (Activity Log) - Hiển thị khi đang chỉnh sửa task */}
                     {task && (
-                      <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 sm:p-4 space-y-3 min-w-0">
+                      <div className="saho-modal-card border rounded-[12px] p-3.5 sm:p-4 space-y-3 min-w-0">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
                             <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
@@ -1646,7 +1677,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     </div>
 
                     {/* Comprehensive Metadata Section */}
-                    <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/40 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs">
+                    <div className="space-y-2.5 saho-modal-card p-3.5 sm:p-4 rounded-[12px] border text-xs">
                       {/* Milestone Card (Full-width row on top) */}
                       <div className="bg-white dark:bg-slate-850 p-2.5 sm:p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 min-w-0">
                         <label className="text-slate-400 dark:text-slate-400 block mb-1 text-[11px] font-medium">
@@ -2077,9 +2108,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                                 step="5"
                                 value={completionPercentage}
                                 onChange={(e) => handleProgressChange(Number(e.target.value))}
-                                className="w-full accent-purple-600 cursor-pointer h-2 bg-purple-200 dark:bg-purple-900 rounded-lg"
+                                className="w-full accent-[#1890FF] cursor-pointer h-2 bg-[#E6F7FF] dark:bg-sky-900 rounded-lg"
                               />
-                              <div className="flex justify-between text-[10px] text-purple-700 dark:text-purple-400 font-mono font-semibold mt-0.5">
+                              <div className="flex justify-between text-[10px] text-[#1890FF] dark:text-sky-400 font-mono font-semibold mt-0.5">
                                 <button
                                   type="button"
                                   onClick={() => handleProgressChange(0)}
@@ -2142,12 +2173,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </div>
 
               {/* Fixed Footer */}
-              <div className="p-4 sm:px-6 sm:py-4 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/60 dark:bg-slate-900/60 flex items-center justify-between gap-3 rounded-b-2xl sm:rounded-b-3xl">
+              <div className="px-5 py-3.5 sm:px-6 sm:py-4 border-t saho-modal-footer shrink-0 flex items-center justify-between gap-3 rounded-b-[12px]">
                 {task && (userRoleInTaskSpec === 'Leader' || userRoleInTaskSpec === 'Advisor' || currentUser?.role === 'Admin' || isUserAdminOrPM(currentUser) || canDeleteTask(task)) ? (
                   <button
                     type="button"
                     onClick={handleDelete}
-                    className="px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                    className="h-[36px] px-3.5 text-[#FF4D4F] dark:text-rose-400 hover:bg-[rgba(255,77,79,0.12)] border border-[#FF4D4F]/35 rounded-[8px] text-xs font-medium transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Xóa Task</span>
@@ -2159,14 +2190,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={handleClose}
-                    className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-xl transition active:scale-95 shadow-2xs cursor-pointer"
+                    onClick={handleRequestClose}
+                    className="saho-modal-btn-secondary"
                   >
                     Hủy
                   </button>
                   <button
                     type="submit"
-                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 cursor-pointer"
+                    className="flex items-center gap-2 h-[36px] px-5 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition active:scale-95 cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
                     {task
@@ -2180,32 +2211,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </form>
           </div>
         </div>
-      </div>
-
-      {/* Image Lightbox preview */}
-      <ImageLightbox
-        isOpen={!!lightboxUrl}
-        imageUrl={lightboxUrl}
-        onClose={() => setLightboxUrl(null)}
-      />
-
-      {/* Link Existing Tasks Modal */}
-      {task && (
-        <LinkExistingTasksModal
-          parentTask={task}
-          isOpen={isLinkExistingModalOpen}
-          onClose={() => setIsLinkExistingModalOpen(false)}
-        />
-      )}
-
-      {/* Internal Fallback Weekly Report Modal */}
-      {isInternalReportOpen && task && (
-        <WeeklyReportModal
-          task={task}
-          isOpen={isInternalReportOpen}
-          onClose={() => setIsInternalReportOpen(false)}
-        />
-      )}
-    </div>
+    </Modal>
   );
 };

@@ -59,7 +59,8 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     currentUser,
     roles,
     users,
-    addTask,
+    transferTaskToNextWeek,
+    undoTransferTaskToNextWeek,
     updateTask,
     deleteTask,
     canDeleteTask,
@@ -196,20 +197,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   // 1.5. Current Week Unfinished Tasks (Incomplete tasks belonging strictly to selectedWeek)
   const currentWeekUnfinishedTasks = React.useMemo(() => {
     return tasks.filter((t) => {
-      // ONLY query tasks of current selectedWeek (Tuần 95)
-      if (t.weekNumber !== selectedWeek || t.year !== selectedYear) return false;
+      if (t.weekNumber !== selectedWeek || (t.year || selectedYear) !== selectedYear) return false;
       if (!t.assigneeAccount || t.assigneeAccount.trim() === '') return false;
       if ((t.completionPercentage !== undefined && t.completionPercentage >= 100) || (t.status === 'Done' && (t.completionPercentage === undefined || t.completionPercentage >= 100))) return false; // Unfinished tasks only
-
-      // Filter out tasks that have ALREADY been transferred to nextWeek
-      const rootId = t.parentTaskId || t.id;
-      const alreadyTransferred = tasks.some(
-        (nt) =>
-          nt.weekNumber === nextWeek &&
-          nt.year === selectedYear &&
-          (nt.parentTaskId === rootId || nt.id === rootId)
-      );
-      if (alreadyTransferred) return false;
 
       if (isUserAdminOrPM(currentUser)) {
         // sees all
@@ -349,117 +339,21 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
     Math.round(nextWeekAssignedTasks.reduce((acc, curr) => acc + (curr.estimatedEffort || 0), 0) * 100) / 100;
 
   const handleTransferToNextWeek = (t: Task) => {
-    // Check if continuation task already exists in nextWeek
-    const rootId = t.parentTaskId || t.id;
-    const existingInNextWeek = tasks.find(
-      (nt) =>
-        nt.weekNumber === nextWeek &&
-        nt.year === selectedYear &&
-        (nt.parentTaskId === rootId || nt.id === rootId)
-    );
-
-    const isZeroWork =
-      (!t.completionPercentage || t.completionPercentage === 0) &&
-      (!t.actualEffort || t.actualEffort === 0);
-
-    if (existingInNextWeek) {
-      if (isZeroWork) {
-        deleteTask(t.id);
-      }
-      return; // Already transferred
-    }
-
-    if (isZeroWork) {
-      // Task 0% tiến độ và 0h: chuyển hẳn sang tuần tới, mất ở tuần cũ luôn
-      updateTask(t.id, {
-        weekNumber: nextWeek,
-        year: selectedYear,
-        actualEffort: 0,
-        memberEfforts: undefined,
-        status: 'To do',
-        completionPercentage: 0,
-        lastSubmittedAt: undefined,
-        isSubmittedLate: undefined,
-        updatedAt: new Date().toISOString(),
-        activityLogs: [
-          ...(t.activityLogs || []),
-          {
-            id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            timestamp: new Date().toISOString(),
-            authorName: currentUser?.name || 'Leader',
-            authorAccount: currentUser?.account || 'leader',
-            authorRole: currentUser?.role || 'Leader',
-            actionType: 'GENERAL_UPDATE',
-            summary: `Chuyển công việc (0% tiến độ, 0h) từ Tuần ${selectedWeek} sang Tuần ${nextWeek} (To do)`,
-          },
-        ],
-      });
-      return;
-    }
-
-    // Task đã làm dở (>0% hoặc >0h): bảo toàn ở tuần cũ để biết tuần cũ đã làm gì, tuần mới tạo task kế thừa
-    const nextWeekTask: Task = {
-      ...t,
-      id: `tsk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      parentTaskId: rootId,
-      weekNumber: nextWeek,
-      year: selectedYear,
-      actualEffort: 0,
-      memberEfforts: undefined,
-      status: (t.completionPercentage && t.completionPercentage > 0) ? 'In Progress' : 'To do',
-      lastSubmittedAt: undefined,
-      isSubmittedLate: undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      activityLogs: [
-        ...(t.activityLogs || []),
-        {
-          id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          timestamp: new Date().toISOString(),
-          authorName: currentUser?.name || 'Leader',
-          authorAccount: currentUser?.account || 'leader',
-          authorRole: currentUser?.role || 'Leader',
-          actionType: 'GENERAL_UPDATE',
-          summary: `Được tiếp nối từ Tuần ${selectedWeek} sang Tuần ${nextWeek} (Tiến độ: ${t.completionPercentage || 0}%)`,
-        },
-      ],
-    };
-
-    addTask(nextWeekTask);
+    transferTaskToNextWeek(t.id, selectedWeek, nextWeek, selectedYear);
   };
 
   const handleUndoTransfer = (t: Task) => {
-    const originalInPrevWeek = tasks.find(
-      (prev) => prev.id === t.parentTaskId && prev.weekNumber === selectedWeek
-    );
-    if (originalInPrevWeek) {
-      deleteTask(t.id);
-    } else {
-      updateTask(t.id, {
-        weekNumber: selectedWeek,
-        updatedAt: new Date().toISOString(),
-      });
-    }
+    undoTransferTaskToNextWeek(t.id, selectedWeek, selectedYear);
   };
 
   const handleUndoNextWeekTask = (t: Task) => {
     confirmDialog({
       title: 'Hoàn tác chuyển task',
-      message: `Bạn có chắc muốn hủy chuyển task "${t.title}" sang Tuần ${nextWeek}? Dữ liệu và báo cáo ở Tuần ${selectedWeek} vẫn được bảo toàn nguyên vẹn.`,
+      message: `Bạn có chắc muốn hủy chuyển task "${t.title}" sang Tuần ${nextWeek}? Dữ liệu và báo cáo ở Tuần ${selectedWeek} vẫn được bảo toàn nguyên vẹn trên cùng task này.`,
       type: 'warning',
       confirmText: `Hủy kế hoạch Tuần ${nextWeek}`,
       onConfirm: () => {
-        const originalInPrevWeek = tasks.find(
-          (prev) => prev.id === t.parentTaskId && prev.weekNumber === selectedWeek
-        );
-        if (originalInPrevWeek) {
-          deleteTask(t.id);
-        } else {
-          updateTask(t.id, {
-            weekNumber: selectedWeek,
-            updatedAt: new Date().toISOString(),
-          });
-        }
+        undoTransferTaskToNextWeek(t.id, selectedWeek, selectedYear);
       },
     });
   };
@@ -538,20 +432,20 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-6 shadow-sm space-y-3 sm:space-y-4">
+      <div className="saho-hero-card border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-4 sm:p-5 space-y-3.5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 lg:gap-4">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                <CalendarPlus className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
+              <h2 className="text-base sm:text-xl font-bold text-[#1D202A] dark:text-slate-100 tracking-tight flex items-center gap-2">
+                <CalendarPlus className="w-5 h-5 sm:w-6 sm:h-6 text-[#1890FF]" />
                 <span className="sm:hidden">Kế Hoạch Tuần {nextWeek}</span>
                 <span className="hidden sm:inline">Define & Kế Hoạch Công Việc Tuần Tới</span>
               </h2>
-              <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-2xs">
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-[12px] bg-[rgba(24,144,255,0.14)] text-[#1890FF]">
                 Tuần {nextWeek} ({nextWeekRange.startDate.slice(0, 5)} - {nextWeekRange.endDate.slice(0, 5)})
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-[#838899] mt-1">
               {isUserAdminOrPM(currentUser)
                 ? `${currentUser?.role === 'Admin' ? 'Admin' : 'PM'}: Define công việc tuần tới cho tất cả các team và phân công task.`
                 : currentUser?.role === 'Leader' || currentUser?.role === 'Advisor'
@@ -564,9 +458,9 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             {/* Unified Role Filter Dropdown */}
             {(isUserAdminOrPM(currentUser) || (currentUser?.specializations && currentUser.specializations.length > 1)) && (
-              <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 p-1 pl-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-                <Filter className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <span className="text-xs text-slate-600 dark:text-slate-300 font-bold hidden sm:inline">Lọc Role:</span>
+              <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1 pl-3 rounded-[8px] border border-[#E8E9EF] dark:border-slate-700">
+                <Filter className="w-3.5 h-3.5 text-[#1890FF] dark:text-sky-400 shrink-0" />
+                <span className="text-xs text-[#838899] dark:text-slate-300 font-semibold hidden sm:inline">Lọc Role:</span>
                 <Dropdown
                   value={roleFilter}
                   onChange={setRoleFilter}
@@ -576,7 +470,6 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
                       ? roles.map((r) => ({ value: r.code, label: `Role: ${r.code}` }))
                       : (currentUser?.specializations || []).map((s) => ({ value: s, label: `Role: ${s}` }))),
                   ]}
-                  buttonClassName="py-1.5 px-3 text-xs font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 rounded-lg shadow-2xs"
                 />
               </div>
             )}
@@ -584,7 +477,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
             {isLeaderOrAdmin ? (
               <button
                 onClick={() => onOpenTaskModal(undefined, nextWeek)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 cursor-pointer"
+                className="flex items-center gap-2 h-[36px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Define & Phân Công Task Tuần {nextWeek}
@@ -592,7 +485,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
             ) : (
               <button
                 onClick={() => onOpenTaskModal(undefined, nextWeek, currentUser?.account)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 cursor-pointer"
+                className="flex items-center gap-2 h-[36px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition active:scale-95 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Tự Tạo Task Cho Tôi (Tuần {nextWeek})
@@ -603,26 +496,26 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
 
         {/* Quick Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-            <span className="text-[10px] text-slate-500 block font-semibold uppercase">Task Đã Lên Kế Hoạch</span>
-            <span className="text-lg font-black text-indigo-700">{nextWeekAssignedTasks.length} task</span>
+          <div className="bg-[#F8FAFB] dark:bg-slate-900 p-3 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800">
+            <span className="text-[10px] text-[#838899] block font-semibold uppercase">Task Đã Lên Kế Hoạch</span>
+            <span className="text-lg font-bold text-[#1890FF]">{nextWeekAssignedTasks.length} task</span>
           </div>
 
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-            <span className="text-[10px] text-slate-500 block font-semibold uppercase">Tổng Effort Dự Kiến</span>
-            <span className="text-lg font-black text-indigo-700">{totalNextWeekEffort}h</span>
+          <div className="bg-[#F8FAFB] dark:bg-slate-900 p-3 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800">
+            <span className="text-[10px] text-[#838899] block font-semibold uppercase">Tổng Effort Dự Kiến</span>
+            <span className="text-lg font-bold text-[#1890FF]">{totalNextWeekEffort}h</span>
           </div>
 
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-            <span className="text-[10px] text-slate-500 block font-semibold uppercase">Yêu Cầu Nhận Task Chờ Duyệt</span>
-            <span className={`text-lg font-black ${pendingRequests.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+          <div className="bg-[#F8FAFB] dark:bg-slate-900 p-3 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800">
+            <span className="text-[10px] text-[#838899] block font-semibold uppercase">Yêu Cầu Nhận Task Chờ Duyệt</span>
+            <span className={`text-lg font-bold ${pendingRequests.length > 0 ? 'text-[#FF7A45]' : 'text-[#A2A6B4]'}`}>
               {pendingRequests.length} yêu cầu
             </span>
           </div>
 
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-            <span className="text-[10px] text-slate-500 block font-semibold uppercase">Kho Task Milestone Chưa Giao</span>
-            <span className="text-lg font-black text-slate-700">{unassignedMilestoneTasks.length} task</span>
+          <div className="bg-[#F8FAFB] dark:bg-slate-900 p-3 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800">
+            <span className="text-[10px] text-[#838899] block font-semibold uppercase">Kho Task Milestone Chưa Giao</span>
+            <span className="text-lg font-bold text-[#1D202A] dark:text-slate-100">{unassignedMilestoneTasks.length} task</span>
           </div>
         </div>
       </div>

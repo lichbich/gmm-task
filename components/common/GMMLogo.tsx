@@ -32,18 +32,18 @@ export const GMMLogo: React.FC<GMMLogoProps> = ({
         >
           <defs>
             <linearGradient id="backCardGrad" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#3B82F6" />
-              <stop offset="100%" stopColor="#1D4ED8" />
+              <stop offset="0%" stopColor="#40A9FF" />
+              <stop offset="100%" stopColor="#096DD9" />
             </linearGradient>
             <linearGradient id="checkGrad" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stopColor="#10B981" />
-              <stop offset="100%" stopColor="#059669" />
+              <stop offset="0%" stopColor="#0AB185" />
+              <stop offset="100%" stopColor="#088E6A" />
             </linearGradient>
             <filter id="softShadow" x="-15%" y="-15%" width="130%" height="130%">
-              <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#0F172A" floodOpacity="0.15" />
+              <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#1D202A" floodOpacity="0.14" />
             </filter>
             <filter id="badgeShadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#065F46" floodOpacity="0.25" />
+              <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#088E6A" floodOpacity="0.25" />
             </filter>
           </defs>
 
@@ -71,16 +71,16 @@ export const GMMLogo: React.FC<GMMLogoProps> = ({
 
           {/* Layer 3: Task Items Inside Card */}
           {/* Item 1: Blue Bullet + Rounded Bar */}
-          <circle cx="39" cy="32" r="4.5" fill="#3B82F6" />
-          <rect x="49" y="29" width="25" height="6" rx="3" fill="#E2E8F0" />
+          <circle cx="39" cy="32" r="4.5" fill="#1890FF" />
+          <rect x="49" y="29" width="25" height="6" rx="3" fill="#E8E9EF" />
 
           {/* Item 2: Green Bullet + Rounded Bar */}
-          <circle cx="39" cy="46" r="4.5" fill="#10B981" />
-          <rect x="49" y="43" width="25" height="6" rx="3" fill="#E2E8F0" />
+          <circle cx="39" cy="46" r="4.5" fill="#0AB185" />
+          <rect x="49" y="43" width="25" height="6" rx="3" fill="#E8E9EF" />
 
           {/* Item 3: Blue Bullet + Short Rounded Bar */}
-          <circle cx="39" cy="60" r="4.5" fill="#3B82F6" />
-          <rect x="49" y="57" width="18" height="6" rx="3" fill="#E2E8F0" />
+          <circle cx="39" cy="60" r="4.5" fill="#1890FF" />
+          <rect x="49" y="57" width="18" height="6" rx="3" fill="#E8E9EF" />
 
           {/* Layer 4: Green Checkmark Badge at Bottom Right */}
           <circle cx="68" cy="67" r="16" fill="url(#checkGrad)" filter="url(#badgeShadow)" />
@@ -97,12 +97,12 @@ export const GMMLogo: React.FC<GMMLogoProps> = ({
       {showText && (
         <div className="leading-tight min-w-0">
           <div className="flex items-center gap-1.5">
-            <h1 className={`text-sm sm:text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight whitespace-nowrap truncate ${textClassName}`}>
-              Saho Task System
+            <h1 className={`text-sm sm:text-base font-bold text-[#1D202A] dark:text-slate-100 tracking-tight whitespace-nowrap truncate ${textClassName}`}>
+              Saho Task
             </h1>
           </div>
-          <p className={`hidden xl:block text-xs text-slate-500 dark:text-slate-400 font-medium truncate ${subtextClassName}`}>
-            Hệ thống quản lý task & báo cáo thưởng/phạt 10h CN
+          <p className={`text-[11px] text-[#838899] dark:text-slate-400 font-medium truncate ${subtextClassName}`}>
+            Task & Report System
           </p>
         </div>
       )}

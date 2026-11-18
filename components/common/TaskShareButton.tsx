@@ -3,8 +3,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Task } from '../../types/task';
+import { useApp } from '../../context/AppContext';
+import { getEffectiveTaskCode } from '../../lib/taskCodeHelper';
 import { getTaskShareUrl, getTaskMRTemplateText, copyTextToClipboard } from '../../lib/taskLinkHelper';
 import { Link2, GitPullRequest, Check, Copy, Share2, Sparkles } from 'lucide-react';
+import { sahoToast } from './SahoToast';
 
 interface TaskShareButtonProps {
   task: Partial<Task> & { id: string; title: string };
@@ -27,6 +30,7 @@ export const TaskShareButton: React.FC<TaskShareButtonProps> = ({
   className = '',
   align = 'right',
 }) => {
+  const { tasks, milestones, roles } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [coords, setCoords] = useState<PopoverCoords | null>(null);
@@ -149,20 +153,30 @@ export const TaskShareButton: React.FC<TaskShareButtonProps> = ({
     }
   };
 
+  const effectiveCode =
+    (task.code && task.code.trim()) ||
+    getEffectiveTaskCode(task as Task, tasks, milestones, roles) ||
+    task.id.replace(/^tsk-/, '');
+  const taskWithCode = { ...task, code: effectiveCode };
+
   const handleCopy = async (e: React.MouseEvent, type: 'link' | 'mr') => {
     e.stopPropagation();
     e.preventDefault();
 
     let textToCopy = '';
     if (type === 'link') {
-      textToCopy = getTaskShareUrl(task.id);
+      textToCopy = getTaskShareUrl(taskWithCode);
     } else {
-      textToCopy = getTaskMRTemplateText(task);
+      textToCopy = getTaskMRTemplateText(taskWithCode);
     }
 
     const success = await copyTextToClipboard(textToCopy);
     if (success) {
       setCopiedType(type);
+      sahoToast.success(
+        type === 'link' ? 'Đã sao chép link task' : 'Đã sao chép mẫu MR',
+        type === 'link' ? 'Sẵn sàng dán vào Telegram, Zalo hoặc tài liệu.' : 'Mẫu Merge Request đã được lưu vào clipboard.'
+      );
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
@@ -173,8 +187,8 @@ export const TaskShareButton: React.FC<TaskShareButtonProps> = ({
     }
   };
 
-  const shareUrl = getTaskShareUrl(task.id);
-  const mrText = getTaskMRTemplateText(task);
+  const shareUrl = getTaskShareUrl(taskWithCode);
+  const mrText = getTaskMRTemplateText(taskWithCode);
 
   const renderPopoverContent = () => {
     if (!coords) return null;
@@ -183,7 +197,7 @@ export const TaskShareButton: React.FC<TaskShareButtonProps> = ({
       <div
         ref={popoverRef}
         onClick={(e) => e.stopPropagation()}
-        className="fixed z-[999999] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-700/90 shadow-2xl p-2.5 animate-in fade-in zoom-in-95 duration-150 text-slate-800 dark:text-slate-100 backdrop-blur-md"
+        className="fixed z-[999999] bg-white dark:bg-slate-900 rounded-[12px] border border-[#E8E9EF] dark:border-slate-700/90 shadow-[0_12px_32px_rgba(29,32,42,0.12)] p-2.5 animate-in fade-in zoom-in-95 duration-150 text-[#1D202A] dark:text-slate-100 backdrop-blur-md"
         style={{
           top: coords.top !== undefined ? `${coords.top}px` : undefined,
           bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
@@ -192,13 +206,13 @@ export const TaskShareButton: React.FC<TaskShareButtonProps> = ({
           transformOrigin: coords.isUp ? 'bottom center' : 'top center',
         }}
       >
-        <div className="px-2 py-1.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between mb-1.5">
-          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+        <div className="px-2 py-1.5 border-b border-[#E8E9EF] dark:border-slate-800 flex items-center justify-between mb-1.5">
+          <span className="text-xs font-bold text-[#1D202A] dark:text-slate-200 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#1890FF]" />
             Chia Sẻ Link Task
           </span>
-          <span className="text-[10px] text-slate-400 font-mono">
-            #{task.id.replace(/^tsk-/, '')}
+          <span className="text-[10px] text-[#A2A6B4] font-mono">
+            #{effectiveCode}
           </span>
         </div>
 
@@ -207,17 +221,17 @@ export const TaskShareButton: React.FC<TaskShareButtonProps> = ({
           <button
             type="button"
             onClick={(e) => handleCopy(e, 'link')}
-            className={`w-full text-left p-2.5 rounded-xl border transition-all cursor-pointer flex items-start gap-2.5 ${
+            className={`w-full text-left p-2.5 rounded-[8px] border transition-all cursor-pointer flex items-start gap-2.5 ${
               copiedType === 'link'
-                ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
-                : 'bg-slate-50/80 dark:bg-slate-800/60 hover:bg-indigo-50/70 dark:hover:bg-slate-800 border-slate-200/70 dark:border-slate-700/70 hover:border-indigo-300'
+                ? 'bg-[rgba(10,177,133,0.12)] dark:bg-emerald-950/60 border-[#0AB185]/40 dark:border-emerald-800 text-[#088E6A] dark:text-emerald-200'
+                : 'bg-[#F8FAFB] dark:bg-slate-800/60 hover:bg-[rgba(64,169,255,0.08)] dark:hover:bg-slate-800 border-[#E8E9EF] dark:border-slate-700/70 hover:border-[#1890FF]'
             }`}
           >
             <div
-              className={`p-2 rounded-lg shrink-0 ${
+              className={`p-2 rounded-[8px] shrink-0 ${
                 copiedType === 'link'
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300'
-                  : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400'
+                  ? 'bg-[rgba(10,177,133,0.16)] text-[#0AB185] dark:bg-emerald-900 dark:text-emerald-300'
+                  : 'bg-[rgba(24,144,255,0.14)] dark:bg-sky-950 text-[#1890FF] dark:text-sky-400'
               }`}
             >
               {copiedType === 'link' ? <Check className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import { useSyncModalUrl, getTaskRouteIdentifier } from '../lib/sahoUrl';
 import { Task, getUserRoleColorClass } from '../types/task';
 import {
   X,
@@ -15,7 +16,7 @@ import {
   ExternalLink,
   Reply,
 } from 'lucide-react';
-import { useModalAnimation } from '../hooks/useModalAnimation';
+import { Modal } from './common/Modal';
 import {
   parseNoteLine,
   formatNewNoteLine,
@@ -68,16 +69,26 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
         cancelText: 'Tiếp tục soạn',
         type: 'warning',
         onConfirm: () => {
-          forceClose();
+          onClose();
         },
       });
       return false;
     }
     return true;
-  }, [quickComment, editingNoteIndex, replyingTo, confirmDialog]);
+  }, [quickComment, editingNoteIndex, replyingTo, confirmDialog, onClose]);
 
-  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
-    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
+  const handleRequestClose = React.useCallback(() => {
+    if (checkDirtyAndConfirmClose()) {
+      onClose();
+    }
+  }, [checkDirtyAndConfirmClose, onClose]);
+
+  useSyncModalUrl(
+    isOpen && Boolean(activeTask),
+    activeTask ? `/task/${getTaskRouteIdentifier(activeTask)}/discuss` : null,
+    onClose,
+    activeTask ? `Trao đổi ${activeTask.code || activeTask.title}` : undefined
+  );
 
   useEffect(() => {
     if (activeTask) {
@@ -103,12 +114,12 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
 
   // Auto scroll to bottom only once on initial modal open
   useEffect(() => {
-    if (isVisible) {
+    if (isOpen) {
       scrollToBottom('auto');
     }
-  }, [isVisible, activeTask?.id]);
+  }, [isOpen, activeTask?.id]);
 
-  if (!isRendered || !activeTask) return null;
+  if (!activeTask) return null;
 
   const assigneeUser = users.find(
     (u) => u.account.toLowerCase() === (activeTask.assigneeAccount || '').toLowerCase()
@@ -248,66 +259,138 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
   };
 
   return (
-    <div
-      onMouseDown={handleBackdropMouseDown}
-      onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 modal-backdrop-transition overflow-y-auto ${
-        isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
-      }`}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full max-w-xl shadow-2xl text-slate-800 dark:text-slate-100 max-h-[92vh] flex flex-col overflow-hidden relative modal-dialog-transition ${
-          isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
-        }`}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 p-4 sm:p-5 shrink-0 bg-white dark:bg-slate-900">
-          <div className="space-y-1.5 min-w-0 flex-1 pr-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 text-xs font-bold">
-                <MessageSquare className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                Luồng Trao Đổi Task
-              </span>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      onRequestClose={checkDirtyAndConfirmClose}
+      size="xl"
+      bodyClassName="space-y-3"
+      eyebrow={
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 text-xs font-bold">
+            <MessageSquare className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            Luồng Trao Đổi Task
+          </span>
 
-              <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-semibold">
-                {activeTask.role}
-              </span>
+          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-semibold">
+            {activeTask.role}
+          </span>
 
-              <span className="text-[11px] font-mono text-slate-400">
-                {displayWeekNumber ? `Tuần ${displayWeekNumber} / ${activeTask.year || 2026}` : 'Kho Backlog (Chưa gán tuần)'}
-              </span>
-            </div>
-
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug break-words">
-              <FormattedTaskTitle title={activeTask.title} />
-            </h3>
-
-            <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
-              <span>Phụ trách:</span>
-              <span className={`font-semibold ${getUserRoleColorClass(assigneeUser?.role)}`}>
-                {assigneeUser?.name || activeTask.assigneeAccount || 'Chưa gán'}
-              </span>
-              {activeTask.assigneeAccount && (
-                <span className={`font-mono ${getUserRoleColorClass(assigneeUser?.role)}`}>
-                  (@{activeTask.assigneeAccount})
-                </span>
-              )}
-            </div>
-          </div>
-
-          <button
-            onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
-            title="Đóng"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <span className="text-[11px] font-mono text-slate-400">
+            {displayWeekNumber ? `Tuần ${displayWeekNumber} / ${activeTask.year || 2026}` : 'Kho Backlog (Chưa gán tuần)'}
+          </span>
         </div>
+      }
+      title={<FormattedTaskTitle title={activeTask.title} />}
+      description={
+        <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+          <span>Phụ trách:</span>
+          <span className={`font-semibold ${getUserRoleColorClass(assigneeUser?.role)}`}>
+            {assigneeUser?.name || activeTask.assigneeAccount || 'Chưa gán'}
+          </span>
+          {activeTask.assigneeAccount && (
+            <span className={`font-mono ${getUserRoleColorClass(assigneeUser?.role)}`}>
+              (@{activeTask.assigneeAccount})
+            </span>
+          )}
+        </div>
+      }
+      footerClassName="space-y-2.5"
+      footer={
+        <>
+          {/* Replying Banner Preview (Telegram/Messenger style) */}
+          {replyingTo && (
+            <div className="flex items-center justify-between gap-2 p-2 px-3 bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 border-l-4 border-l-indigo-500 rounded-xl text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
+              <div className="flex items-center gap-2 min-w-0">
+                <Reply className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <div className="min-w-0">
+                  <div className="font-bold text-indigo-700 dark:text-indigo-300 text-[11px] truncate flex items-center gap-1">
+                    <span>Đang trả lời</span>
+                    <span className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[200px]">
+                      {replyingTo.author}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 italic truncate max-w-[320px] sm:max-w-[420px]">
+                    &ldquo;{replyingTo.text}&rdquo;
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelReply}
+                className="w-5 h-5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center shrink-0 transition cursor-pointer"
+                title="Hủy trả lời"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
-        {/* Scrollable Conversation Body */}
-        <div className="p-4 sm:p-5 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-3 min-h-0 min-w-0 bg-slate-50/50 dark:bg-slate-900/60">
-          <div className="flex items-center justify-between pb-1">
+          <form onSubmit={handleSendComment} className="flex gap-2 min-w-0">
+            <MentionInput
+              as="input"
+              value={quickComment}
+              onChange={setQuickComment}
+              users={users}
+              mentionPlacement="top"
+              placeholder={
+                replyingTo
+                  ? `Trả lời @${replyingTo.author} (Gõ @ để tag)...`
+                  : `Nhập phản hồi / trao đổi với vai trò ${currentUser?.name || 'thành viên'} (Gõ @ để tag)...`
+              }
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={!quickComment.trim()}
+              className="px-4 py-2.5 bg-[#1890FF] hover:bg-[#40A9FF] disabled:opacity-50 text-white text-xs font-semibold rounded-[8px] shadow-sm transition flex items-center gap-1.5 shrink-0 active:scale-95 cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Gửi</span>
+            </button>
+          </form>
+
+          {isSaved && (
+            <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-fade-in">
+              <CheckCircle className="w-3.5 h-3.5" /> Đã lưu &amp; đồng bộ trao đổi thành công!
+            </div>
+          )}
+
+          {/* Modal Footer Controls */}
+          <div className="flex items-center justify-between pt-1">
+            {onOpenFullDetail ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (checkDirtyAndConfirmClose()) {
+                    onClose();
+                    setTimeout(() => {
+                      onOpenFullDetail(activeTask);
+                    }, 180);
+                  }
+                }}
+                className="text-xs text-[#1890FF] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Xem toàn bộ chi tiết task
+              </button>
+            ) : (
+              <div />
+            )}
+
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              className="saho-modal-btn-secondary"
+            >
+              Đóng
+            </button>
+          </div>
+        </>
+      }
+    >
+      <div className="flex items-center justify-between pb-1">
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
               <span>Nội dung ghi chú & trao đổi ({noteLines.length}):</span>
             </span>
@@ -485,100 +568,7 @@ export const TaskDiscussionModal: React.FC<TaskDiscussionModalProps> = ({
             )}
             <div ref={messagesEndRef} />
           </div>
-        </div>
-
-        {/* Input & Quick Actions Footer */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900 space-y-2.5">
-          {/* Replying Banner Preview (Telegram/Messenger style) */}
-          {replyingTo && (
-            <div className="flex items-center justify-between gap-2 p-2 px-3 bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 border-l-4 border-l-indigo-500 rounded-xl text-xs animate-in fade-in slide-in-from-bottom-2 duration-150">
-              <div className="flex items-center gap-2 min-w-0">
-                <Reply className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <div className="min-w-0">
-                  <div className="font-bold text-indigo-700 dark:text-indigo-300 text-[11px] truncate flex items-center gap-1">
-                    <span>Đang trả lời</span>
-                    <span className="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[200px]">
-                      {replyingTo.author}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 italic truncate max-w-[320px] sm:max-w-[420px]">
-                    "{replyingTo.text}"
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleCancelReply}
-                className="w-5 h-5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center shrink-0 transition cursor-pointer"
-                title="Hủy trả lời"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
-          <form onSubmit={handleSendComment} className="flex gap-2 min-w-0">
-            <MentionInput
-              as="input"
-              value={quickComment}
-              onChange={setQuickComment}
-              users={users}
-              mentionPlacement="top"
-              placeholder={
-                replyingTo
-                  ? `Trả lời @${replyingTo.author} (Gõ @ để tag)...`
-                  : `Nhập phản hồi / trao đổi với vai trò ${currentUser?.name || 'thành viên'} (Gõ @ để tag)...`
-              }
-              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
-              autoFocus
-            />
-            <button
-              type="submit"
-              disabled={!quickComment.trim()}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5 shrink-0 active:scale-95 cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Gửi</span>
-            </button>
-          </form>
-
-          {isSaved && (
-            <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5 animate-fade-in">
-              <CheckCircle className="w-3.5 h-3.5" /> Đã lưu & đồng bộ trao đổi thành công!
-            </div>
-          )}
-
-          {/* Modal Footer Controls */}
-          <div className="flex items-center justify-between pt-1">
-            {onOpenFullDetail ? (
-              <button
-                type="button"
-                onClick={() => {
-                  handleClose();
-                  setTimeout(() => {
-                    onOpenFullDetail(activeTask);
-                  }, 180);
-                }}
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Xem toàn bộ chi tiết task
-              </button>
-            ) : (
-              <div />
-            )}
-
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-4 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-xl transition cursor-pointer"
-            >
-              Đóng
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

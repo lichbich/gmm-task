@@ -1,7 +1,16 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { User, Milestone, Task, TaskStatus, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, TicketActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, getMemberTaskEffort } from '../types/task';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { User, Milestone, Task, TaskStatus, TaskWeeklyHistoryEntry, WeeklyAwardSummary, WeeklyHistoryArchive, RoleItem, ProjectResource, TaskActivityLog, TicketActivityLog, UserRole, Specialization, isTaskUnworked, Ticket, TicketComment, TicketPriority, TicketStatus, getUserRoleInSpec, getTodayDateOnlyString, formatDateOnlyDisplay, isUserPM, isUserAdminOrPM, getMemberTaskEffort } from '../types/task';
+import { sahoToast } from '../components/common/SahoToast';
+import {
+  getWeeklyHistoryKey,
+  buildWeeklyHistoryEntryFromTask,
+  getTaskForWeekView,
+  consolidateMultiWeekTaskClones,
+  normalizeWeekNumberForYear,
+  findWeeklyHistoryEntry,
+} from '../lib/taskEffortHelper';
 import { INITIAL_USERS, INITIAL_MILESTONES, INITIAL_TASKS, INITIAL_PROJECT_RESOURCES } from '../lib/mockData';
 import { database, ref, onValue, set, update, remove, DB_ROOT_NODE } from '../lib/firebase';
 import { hashPassword, verifyPassword, generateTemporaryPassword } from '../lib/crypto';
@@ -277,6 +286,10 @@ interface AppContextType {
   weeklyArchives: WeeklyHistoryArchive[];
   finishWeekAndRollover: () => void;
   rollbackWeekArchive: (targetWeek: number, targetYear?: number) => void;
+  transferTaskToNextWeek: (taskId: string, fromWeek: number, toWeek: number, year?: number) => void;
+  undoTransferTaskToNextWeek: (taskId: string, backToWeek: number, year?: number) => void;
+  adminUpdateTaskWeeklyHistory: (taskId: string, weekKey: string, updates: Partial<TaskWeeklyHistoryEntry>) => void;
+  adminDeleteTaskWeeklyHistory: (taskId: string, weekKey: string) => void;
   
   resetToDefaultData: () => void;
   isFirebaseConnected: boolean;
@@ -502,6 +515,13 @@ export const syncParentTaskMetricsInList = (
   const subtasks = taskList.filter((t) => t.subtaskParentId === parentId);
   const metrics = calculateParentMetrics(parent, subtasks);
 
+  const normW = parent.weekNumber
+    ? normalizeWeekNumberForYear(parent.weekNumber, parent.year || 2026)
+    : 0;
+  const isCurrentWeekLocked = Boolean(
+    normW && findWeeklyHistoryEntry(parent, normW, parent.year || 2026)
+  );
+
   const todayStr = getTodayDateOnlyString(simulatedTime);
   let nextStartDate = parent.startDate;
   let nextEndDate = parent.endDate;
@@ -518,9 +538,10 @@ export const syncParentTaskMetricsInList = (
     completionPercentage: metrics.completionPercentage,
     status: metrics.status,
     estimatedEffort: metrics.totalEstimatedEffort,
-    actualEffort: metrics.totalActualEffort,
+    actualEffort: isCurrentWeekLocked ? parent.actualEffort : metrics.totalActualEffort,
     startDate: nextStartDate,
     endDate: nextEndDate,
+    weeklyHistory: parent.weeklyHistory,
     supporterAccounts: metrics.collaboratorAccounts.length > 0 ? metrics.collaboratorAccounts : parent.supporterAccounts,
   };
 
@@ -541,6 +562,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authSession, setAuthSession] = useState<User | null>(null);
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
   const [confirmState, setConfirmState] = useState<ConfirmDialogOptions | null>(null);
+  const hasConsolidatedClonesRef = useRef<boolean>(false);
 
   // Cross-Role Request Tickets State
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -624,22 +646,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [authSession?.account]);
 
-  const markNoteAsRead = (taskId: string, notesContent?: string) => {
-    const task = tasks.find((t) => t.id === taskId);
-    const contentToSave = notesContent !== undefined ? notesContent : (task?.notes || '');
-    setReadNotesMap((prev) => {
-      const updated = { ...prev, [taskId]: contentToSave };
-      try {
-        if (typeof window !== 'undefined') {
-          const key = getStorageKey(authSession?.account);
-          localStorage.setItem(key, JSON.stringify(updated));
+  const markNoteAsRead = useCallback(
+    (taskId: string, notesContent?: string) => {
+      const task = tasks.find((t) => t.id === taskId);
+      const contentToSave = notesContent !== undefined ? notesContent : (task?.notes || '');
+      setReadNotesMap((prev) => {
+        if (prev[taskId] === contentToSave) {
+          return prev;
         }
-      } catch (e) {
-        console.error('Failed to save readNotesMap', e);
-      }
-      return updated;
-    });
-  };
+        const updated = { ...prev, [taskId]: contentToSave };
+        try {
+          if (typeof window !== 'undefined') {
+            const key = getStorageKey(authSession?.account);
+            localStorage.setItem(key, JSON.stringify(updated));
+          }
+        } catch (e) {
+          console.error('Failed to save readNotesMap', e);
+        }
+        return updated;
+      });
+    },
+    [tasks, authSession?.account]
+  );
 
   const hasUnreadNote = (task: Task): boolean => {
     if (!task.notes || !task.notes.trim()) return false;
@@ -722,6 +750,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setRoles(activeRoles);
           } else {
             setRoles([]);
+          }
+
+          let deduplicatedArchives: WeeklyHistoryArchive[] = [];
+          if (data.weeklyArchives) {
+            const archivesList = Object.values(data.weeklyArchives) as WeeklyHistoryArchive[];
+            const uniqueMap = new Map<string, WeeklyHistoryArchive>();
+            archivesList.forEach((a) => {
+              const key = `${a.weekNumber}_${a.year || 2026}`;
+              const existing = uniqueMap.get(key);
+              if (!existing || (a.archivedAt && existing.archivedAt && new Date(a.archivedAt).getTime() > new Date(existing.archivedAt).getTime())) {
+                uniqueMap.set(key, a);
+              }
+            });
+            deduplicatedArchives = Array.from(uniqueMap.values()).sort((a, b) => a.weekNumber - b.weekNumber);
+            setWeeklyArchives(deduplicatedArchives);
+
+            if (deduplicatedArchives.length < archivesList.length) {
+              const obj: Record<string, WeeklyHistoryArchive> = {};
+              deduplicatedArchives.forEach((a) => {
+                obj[a.id] = sanitizeForFirebase(a);
+              });
+              set(ref(database, `${DB_ROOT_NODE}/weeklyArchives`), obj).catch(console.error);
+            }
+          } else {
+            setWeeklyArchives([]);
           }
 
           // 1. Process explicit deletion tombstones from Firebase
@@ -830,9 +883,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return t;
             });
 
+            // One-time / self-healing consolidation of legacy multi-week clones into 1 unique Task per lifecycle
+            const {
+              consolidatedTasks,
+              removedCloneIds,
+              updatedParentTasks,
+              remappedSubtasks,
+            } = consolidateMultiWeekTaskClones(normalizedTasks, deduplicatedArchives);
+
+            if (
+              !hasConsolidatedClonesRef.current &&
+              (removedCloneIds.length > 0 || updatedParentTasks.length > 0 || remappedSubtasks.length > 0)
+            ) {
+              hasConsolidatedClonesRef.current = true;
+              const toPersistMap = new Map<string, Task>();
+              updatedParentTasks.forEach((pt) => toPersistMap.set(pt.id, pt));
+              remappedSubtasks.forEach((st) => toPersistMap.set(st.id, st));
+              toPersistMap.forEach((item) => {
+                saveTaskToFirebase(item).catch(console.error);
+              });
+              if (removedCloneIds.length > 0) {
+                deleteMultipleTasksFromFirebase(removedCloneIds, 'system-consolidation').catch(console.error);
+              }
+            }
+
             // Reconcile parent task metrics in a single O(N) pass
             const subtasksByParent = new Map<string, Task[]>();
-            normalizedTasks.forEach((t) => {
+            consolidatedTasks.forEach((t) => {
               if (t.subtaskParentId) {
                 const list = subtasksByParent.get(t.subtaskParentId) || [];
                 list.push(t);
@@ -840,10 +917,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             });
             const todayStr = getTodayDateOnlyString(simulatedTime);
-            const reconciledTasks = normalizedTasks.map((t) => {
+            const reconciledTasks = consolidatedTasks.map((t) => {
               const subtasks = subtasksByParent.get(t.id);
               if (!subtasks || subtasks.length === 0) return t;
               const metrics = calculateParentMetrics(t, subtasks);
+              const normW = t.weekNumber ? normalizeWeekNumberForYear(t.weekNumber, t.year || 2026) : 0;
+              const isCurrentWeekLocked = Boolean(
+                normW && findWeeklyHistoryEntry(t, normW, t.year || 2026)
+              );
               let nextStartDate = t.startDate;
               let nextEndDate = t.endDate;
               if (metrics.status === 'In Progress' && !nextStartDate) nextStartDate = todayStr;
@@ -857,9 +938,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 completionPercentage: metrics.completionPercentage,
                 status: metrics.status,
                 estimatedEffort: metrics.totalEstimatedEffort,
-                actualEffort: metrics.totalActualEffort,
+                actualEffort: isCurrentWeekLocked ? t.actualEffort : metrics.totalActualEffort,
                 startDate: nextStartDate,
                 endDate: nextEndDate,
+                weeklyHistory: t.weeklyHistory,
                 supporterAccounts: metrics.collaboratorAccounts.length > 0 ? metrics.collaboratorAccounts : t.supporterAccounts,
               };
             });
@@ -869,30 +951,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }, 0);
           } else if (rawRemoteTasks.length === 0 && localCached.length === 0) {
             setTasks([]);
-          }
-
-          if (data.weeklyArchives) {
-            const archivesList = Object.values(data.weeklyArchives) as WeeklyHistoryArchive[];
-            const uniqueMap = new Map<string, WeeklyHistoryArchive>();
-            archivesList.forEach((a) => {
-              const key = `${a.weekNumber}_${a.year || 2026}`;
-              const existing = uniqueMap.get(key);
-              if (!existing || (a.archivedAt && existing.archivedAt && new Date(a.archivedAt).getTime() > new Date(existing.archivedAt).getTime())) {
-                uniqueMap.set(key, a);
-              }
-            });
-            const deduplicatedList = Array.from(uniqueMap.values()).sort((a, b) => a.weekNumber - b.weekNumber);
-            setWeeklyArchives(deduplicatedList);
-
-            if (deduplicatedList.length < archivesList.length) {
-              const obj: Record<string, WeeklyHistoryArchive> = {};
-              deduplicatedList.forEach((a) => {
-                obj[a.id] = sanitizeForFirebase(a);
-              });
-              set(ref(database, `${DB_ROOT_NODE}/weeklyArchives`), obj).catch(console.error);
-            }
-          } else {
-            setWeeklyArchives([]);
           }
           if (data.resources) {
             const resList = Object.values(data.resources) as ProjectResource[];
@@ -2087,33 +2145,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const authorRole = authSession?.role || 'Member';
     const updaterDisplay = `${authorName} (@${authorAccount})`;
 
+    // Guardrail: `weeklyHistory` map is strictly immutable in normal task updates
+    // and can NEVER be modified by regular code paths (Admin-only via dedicated UI API).
+    const { weeklyHistory: _ignoredWeeklyHistory, ...restUpdates } = updates;
     let targetTaskUpdated: Task | null = null;
 
     let updated = tasks.map((t) => {
       if (t.id !== id) return t;
 
-      if (updates.title !== undefined || updates.role !== undefined) {
-        const nextRole = updates.role || t.role;
-        const rawTitle = updates.title !== undefined ? updates.title : t.title;
-        updates.title = ensureTaskTitlePrefix(rawTitle, nextRole, roles);
+      const safeUpdates: Partial<Task> = { ...restUpdates };
+
+      if (safeUpdates.title !== undefined || safeUpdates.role !== undefined) {
+        const nextRole = safeUpdates.role || t.role;
+        const rawTitle = safeUpdates.title !== undefined ? safeUpdates.title : t.title;
+        safeUpdates.title = ensureTaskTitlePrefix(rawTitle, nextRole, roles);
       }
 
-      if (updates.estimatedEffort !== undefined) {
-        updates.estimatedEffort = Math.min(24, Math.max(0, Number(updates.estimatedEffort) || 0));
+      if (safeUpdates.estimatedEffort !== undefined) {
+        safeUpdates.estimatedEffort = Math.min(24, Math.max(0, Number(safeUpdates.estimatedEffort) || 0));
       }
-      if (updates.actualEffort !== undefined) {
-        updates.actualEffort = Math.min(24, Math.max(0, Number(updates.actualEffort) || 0));
+      if (safeUpdates.actualEffort !== undefined) {
+        safeUpdates.actualEffort = Math.min(24, Math.max(0, Number(safeUpdates.actualEffort) || 0));
       }
 
       // If completionPercentage is explicitly set to 0 or is 0, ensure actualEffort is 0 and status is To do (cannot be Done)
-      const effectivePct = updates.completionPercentage !== undefined ? updates.completionPercentage : (t.completionPercentage || 0);
-      let nextStatus: TaskStatus = updates.status || t.status || 'To do';
-      if (effectivePct === 0 || updates.actualEffort === 0) {
-        updates.actualEffort = 0;
-        if (updates.memberEfforts === undefined && t.memberEfforts) {
+      const effectivePct = safeUpdates.completionPercentage !== undefined ? safeUpdates.completionPercentage : (t.completionPercentage || 0);
+      let nextStatus: TaskStatus = safeUpdates.status || t.status || 'To do';
+      if (effectivePct === 0 || safeUpdates.actualEffort === 0) {
+        safeUpdates.actualEffort = 0;
+        if (safeUpdates.memberEfforts === undefined && t.memberEfforts) {
           const clearedMemberEfforts: Record<string, number> = {};
           Object.keys(t.memberEfforts).forEach((k) => { clearedMemberEfforts[k] = 0; });
-          updates.memberEfforts = clearedMemberEfforts;
+          safeUpdates.memberEfforts = clearedMemberEfforts;
         }
         if (nextStatus === 'Done') {
           nextStatus = 'To do';
@@ -2125,58 +2188,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           nextStatus = 'In Progress';
         }
       }
-      updates.status = nextStatus;
+      safeUpdates.status = nextStatus;
 
       // Auto start date / end date handling when not explicitly provided
       const todayStr = getTodayDateOnlyString(simulatedTime);
       if (effectivePct > 0 || nextStatus === 'In Progress') {
-        if (updates.startDate === undefined && !t.startDate) {
-          updates.startDate = todayStr;
+        if (safeUpdates.startDate === undefined && !t.startDate) {
+          safeUpdates.startDate = todayStr;
         }
       }
       if (effectivePct >= 100 || nextStatus === 'Done') {
-        if (updates.startDate === undefined && !t.startDate) {
-          updates.startDate = todayStr;
+        if (safeUpdates.startDate === undefined && !t.startDate) {
+          safeUpdates.startDate = todayStr;
         }
-        if (updates.endDate === undefined && !t.endDate) {
-          updates.endDate = todayStr;
+        if (safeUpdates.endDate === undefined && !t.endDate) {
+          safeUpdates.endDate = todayStr;
         }
       }
 
       // Auto-assign week when assigning member to an unassigned or backlog task if weekNumber is not explicitly provided
       if (
-        updates.assigneeAccount &&
-        updates.assigneeAccount.trim() !== '' &&
+        safeUpdates.assigneeAccount &&
+        safeUpdates.assigneeAccount.trim() !== '' &&
         (!t.assigneeAccount || t.assigneeAccount.trim() === '' || !t.weekNumber) &&
-        updates.weekNumber === undefined
+        safeUpdates.weekNumber === undefined
       ) {
-        updates.weekNumber = selectedWeek;
-        updates.year = selectedYear;
+        safeUpdates.weekNumber = selectedWeek;
+        safeUpdates.year = selectedYear;
       }
 
       // Hierarchical Task Code Management
-      let nextCode = updates.code !== undefined ? updates.code : t.code;
-      const isBecomingSubtask = updates.subtaskParentId && updates.subtaskParentId !== t.subtaskParentId;
+      let nextCode = safeUpdates.code !== undefined ? safeUpdates.code : t.code;
+      const isBecomingSubtask = safeUpdates.subtaskParentId && safeUpdates.subtaskParentId !== t.subtaskParentId;
       const isDetachingSubtask =
-        (updates.subtaskParentId === '' || updates.subtaskParentId === null || updates.isSubtask === false) &&
+        (safeUpdates.subtaskParentId === '' || safeUpdates.subtaskParentId === null || safeUpdates.isSubtask === false) &&
         Boolean(t.subtaskParentId);
-      const isMilestoneChanged = updates.milestoneId !== undefined && updates.milestoneId !== t.milestoneId;
-      const isRoleChanged = updates.role !== undefined && updates.role !== t.role;
+      const isMilestoneChanged = safeUpdates.milestoneId !== undefined && safeUpdates.milestoneId !== t.milestoneId;
+      const isRoleChanged = safeUpdates.role !== undefined && safeUpdates.role !== t.role;
 
-      if (!updates.code && (isBecomingSubtask || isDetachingSubtask || isMilestoneChanged || isRoleChanged || !t.code)) {
-        const effectiveMilestoneId = updates.milestoneId !== undefined ? updates.milestoneId : t.milestoneId;
-        const effectiveRole = updates.role || t.role;
+      if (!safeUpdates.code && (isBecomingSubtask || isDetachingSubtask || isMilestoneChanged || isRoleChanged || !t.code)) {
+        const effectiveMilestoneId = safeUpdates.milestoneId !== undefined ? safeUpdates.milestoneId : t.milestoneId;
+        const effectiveRole = safeUpdates.role || t.role;
         const effectiveIsSubtask = isBecomingSubtask
           ? true
           : isDetachingSubtask
           ? false
-          : Boolean(updates.isSubtask !== undefined ? updates.isSubtask : t.isSubtask);
+          : Boolean(safeUpdates.isSubtask !== undefined ? safeUpdates.isSubtask : t.isSubtask);
         const effectiveParentId = isBecomingSubtask
-          ? updates.subtaskParentId
+          ? safeUpdates.subtaskParentId
           : isDetachingSubtask
           ? undefined
-          : updates.subtaskParentId !== undefined
-          ? updates.subtaskParentId
+          : safeUpdates.subtaskParentId !== undefined
+          ? safeUpdates.subtaskParentId
           : t.subtaskParentId;
 
         nextCode = generateNextTaskCode({
@@ -2188,21 +2251,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           milestones,
           roles,
         });
-        updates.code = nextCode;
+        safeUpdates.code = nextCode;
       }
 
       if (options?.skipLog) {
         targetTaskUpdated = {
           ...t,
-          ...updates,
+          ...safeUpdates,
           code: nextCode,
+          weeklyHistory: t.weeklyHistory,
           updatedAt: nowIso,
           updatedBy: updaterDisplay,
         };
-        if ('weekNumber' in updates && (updates.weekNumber === undefined || updates.weekNumber === null)) {
+        if ('weekNumber' in safeUpdates && (safeUpdates.weekNumber === undefined || safeUpdates.weekNumber === null)) {
           delete (targetTaskUpdated as any).weekNumber;
         }
-        if ('requestedWeekNumber' in updates && (updates.requestedWeekNumber === undefined || updates.requestedWeekNumber === null)) {
+        if ('requestedWeekNumber' in safeUpdates && (safeUpdates.requestedWeekNumber === undefined || safeUpdates.requestedWeekNumber === null)) {
           delete (targetTaskUpdated as any).requestedWeekNumber;
         }
         return targetTaskUpdated;
@@ -2212,53 +2276,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (nextCode && nextCode !== t.code) {
         changes.push(`Mã task: "${t.code || 'Chưa có'}" ➔ "${nextCode}"`);
       }
-      if (updates.status && updates.status !== t.status) {
-        changes.push(`Trạng thái: "${t.status}" ➔ "${updates.status}"`);
+      if (safeUpdates.status && safeUpdates.status !== t.status) {
+        changes.push(`Trạng thái: "${t.status}" ➔ "${safeUpdates.status}"`);
       }
-      if (updates.completionPercentage !== undefined && updates.completionPercentage !== t.completionPercentage) {
-        changes.push(`Tiến độ: ${t.completionPercentage}% ➔ ${updates.completionPercentage}%`);
+      if (safeUpdates.completionPercentage !== undefined && safeUpdates.completionPercentage !== t.completionPercentage) {
+        changes.push(`Tiến độ: ${t.completionPercentage}% ➔ ${safeUpdates.completionPercentage}%`);
       }
-      if (updates.actualEffort !== undefined && updates.actualEffort !== t.actualEffort) {
-        changes.push(`Effort thực tế: ${t.actualEffort}h ➔ ${updates.actualEffort}h`);
+      if (safeUpdates.actualEffort !== undefined && safeUpdates.actualEffort !== t.actualEffort) {
+        changes.push(`Effort thực tế: ${t.actualEffort}h ➔ ${safeUpdates.actualEffort}h`);
       }
-      if (updates.estimatedEffort !== undefined && updates.estimatedEffort !== t.estimatedEffort) {
-        changes.push(`Effort ước tính: ${t.estimatedEffort}h ➔ ${updates.estimatedEffort}h`);
+      if (safeUpdates.estimatedEffort !== undefined && safeUpdates.estimatedEffort !== t.estimatedEffort) {
+        changes.push(`Effort ước tính: ${t.estimatedEffort}h ➔ ${safeUpdates.estimatedEffort}h`);
       }
-      if (updates.startDate !== undefined && updates.startDate !== t.startDate) {
-        changes.push(`Ngày bắt đầu: "${formatDateOnlyDisplay(t.startDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(updates.startDate) || 'Chưa đặt'}"`);
+      if (safeUpdates.startDate !== undefined && safeUpdates.startDate !== t.startDate) {
+        changes.push(`Ngày bắt đầu: "${formatDateOnlyDisplay(t.startDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(safeUpdates.startDate) || 'Chưa đặt'}"`);
       }
-      if (updates.endDate !== undefined && updates.endDate !== t.endDate) {
-        changes.push(`Ngày hoàn thành: "${formatDateOnlyDisplay(t.endDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(updates.endDate) || 'Chưa đặt'}"`);
+      if (safeUpdates.endDate !== undefined && safeUpdates.endDate !== t.endDate) {
+        changes.push(`Ngày hoàn thành: "${formatDateOnlyDisplay(t.endDate) || 'Chưa đặt'}" ➔ "${formatDateOnlyDisplay(safeUpdates.endDate) || 'Chưa đặt'}"`);
       }
-      if (updates.assigneeAccount !== undefined && updates.assigneeAccount !== t.assigneeAccount) {
-        changes.push(`Người phụ trách: ${t.assigneeAccount || 'Chưa gán'} ➔ ${updates.assigneeAccount || 'Chưa gán'}`);
+      if (safeUpdates.assigneeAccount !== undefined && safeUpdates.assigneeAccount !== t.assigneeAccount) {
+        changes.push(`Người phụ trách: ${t.assigneeAccount || 'Chưa gán'} ➔ ${safeUpdates.assigneeAccount || 'Chưa gán'}`);
       }
-      if (updates.weekNumber !== undefined && updates.weekNumber !== t.weekNumber) {
+      if (safeUpdates.weekNumber !== undefined && safeUpdates.weekNumber !== t.weekNumber) {
         const oldW = t.weekNumber ? `Tuần ${t.weekNumber}` : 'Kho Backlog';
-        const newW = updates.weekNumber ? `Tuần ${updates.weekNumber}` : 'Kho Backlog';
+        const newW = safeUpdates.weekNumber ? `Tuần ${safeUpdates.weekNumber}` : 'Kho Backlog';
         changes.push(`Kế hoạch: ${oldW} ➔ ${newW}`);
       }
-      if (updates.priority && updates.priority !== t.priority) {
-        changes.push(`Độ ưu tiên: ${t.priority || 'Medium'} ➔ ${updates.priority}`);
+      if (safeUpdates.priority && safeUpdates.priority !== t.priority) {
+        changes.push(`Độ ưu tiên: ${t.priority || 'Medium'} ➔ ${safeUpdates.priority}`);
       }
-      if (updates.description !== undefined && updates.description !== t.description) {
+      if (safeUpdates.description !== undefined && safeUpdates.description !== t.description) {
         changes.push(`Cập nhật mô tả & hướng dẫn kỹ thuật`);
       }
-      if (updates.title && updates.title !== t.title) {
-        changes.push(`Đổi tiêu đề: "${updates.title}"`);
+      if (safeUpdates.title && safeUpdates.title !== t.title) {
+        changes.push(`Đổi tiêu đề: "${safeUpdates.title}"`);
       }
-      if (updates.notes !== undefined && updates.notes !== t.notes) {
+      if (safeUpdates.notes !== undefined && safeUpdates.notes !== t.notes) {
         changes.push(`Cập nhật ghi chú trao đổi`);
       }
-      if (updates.role && updates.role !== t.role) {
-        changes.push(`Chuyên môn (Role): ${t.role} ➔ ${updates.role}`);
+      if (safeUpdates.role && safeUpdates.role !== t.role) {
+        changes.push(`Chuyên môn (Role): ${t.role} ➔ ${safeUpdates.role}`);
       }
-      if (updates.assignmentRequestStatus && updates.assignmentRequestStatus !== t.assignmentRequestStatus) {
-        if (updates.assignmentRequestStatus === 'PENDING') {
-          changes.push(`Yêu cầu nhận task bởi @${updates.assignmentRequestedBy || authorAccount}`);
-        } else if (updates.assignmentRequestStatus === 'APPROVED') {
+      if (safeUpdates.assignmentRequestStatus && safeUpdates.assignmentRequestStatus !== t.assignmentRequestStatus) {
+        if (safeUpdates.assignmentRequestStatus === 'PENDING') {
+          changes.push(`Yêu cầu nhận task bởi @${safeUpdates.assignmentRequestedBy || authorAccount}`);
+        } else if (safeUpdates.assignmentRequestStatus === 'APPROVED') {
           changes.push(`Duyệt phân công task cho @${t.assignmentRequestedBy || t.assigneeAccount}`);
-        } else if (updates.assignmentRequestStatus === 'REJECTED') {
+        } else if (safeUpdates.assignmentRequestStatus === 'REJECTED') {
           changes.push(`Từ chối yêu cầu nhận task`);
         }
       }
@@ -2278,15 +2342,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       targetTaskUpdated = {
         ...t,
-        ...updates,
+        ...safeUpdates,
+        weeklyHistory: t.weeklyHistory,
         updatedAt: nowIso,
         updatedBy: updaterDisplay,
         activityLogs: [logEntry, ...existingLogs],
       };
-      if ('weekNumber' in updates && (updates.weekNumber === undefined || updates.weekNumber === null)) {
+      if ('weekNumber' in safeUpdates && (safeUpdates.weekNumber === undefined || safeUpdates.weekNumber === null)) {
         delete (targetTaskUpdated as any).weekNumber;
       }
-      if ('requestedWeekNumber' in updates && (updates.requestedWeekNumber === undefined || updates.requestedWeekNumber === null)) {
+      if ('requestedWeekNumber' in safeUpdates && (safeUpdates.requestedWeekNumber === undefined || safeUpdates.requestedWeekNumber === null)) {
         delete (targetTaskUpdated as any).requestedWeekNumber;
       }
       return targetTaskUpdated;
@@ -2298,8 +2363,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentTaskBeforeUpdate?.subtaskParentId) {
       parentsToSync.add(currentTaskBeforeUpdate.subtaskParentId);
     }
-    if (updates.subtaskParentId) {
-      parentsToSync.add(updates.subtaskParentId);
+    if (restUpdates.subtaskParentId) {
+      parentsToSync.add(restUpdates.subtaskParentId);
     }
     if (targetTaskUpdated && (targetTaskUpdated as Task).subtaskParentId) {
       parentsToSync.add((targetTaskUpdated as Task).subtaskParentId!);
@@ -2347,25 +2412,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveLocalTasksCache(updated);
     if (targetTaskUpdated) {
       saveTaskToFirebase(targetTaskUpdated).catch(console.error);
-
-      // Also keep weeklyArchives snapshot synchronized if task is archived
-      const finalTask: Task = targetTaskUpdated;
-      const hasArchiveMatch = weeklyArchives.some((a) =>
-        a.tasksSnapshot?.some((st) => st.id === id)
-      );
-      if (hasArchiveMatch) {
-        const updatedArchives = weeklyArchives.map((a) => {
-          if (!a.tasksSnapshot?.some((st) => st.id === id)) return a;
-          return {
-            ...a,
-            tasksSnapshot: a.tasksSnapshot.map((st) =>
-              st.id === id ? { ...st, ...finalTask } : st
-            ),
-          };
-        });
-        setWeeklyArchives(updatedArchives);
-        syncArchivesToFirebase(updatedArchives).catch(console.error);
-      }
     }
 
     parentsUpdated.forEach((p) => {
@@ -2963,20 +3009,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const nextWeek = selectedWeek + 1;
+    const nowIso = new Date().toISOString();
+    const authorName = authSession?.name || 'Admin';
+    const authorAccount = authSession?.account || 'admin';
+    const authorRole = authSession?.role || 'Admin';
+    const weekKey = getWeeklyHistoryKey(selectedWeek, selectedYear);
+
     // Only assigned tasks are part of active weekly schedules & history (tasks with primary assignee or supporters)
     const currentWeekAssignedTasks = tasks.filter(
       (t) =>
         t.weekNumber === selectedWeek &&
-        t.year === selectedYear &&
+        (t.year || selectedYear) === selectedYear &&
         ((t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
           (t.supporterAccounts && t.supporterAccounts.length > 0))
     );
 
     // Separate tasks into worked (has progress/effort or Done) vs unworked (0% progress & 0h effort)
     const workedTasks = currentWeekAssignedTasks.filter((t) => !isTaskUnworked(t));
-    const unworkedTasks = currentWeekAssignedTasks.filter((t) => isTaskUnworked(t));
 
-    const completedTasksCount = workedTasks.filter((t) => (t.completionPercentage || 0) >= 100).length;
+    const completedTasksCount = workedTasks.filter((t) => (t.completionPercentage || 0) >= 100 || t.status === 'Done').length;
     const rolledOverTasksCount = currentWeekAssignedTasks.length - completedTasksCount;
 
     // Create Archive Record for current week:
@@ -2984,7 +3035,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `archive-${selectedWeek}-${Date.now()}`,
       weekNumber: selectedWeek,
       year: selectedYear,
-      archivedAt: new Date().toISOString(),
+      archivedAt: nowIso,
       completedTasksCount: completedTasksCount,
       rolledOverTasksCount: rolledOverTasksCount,
       awards: calculateWeeklyAwardsForWeek(selectedWeek, selectedYear, true),
@@ -3005,101 +3056,352 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setWeeklyArchives(updatedArchives);
     syncArchivesToFirebase(updatedArchives);
 
-    // Create continuation tasks for nextWeek for ALL unfinished tasks (both working progress < 100% and 0% unworked)
-    // while PRESERVING current week tasks 100%!
-    const continuationTasks: Task[] = [];
-    const unfinishedTasks = currentWeekAssignedTasks.filter((t) => {
+    // Single unique Task rollover:
+    // - Freeze selectedWeek's metrics into `task.weeklyHistory[weekKey]` (immutable once archived).
+    // - Unfinished tasks advance IN PLACE (same `id`, same `code`, preserving all `subtaskParentId` links).
+    // - Finished tasks remain at selectedWeek with their frozen `weeklyHistory` entry recorded.
+    // - Unassigned tasks in selectedWeek return to Backlog in place.
+    const changedTasks: Task[] = [];
+    const newTasksList = tasks.map((t) => {
+      const taskYear = t.year || selectedYear;
+      if (t.weekNumber !== selectedWeek || taskYear !== selectedYear) {
+        return t;
+      }
+
+      const isAssigned =
+        (t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
+        (t.supporterAccounts && t.supporterAccounts.length > 0);
+
+      if (!isAssigned) {
+        const released: Task = { ...t };
+        delete (released as any).weekNumber;
+        changedTasks.push(released);
+        return released;
+      }
+
+      const nextWeeklyHistory: Record<string, TaskWeeklyHistoryEntry> = {
+        ...(t.weeklyHistory || {}),
+      };
+
+      if (!isTaskUnworked(t) && !nextWeeklyHistory[weekKey]) {
+        const snapEntry = buildWeeklyHistoryEntryFromTask(t, nowIso, authorAccount);
+        if (snapEntry) {
+          nextWeeklyHistory[weekKey] = snapEntry;
+        }
+      }
+
       const isFinished =
         (t.completionPercentage !== undefined && t.completionPercentage >= 100) ||
         (t.completionPercentage === undefined && t.status === 'Done');
-      return !isFinished;
-    });
 
-    unfinishedTasks.forEach((t) => {
-      const rootId = t.parentTaskId || t.id;
-      const titleLower = (t.title || '').trim().toLowerCase();
-      const assigneeLower = (t.assigneeAccount || '').trim().toLowerCase();
-      const roleLower = (t.role || '').trim().toLowerCase();
-
-      const alreadyExistsInNextWeek = tasks.some((nt) => {
-        if (nt.weekNumber !== nextWeek || (nt.year || selectedYear) !== selectedYear) return false;
-        if (nt.parentTaskId === rootId || nt.id === rootId) return true;
-        const ntTitle = (nt.title || '').trim().toLowerCase();
-        const ntAssignee = (nt.assigneeAccount || '').trim().toLowerCase();
-        const ntRole = (nt.role || '').trim().toLowerCase();
-        return ntTitle === titleLower && ntAssignee === assigneeLower && ntRole === roleLower;
-      });
-
-      const alreadyInContinuation = continuationTasks.some((ct) => {
-        if (ct.parentTaskId === rootId || ct.id === rootId) return true;
-        const ctTitle = (ct.title || '').trim().toLowerCase();
-        const ctAssignee = (ct.assigneeAccount || '').trim().toLowerCase();
-        const ctRole = (ct.role || '').trim().toLowerCase();
-        return ctTitle === titleLower && ctAssignee === assigneeLower && ctRole === roleLower;
-      });
-
-      if (!alreadyExistsInNextWeek && !alreadyInContinuation) {
-        const isProgress = (t.completionPercentage !== undefined && t.completionPercentage > 0);
-        continuationTasks.push({
+      if (isFinished) {
+        const updatedDone: Task = {
           ...t,
-          id: `tsk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          parentTaskId: rootId,
-          weekNumber: nextWeek,
-          year: selectedYear,
-          actualEffort: 0,
-          memberEfforts: undefined,
-          status: isProgress ? 'In Progress' : 'To do',
-          completionPercentage: t.completionPercentage || 0,
-          lastSubmittedAt: undefined,
-          isSubmittedLate: undefined,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          activityLogs: [
-            ...(t.activityLogs || []),
-            {
-              id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              timestamp: new Date().toISOString(),
-              authorName: authSession?.name || 'Admin',
-              authorAccount: authSession?.account || 'admin',
-              authorRole: authSession?.role || 'Admin',
-              actionType: 'GENERAL_UPDATE',
-              summary: isProgress
-                ? `Chốt Tuần ${selectedWeek} & chuyển tiếp sang Tuần ${nextWeek} (Tiến độ kế thừa: ${t.completionPercentage || 0}%)`
-                : `Chốt Tuần ${selectedWeek} & chuyển tiếp công việc sang Tuần ${nextWeek} (Chưa thực hiện - To do)`,
-            },
-          ],
-        });
+          parentTaskId: undefined,
+          weeklyHistory:
+            Object.keys(nextWeeklyHistory).length > 0 ? nextWeeklyHistory : t.weeklyHistory,
+        };
+        changedTasks.push(updatedDone);
+        return updatedDone;
       }
-    });
 
-    // Unworked tasks (0% progress & 0h effort) are MOVED to nextWeek (removed from selectedWeek to prevent clutter)
-    const unworkedIds = new Set(unworkedTasks.map((t) => t.id));
-    const remainingTasks = tasks.filter((t) => !unworkedIds.has(t.id));
-    const newTasksList = [...remainingTasks, ...continuationTasks];
+      const isProgress =
+        (t.completionPercentage !== undefined && t.completionPercentage > 0) ||
+        (t.actualEffort || 0) > 0;
+      const rolloverLog: TaskActivityLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: nowIso,
+        authorName,
+        authorAccount,
+        authorRole,
+        actionType: 'GENERAL_UPDATE',
+        summary: isProgress
+          ? `Chốt Tuần ${selectedWeek} & chuyển tiếp trên cùng 1 task [${t.code || t.id}] sang Tuần ${nextWeek} (Tiến độ kế thừa: ${t.completionPercentage || 0}%)`
+          : `Chốt Tuần ${selectedWeek} & chuyển task [${t.code || t.id}] sang Tuần ${nextWeek} (Chưa thực hiện - To do)`,
+      };
 
-    if (unworkedIds.size > 0) {
-      deleteMultipleTasksFromFirebase(Array.from(unworkedIds), authSession?.account).catch(console.error);
-    }
-
-    // Release any unassigned tasks still tagged with selectedWeek back to Backlog pool
-    const unassignedInWeek = tasks.filter(
-      (t) =>
-        t.weekNumber === selectedWeek &&
-        (!t.assigneeAccount || t.assigneeAccount.trim() === '') &&
-        (!t.supporterAccounts || t.supporterAccounts.length === 0)
-    );
-    unassignedInWeek.forEach((t) => {
-      updateTask(t.id, { weekNumber: undefined }, { skipLog: true });
+      const rolledTask: Task = {
+        ...t,
+        parentTaskId: undefined,
+        weekNumber: nextWeek,
+        year: selectedYear,
+        actualEffort: 0,
+        memberEfforts: undefined,
+        status: (t.completionPercentage || 0) > 0 ? 'In Progress' : 'To do',
+        completionPercentage: t.completionPercentage || 0,
+        lastSubmittedAt: undefined,
+        isSubmittedLate: undefined,
+        weeklyHistory:
+          Object.keys(nextWeeklyHistory).length > 0 ? nextWeeklyHistory : t.weeklyHistory,
+        updatedAt: nowIso,
+        updatedBy: `${authorName} (@${authorAccount})`,
+        activityLogs: [rolloverLog, ...(t.activityLogs || [])],
+      };
+      changedTasks.push(rolledTask);
+      return rolledTask;
     });
 
     setTasks(newTasksList);
     saveLocalTasksCache(newTasksList);
-    syncTasksToFirebase(newTasksList).catch(console.error);
+    if (changedTasks.length > 0) {
+      syncTasksToFirebase(changedTasks).catch(console.error);
+    }
 
     setSelectedWeek(nextWeek);
   };
 
-  // Rollback / Hoàn tác chốt tuần: Khôi phục lại toàn bộ dữ liệu task từ snapshot và xóa các task chuyển tiếp tự động
+  // Single-task transfer to next week (from NextWeekDefineView)
+  const transferTaskToNextWeek = (
+    taskId: string,
+    fromWeek: number,
+    toWeek: number,
+    year: number = selectedYear
+  ) => {
+    const t = tasks.find((item) => item.id === taskId);
+    if (!t) return;
+    const taskYear = t.year || year;
+    if (t.weekNumber === toWeek && taskYear === year) return;
+
+    const nowIso = new Date().toISOString();
+    const authorName = authSession?.name || 'Leader';
+    const authorAccount = authSession?.account || 'leader';
+    const authorRole = authSession?.role || 'Leader';
+    const fromKey = getWeeklyHistoryKey(fromWeek, year);
+
+    const nextWeeklyHistory: Record<string, TaskWeeklyHistoryEntry> = {
+      ...(t.weeklyHistory || {}),
+    };
+
+    const hasWork =
+      (t.actualEffort || 0) > 0 ||
+      (t.completionPercentage || 0) > 0 ||
+      t.status === 'Done';
+
+    if (hasWork && !nextWeeklyHistory[fromKey]) {
+      const snapEntry = buildWeeklyHistoryEntryFromTask(
+        { ...t, weekNumber: fromWeek, year },
+        nowIso,
+        authorAccount
+      );
+      if (snapEntry) {
+        nextWeeklyHistory[fromKey] = snapEntry;
+      }
+    }
+
+    const logEntry: TaskActivityLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: nowIso,
+      authorName,
+      authorAccount,
+      authorRole,
+      actionType: 'GENERAL_UPDATE',
+      summary: hasWork
+        ? `Tiếp nối trên cùng 1 task từ Tuần ${fromWeek} sang Tuần ${toWeek} (Tiến độ: ${t.completionPercentage || 0}%, giữ nguyên bảng map Tuần ${fromWeek})`
+        : `Chuyển công việc (0% tiến độ, 0h) từ Tuần ${fromWeek} sang Tuần ${toWeek} (To do)`,
+    };
+
+    const updatedTask: Task = {
+      ...t,
+      parentTaskId: undefined,
+      weekNumber: toWeek,
+      year,
+      actualEffort: 0,
+      memberEfforts: undefined,
+      status: (t.completionPercentage || 0) > 0 ? 'In Progress' : 'To do',
+      lastSubmittedAt: undefined,
+      isSubmittedLate: undefined,
+      weeklyHistory:
+        Object.keys(nextWeeklyHistory).length > 0 ? nextWeeklyHistory : undefined,
+      updatedAt: nowIso,
+      updatedBy: `${authorName} (@${authorAccount})`,
+      activityLogs: [logEntry, ...(t.activityLogs || [])],
+    };
+
+    const nextList = tasks.map((item) => (item.id === taskId ? updatedTask : item));
+    setTasks(nextList);
+    saveLocalTasksCache(nextList);
+    saveTaskToFirebase(updatedTask).catch(console.error);
+  };
+
+  // Single-task undo transfer back to previous week
+  const undoTransferTaskToNextWeek = (
+    taskId: string,
+    backToWeek: number,
+    year: number = selectedYear
+  ) => {
+    const t = tasks.find((item) => item.id === taskId);
+    if (!t) return;
+
+    const nowIso = new Date().toISOString();
+    const authorName = authSession?.name || 'Leader';
+    const authorAccount = authSession?.account || 'leader';
+    const authorRole = authSession?.role || 'Leader';
+    const backKey = getWeeklyHistoryKey(backToWeek, year);
+    const entry = t.weeklyHistory?.[backKey];
+    const isFinalizedWeek = weeklyArchives.some(
+      (a) =>
+        normalizeWeekNumberForYear(a.weekNumber, a.year || 2026) ===
+          normalizeWeekNumberForYear(backToWeek, year) &&
+        (a.year || 2026) === year
+    );
+
+    const nextWeeklyHistory: Record<string, TaskWeeklyHistoryEntry> = {
+      ...(t.weeklyHistory || {}),
+    };
+    if (!isFinalizedWeek) {
+      delete nextWeeklyHistory[backKey];
+    }
+
+    const logEntry: TaskActivityLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: nowIso,
+      authorName,
+      authorAccount,
+      authorRole,
+      actionType: 'GENERAL_UPDATE',
+      summary: `Hoàn tác chuyển tuần ➔ khôi phục task về Tuần ${backToWeek}`,
+    };
+
+    const restoredTask: Task = {
+      ...t,
+      parentTaskId: undefined,
+      weekNumber: backToWeek,
+      year,
+      actualEffort: entry ? entry.actualEffort : t.actualEffort,
+      memberEfforts: entry ? entry.memberEfforts : t.memberEfforts,
+      completionPercentage: entry ? entry.completionPercentage : t.completionPercentage,
+      status: entry ? entry.status : t.status,
+      lastSubmittedAt: entry ? entry.lastSubmittedAt : t.lastSubmittedAt,
+      isSubmittedLate: entry ? entry.isSubmittedLate : t.isSubmittedLate,
+      notes: entry && entry.notes !== undefined ? entry.notes : t.notes,
+      weeklyHistory:
+        Object.keys(nextWeeklyHistory).length > 0 ? nextWeeklyHistory : undefined,
+      updatedAt: nowIso,
+      updatedBy: `${authorName} (@${authorAccount})`,
+      activityLogs: [logEntry, ...(t.activityLogs || [])],
+    };
+
+    const nextList = tasks.map((item) => (item.id === taskId ? restoredTask : item));
+    setTasks(nextList);
+    saveLocalTasksCache(nextList);
+    saveTaskToFirebase(restoredTask).catch(console.error);
+  };
+
+  // Admin-only mutation API for the weeklyHistory map
+  const adminUpdateTaskWeeklyHistory = (
+    taskId: string,
+    weekKey: string,
+    updates: Partial<TaskWeeklyHistoryEntry>
+  ) => {
+    if (!authSession || authSession.role !== 'Admin') {
+      sahoToast.error('Chỉ Admin mới có quyền chỉnh sửa bảng map lịch sử tuần!');
+      return;
+    }
+
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target) return;
+
+    const nowIso = new Date().toISOString();
+    const updaterDisplay = `${authSession.name} (@${authSession.account})`;
+    const existingEntry = target.weeklyHistory?.[weekKey];
+    if (!existingEntry) return;
+
+    const clampedEffort =
+      updates.actualEffort !== undefined
+        ? Math.min(24, Math.max(0, Number(updates.actualEffort) || 0))
+        : existingEntry.actualEffort;
+    const clampedEst =
+      updates.estimatedEffort !== undefined
+        ? Math.min(24, Math.max(0, Number(updates.estimatedEffort) || 0))
+        : existingEntry.estimatedEffort;
+    const clampedPct =
+      updates.completionPercentage !== undefined
+        ? Math.min(100, Math.max(0, Number(updates.completionPercentage) || 0))
+        : existingEntry.completionPercentage;
+    const nextStatus: TaskStatus = updates.status || existingEntry.status;
+
+    const updatedEntry: TaskWeeklyHistoryEntry = {
+      ...existingEntry,
+      ...updates,
+      weekKey,
+      actualEffort: clampedEffort,
+      estimatedEffort: clampedEst,
+      completionPercentage: clampedPct,
+      status: nextStatus,
+      updatedByAdminAt: nowIso,
+      updatedByAdminAccount: authSession.account,
+    };
+
+    const nextWeeklyHistory: Record<string, TaskWeeklyHistoryEntry> = {
+      ...(target.weeklyHistory || {}),
+      [weekKey]: updatedEntry,
+    };
+
+    const logEntry: TaskActivityLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: nowIso,
+      authorName: authSession.name,
+      authorAccount: authSession.account,
+      authorRole: authSession.role,
+      actionType: 'GENERAL_UPDATE',
+      summary: `[Admin] Chỉnh sửa bảng map lịch sử [${weekKey}]: Effort ${existingEntry.actualEffort}h ➔ ${clampedEffort}h • Tiến độ ${existingEntry.completionPercentage}% ➔ ${clampedPct}% (${nextStatus})`,
+    };
+
+    const updatedTask: Task = {
+      ...target,
+      weeklyHistory: nextWeeklyHistory,
+      updatedAt: nowIso,
+      updatedBy: updaterDisplay,
+      activityLogs: [logEntry, ...(target.activityLogs || [])],
+    };
+
+    const nextList = tasks.map((item) => (item.id === taskId ? updatedTask : item));
+    setTasks(nextList);
+    saveLocalTasksCache(nextList);
+    saveTaskToFirebase(updatedTask).catch(console.error);
+    sahoToast.success('Đã cập nhật bảng map lịch sử tuần!');
+  };
+
+  const adminDeleteTaskWeeklyHistory = (taskId: string, weekKey: string) => {
+    if (!authSession || authSession.role !== 'Admin') {
+      sahoToast.error('Chỉ Admin mới có quyền xóa mục trong bảng map lịch sử tuần!');
+      return;
+    }
+
+    const target = tasks.find((t) => t.id === taskId);
+    if (!target || !target.weeklyHistory?.[weekKey]) return;
+
+    const nowIso = new Date().toISOString();
+    const updaterDisplay = `${authSession.name} (@${authSession.account})`;
+    const nextWeeklyHistory = { ...target.weeklyHistory };
+    delete nextWeeklyHistory[weekKey];
+
+    const logEntry: TaskActivityLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: nowIso,
+      authorName: authSession.name,
+      authorAccount: authSession.account,
+      authorRole: authSession.role,
+      actionType: 'GENERAL_UPDATE',
+      summary: `[Admin] Xóa bản ghi [${weekKey}] khỏi bảng map lịch sử tuần`,
+    };
+
+    const updatedTask: Task = {
+      ...target,
+      weeklyHistory: Object.keys(nextWeeklyHistory).length > 0 ? nextWeeklyHistory : undefined,
+      updatedAt: nowIso,
+      updatedBy: updaterDisplay,
+      activityLogs: [logEntry, ...(target.activityLogs || [])],
+    };
+
+    const nextList = tasks.map((item) => (item.id === taskId ? updatedTask : item));
+    setTasks(nextList);
+    saveLocalTasksCache(nextList);
+    saveTaskToFirebase(updatedTask).catch(console.error);
+    sahoToast.info('Đã xóa bản ghi tuần khỏi bảng map.');
+  };
+
+  // Rollback / Hoàn tác chốt tuần: Khôi phục lại dữ liệu task từ snapshot về đúng 1 task duy nhất ở targetWeek
   const rollbackWeekArchive = (targetWeek: number, targetYear: number = selectedYear) => {
     const isPOOrAdmin = (u?: any): boolean => {
       if (!u) return false;
@@ -3136,47 +3438,105 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     confirmDialog({
       title: `Rollback / Hoàn tác Chốt Tuần ${targetWeek}`,
-      message: `Bạn có chắc chắn muốn Rollback (Hoàn tác chốt tuần) cho Tuần ${targetWeek}? Toàn bộ dữ liệu task và báo cáo của Tuần ${targetWeek} sẽ được khôi phục nguyên vẹn 100% từ bản lưu trữ snapshot (${targetArchive.tasksSnapshot?.length || 0} task), đồng thời các task tự động chuyển tiếp sang Tuần ${targetWeek + 1} sẽ được thu hồi.`,
+      message: `Bạn có chắc chắn muốn Rollback (Hoàn tác chốt tuần) cho Tuần ${targetWeek}? Toàn bộ dữ liệu task và báo cáo của Tuần ${targetWeek} sẽ được khôi phục nguyên vẹn 100% từ bản lưu trữ snapshot (${targetArchive.tasksSnapshot?.length || 0} task) về chính các task duy nhất ban đầu.`,
       type: 'warning',
       confirmText: `Xác nhận Rollback Tuần ${targetWeek}`,
       onConfirm: () => {
         const nextWeek = targetWeek + 1;
+        const targetWeekKey = getWeeklyHistoryKey(targetWeek, targetYear);
         const snapshotTasks: Task[] = targetArchive.tasksSnapshot || [];
-
-        // 1. Get snapshot task root IDs and task IDs
-        const snapshotRootIds = new Set(
-          snapshotTasks.map((t) => t.parentTaskId || t.id)
-        );
-        const snapshotTaskIds = new Set(snapshotTasks.map((t) => t.id));
-
-        // 2. Remove continuation tasks in nextWeek that were rolled over from this targetWeek
-        // and remove existing tasks of targetWeek that will be replaced by snapshot tasks
-        const filteredTasks = tasks.filter((t) => {
-          if (t.weekNumber === nextWeek && (t.year || 2026) === targetYear) {
-            if (t.parentTaskId && snapshotRootIds.has(t.parentTaskId)) {
-              return false; // Remove auto continuation task in nextWeek
-            }
-          }
-          if (t.weekNumber === targetWeek && (t.year || 2026) === targetYear) {
-            return false;
-          }
-          if (snapshotTaskIds.has(t.id)) {
-            return false;
-          }
-          return true;
+        const snapshotById = new Map<string, Task>();
+        const snapshotRootToSnap = new Map<string, Task>();
+        snapshotTasks.forEach((st) => {
+          snapshotById.set(st.id, st);
+          if (st.parentTaskId) snapshotRootToSnap.set(st.parentTaskId, st);
+          snapshotRootToSnap.set(st.id, st);
         });
 
-        // 3. Add back snapshot tasks into targetWeek
-        const restoredTasksList = [...filteredTasks, ...snapshotTasks];
+        const matchedTaskIds = new Set<string>();
+        const changedTasks: Task[] = [];
 
-        // 4. Remove targetWeek from weeklyArchives
+        const restoredTasksList = tasks.map((t) => {
+          const snap =
+            snapshotById.get(t.id) ||
+            (t.parentTaskId ? snapshotRootToSnap.get(t.parentTaskId) : undefined) ||
+            snapshotRootToSnap.get(t.id);
+
+          if (snap) {
+            matchedTaskIds.add(snap.id);
+            const nextWeeklyHistory = { ...(t.weeklyHistory || {}) };
+            delete nextWeeklyHistory[targetWeekKey];
+
+            const restored: Task = {
+              ...t,
+              parentTaskId: undefined,
+              weekNumber: targetWeek,
+              year: targetYear,
+              actualEffort: snap.actualEffort ?? 0,
+              memberEfforts: snap.memberEfforts,
+              completionPercentage: snap.completionPercentage ?? 0,
+              status: snap.status || 'To do',
+              lastSubmittedAt: snap.lastSubmittedAt,
+              isSubmittedLate: snap.isSubmittedLate,
+              weeklyHistory:
+                Object.keys(nextWeeklyHistory).length > 0 ? nextWeeklyHistory : undefined,
+            };
+            changedTasks.push(restored);
+            return restored;
+          }
+
+          // Unworked tasks (0% & 0h) that were rolled over to nextWeek during that finalize
+          if (
+            t.weekNumber === nextWeek &&
+            (t.year || 2026) === targetYear &&
+            t.weeklyHistory?.[targetWeekKey]
+          ) {
+            const entry = t.weeklyHistory[targetWeekKey];
+            const nextWeeklyHistory = { ...t.weeklyHistory };
+            delete nextWeeklyHistory[targetWeekKey];
+            const restored: Task = {
+              ...t,
+              parentTaskId: undefined,
+              weekNumber: targetWeek,
+              year: targetYear,
+              actualEffort: entry.actualEffort ?? 0,
+              memberEfforts: entry.memberEfforts,
+              completionPercentage: entry.completionPercentage ?? 0,
+              status: entry.status || 'To do',
+              weeklyHistory:
+                Object.keys(nextWeeklyHistory).length > 0 ? nextWeeklyHistory : undefined,
+            };
+            changedTasks.push(restored);
+            return restored;
+          }
+
+          return t;
+        });
+
+        // Re-insert any snapshot tasks that were missing from live tasks
+        snapshotTasks.forEach((st) => {
+          if (!matchedTaskIds.has(st.id) && !restoredTasksList.some((x) => x.id === st.id)) {
+            const restored: Task = {
+              ...st,
+              parentTaskId: undefined,
+              weekNumber: targetWeek,
+              year: targetYear,
+            };
+            restoredTasksList.push(restored);
+            changedTasks.push(restored);
+          }
+        });
+
+        // Remove targetWeek from weeklyArchives
         const updatedArchives = weeklyArchives.filter(
           (a) => !(a.weekNumber === targetWeek && (a.year || 2026) === targetYear)
         );
 
         setTasks(restoredTasksList);
         saveLocalTasksCache(restoredTasksList);
-        syncTasksToFirebase(restoredTasksList).catch(console.error);
+        if (changedTasks.length > 0) {
+          syncTasksToFirebase(changedTasks).catch(console.error);
+        }
 
         setWeeklyArchives(updatedArchives);
         syncArchivesToFirebase(updatedArchives).catch(console.error);
@@ -3192,9 +3552,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     targetYear: number,
     isFinalized: boolean = true
   ): WeeklyAwardSummary[] => {
-    const currentWeekTasks = tasks.filter(
-      (t) => t.weekNumber === targetWeek && t.year === targetYear
-    );
+    const currentWeekTasks = tasks
+      .map((t) => getTaskForWeekView(t, targetWeek, targetYear))
+      .filter((t): t is Task => Boolean(t));
 
     const sundayNoon = getWeekSundayNoon(targetWeek, targetYear);
     const deadline = getWeekDeadline(targetWeek, targetYear);
@@ -4070,6 +4430,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         weeklyArchives,
         finishWeekAndRollover,
         rollbackWeekArchive,
+        transferTaskToNextWeek,
+        undoTransferTaskToNextWeek,
+        adminUpdateTaskWeeklyHistory,
+        adminDeleteTaskWeeklyHistory,
         resetToDefaultData,
         isFirebaseConnected,
         confirmDialog,

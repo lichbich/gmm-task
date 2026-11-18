@@ -345,8 +345,8 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
           onClick={() => setIsOpen(!isOpen)}
           className={`relative group flex items-center justify-center w-12 h-12 sm:w-13 sm:h-13 rounded-full transition-all duration-300 cursor-pointer shadow-xl active:scale-90 ${
             isOpen
-              ? 'bg-slate-800 text-white rotate-90 ring-4 ring-slate-400/30'
-              : 'bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-600/35 hover:shadow-indigo-600/50 hover:scale-105 ring-4 ring-white/90 dark:ring-slate-900/90'
+              ? 'bg-[#22293C] text-white rotate-90 ring-4 ring-slate-400/30'
+              : 'bg-gradient-to-tr from-[#096DD9] via-[#1890FF] to-[#40A9FF] hover:from-[#1890FF] hover:to-[#69C0FF] text-white shadow-[#1890FF]/35 hover:shadow-[#1890FF]/50 hover:scale-105 ring-4 ring-white/90 dark:ring-slate-900/90'
           }`}
           title="Truy Cập Nhanh Resource (Figma, Sơ đồ, GSheet...)"
           aria-label="Truy cập nhanh Resource"
@@ -356,7 +356,7 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
           ) : (
             <>
               {/* Pulsing subtle glow effect behind */}
-              <span className="absolute inset-0 rounded-full bg-indigo-400/30 animate-ping opacity-40 group-hover:opacity-75 pointer-events-none" />
+              <span className="absolute inset-0 rounded-full bg-[#40A9FF]/30 animate-ping opacity-40 group-hover:opacity-75 pointer-events-none" />
               <FolderGit2 className="w-5 h-5 sm:w-6 sm:h-6 text-white drop-shadow-sm transition-transform duration-200 group-hover:scale-110" />
             </>
           )}
@@ -371,9 +371,9 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
 
           {/* Floating Tooltip on Hover */}
           {!isOpen && (
-            <div className="hidden sm:block absolute right-full mr-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900/90 text-white text-xs font-semibold rounded-xl shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all pointer-events-none -translate-x-2 group-hover:translate-x-0">
+            <div className="hidden sm:block absolute right-full mr-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[#22293C]/95 text-white text-xs font-semibold rounded-[10px] shadow-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-all pointer-events-none -translate-x-2 group-hover:translate-x-0">
               ⚡ Truy Cập Nhanh Resource
-              <div className="text-[10px] text-indigo-300 font-normal">
+              <div className="text-[10px] text-[#69C0FF] font-normal">
                 {totalPinnedCount > 0 ? `${totalPinnedCount} link đã ghim` : 'Figma, Sheet, Docs...'}
               </div>
             </div>
@@ -393,22 +393,22 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
       {isOpen && (
         <div
           {...hoverScrollProps}
-          className="fixed bottom-24 right-3 left-3 sm:left-auto sm:right-6 sm:bottom-20 z-50 sm:w-[460px] max-h-[82vh] sm:max-h-[640px] flex flex-col bg-slate-50/98 dark:bg-slate-900/98 backdrop-blur-2xl border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] overflow-hidden overscroll-contain animate-in zoom-in-95 fade-in duration-200"
+          className="fixed bottom-24 right-3 left-3 sm:left-auto sm:right-6 sm:bottom-20 z-50 sm:w-[460px] max-h-[82vh] sm:max-h-[640px] flex flex-col bg-[#F8FAFB]/98 dark:bg-slate-900/98 backdrop-blur-2xl border border-[#E8E9EF] dark:border-slate-800 rounded-[16px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.28)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.7)] overflow-hidden overscroll-contain animate-in zoom-in-95 fade-in duration-200"
         >
           {/* Header */}
-          <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-800/90 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2 shrink-0">
+          <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-800/90 border-b border-[#E8E9EF] dark:border-slate-800 flex items-center justify-between gap-2 shrink-0">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+              <div className="w-8 h-8 rounded-[10px] bg-gradient-to-br from-[#096DD9] to-[#1890FF] text-white flex items-center justify-center shadow-sm shadow-[#1890FF]/25 shrink-0">
                 <FolderGit2 className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate flex items-center gap-1.5">
+                <h3 className="text-xs sm:text-sm font-bold text-[#22293C] dark:text-slate-100 truncate flex items-center gap-1.5">
                   <span>Truy Cập Nhanh Resource</span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-[6px] bg-[#E6F7FF] text-[#096DD9] dark:bg-[#1890FF]/15 dark:text-[#69C0FF]">
                     Quick Links
                   </span>
                 </h3>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                <p className="text-[10px] sm:text-[11px] text-[#7D8599] dark:text-slate-400 truncate">
                   Bấm vào card để mở ngay tài liệu, sơ đồ & Figma
                 </p>
               </div>
@@ -418,10 +418,10 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
               <button
                 type="button"
                 onClick={() => setIsAddCustomOpen(!isAddCustomOpen)}
-                className={`p-1.5 sm:px-2.5 sm:py-1 rounded-xl text-xs font-semibold flex items-center gap-1 transition active:scale-95 cursor-pointer ${
+                className={`p-1.5 sm:px-2.5 sm:py-1 rounded-[8px] text-xs font-semibold flex items-center gap-1 transition active:scale-95 cursor-pointer ${
                   isAddCustomOpen
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-indigo-600 dark:text-indigo-300 border border-slate-200/60 dark:border-slate-600'
+                    ? 'bg-[#1890FF] text-white shadow-xs'
+                    : 'bg-[#F8FAFB] hover:bg-[#E6F7FF] dark:bg-slate-700 dark:hover:bg-slate-600 text-[#096DD9] dark:text-[#69C0FF] border border-[#E8E9EF] dark:border-slate-600'
                 }`}
                 title="Thêm link riêng"
               >
@@ -539,7 +539,7 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                 placeholder="Tìm nhanh tài liệu, sơ đồ, Figma, Sheets..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 rounded-xl pl-8 pr-8 py-1.5 text-xs text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900 focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950 transition"
+                className="w-full h-[32px] bg-[#F8FAFB] dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] pl-8 pr-8 text-xs text-[#22293C] dark:text-slate-100 placeholder:text-[#989FB0] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:bg-white dark:focus:bg-slate-900 focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none transition"
               />
               {searchQuery && (
                 <button
@@ -554,14 +554,14 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
             </div>
 
             {/* Inset Segmented Tab Switcher */}
-            <div className="flex items-center justify-between gap-1 bg-slate-200/80 dark:bg-slate-800 p-1 rounded-xl">
+            <div className="flex items-center justify-between gap-1 bg-[#F3F4F7] dark:bg-slate-800 p-1 rounded-[10px] border border-[#E8E9EF] dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => setActiveTab('PINNED')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer active:scale-95 ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-[7px] text-xs font-bold transition cursor-pointer active:scale-95 ${
                   activeTab === 'PINNED'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-white dark:bg-slate-700 text-[#096DD9] dark:text-[#69C0FF] shadow-xs'
+                    : 'text-[#6A7185] dark:text-slate-400 hover:text-[#22293C] dark:hover:text-slate-200'
                 }`}
               >
                 <Star
@@ -580,15 +580,15 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
               <button
                 type="button"
                 onClick={() => setActiveTab('ALL')}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer active:scale-95 ${
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-[7px] text-xs font-bold transition cursor-pointer active:scale-95 ${
                   activeTab === 'ALL'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-white dark:bg-slate-700 text-[#096DD9] dark:text-[#69C0FF] shadow-xs'
+                    : 'text-[#6A7185] dark:text-slate-400 hover:text-[#22293C] dark:hover:text-slate-200'
                 }`}
               >
-                <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                <BookOpen className="w-3.5 h-3.5 text-[#1890FF]" />
                 <span>Tất Cả Resource</span>
-                <span className="ml-0.5 text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-300 font-bold font-mono">
+                <span className="ml-0.5 text-[10px] px-1.5 py-0.2 rounded-full bg-[#E8E9EF] dark:bg-slate-600 text-[#49526A] dark:text-slate-300 font-bold font-mono">
                   {resources.length}
                 </span>
               </button>
@@ -611,10 +611,10 @@ export const QuickResourceFloatingButton: React.FC<QuickResourceFloatingButtonPr
                         key={lvl}
                         type="button"
                         onClick={() => setSelectedLevelFilter(lvl)}
-                        className={`px-2 py-0.8 rounded-lg font-bold whitespace-nowrap transition cursor-pointer active:scale-95 ${
+                        className={`px-2.5 py-1 rounded-[12px] font-bold whitespace-nowrap transition cursor-pointer active:scale-95 ${
                           isSelected
-                            ? 'bg-indigo-600 text-white shadow-2xs'
-                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                            ? 'bg-[#1890FF] text-white shadow-2xs'
+                            : 'bg-white dark:bg-slate-800 text-[#6A7185] dark:text-slate-400 border border-[#E8E9EF] dark:border-slate-700 hover:bg-[#E6F7FF] hover:text-[#096DD9]'
                         }`}
                       >
                         {label}

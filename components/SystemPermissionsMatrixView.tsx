@@ -12,8 +12,6 @@ import {
 } from '../lib/permissionsHelper';
 import {
   ShieldCheck,
-  Save,
-  RotateCcw,
   Search,
   Check,
   X,
@@ -31,6 +29,8 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { UserAvatar } from './common/UserAvatar';
+import { SahoToggle } from './common/SahoControls';
+import { sahoToast } from './common/SahoToast';
 
 const ROLES_LIST: UserRole[] = ['Admin', 'Leader', 'Advisor', 'Member'];
 
@@ -62,7 +62,15 @@ const getSpecOrderRank = (u: User): number => {
   return 50;
 };
 
-export const SystemPermissionsMatrixView: React.FC = () => {
+interface SystemPermissionsMatrixViewProps {
+  actionsRef?: React.MutableRefObject<{ resetToDefaults: () => void; save: () => void } | null>;
+  onStateChange?: (state: { isDirty: boolean; isSaving: boolean }) => void;
+}
+
+export const SystemPermissionsMatrixView: React.FC<SystemPermissionsMatrixViewProps> = ({
+  actionsRef,
+  onStateChange,
+}) => {
   const { users, currentUser, systemPermissions, updateSystemPermissions, confirmDialog } = useApp();
 
   const isAdmin =
@@ -253,13 +261,27 @@ export const SystemPermissionsMatrixView: React.FC = () => {
       await updateSystemPermissions(matrixState);
       setSaveSuccess(true);
       setIsDirty(false);
+      sahoToast.success('Đã lưu ma trận phân quyền', 'Cấu hình quyền hạn mới đã đồng bộ tới tất cả thành viên.');
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (e: any) {
-      alert(`Lỗi lưu ma trận phân quyền: ${e?.message || 'Không thể kết nối Firebase'}`);
+      sahoToast.error('Lỗi lưu ma trận phân quyền', e?.message || 'Không thể kết nối Firebase');
     } finally {
       setIsSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (actionsRef) {
+      actionsRef.current = {
+        resetToDefaults: handleResetToDefaults,
+        save: handleSave,
+      };
+    }
+  });
+
+  useEffect(() => {
+    onStateChange?.({ isDirty, isSaving });
+  }, [isDirty, isSaving, onStateChange]);
 
   // Only display active users (exclude disabled/locked accounts)
   const activeUsers = useMemo(() => {
@@ -331,93 +353,36 @@ export const SystemPermissionsMatrixView: React.FC = () => {
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
-      {/* Top Banner & Main Actions */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-start gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-blue-600 flex items-center justify-center text-white shadow-md shadow-purple-600/30 shrink-0">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-                Ma Trận Phân Quyền Hệ Thống Saho
-              </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80">
-                Admin Exclusive
-              </span>
-              {isDirty && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-300 animate-pulse">
-                  Có thay đổi chưa lưu
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-              Thiết lập quyền hạn truy cập chức năng theo từng Vai trò (Role) và tùy biến quyền riêng cho từng Thành viên.
-            </p>
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <button
-            type="button"
-            disabled={!isAdmin || isSaving}
-            onClick={handleResetToDefaults}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl transition active:scale-95 disabled:opacity-50 cursor-pointer"
-            title="Khôi phục ma trận phân quyền về chuẩn mặc định"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Mặc Định Chuẩn</span>
-          </button>
-
-          {isAdmin && (
-            <button
-              type="button"
-              disabled={isSaving || !isDirty}
-              onClick={handleSave}
-              className={`flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold shadow-lg transition-all active:scale-95 cursor-pointer ${
-                isDirty
-                  ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-purple-600/30'
-                  : 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed shadow-none'
-              }`}
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>{isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi'}</span>
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Save Success Alert */}
       {saveSuccess && (
-        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-2xl flex items-center gap-2 text-emerald-800 dark:text-emerald-200 text-xs font-bold animate-in fade-in slide-in-from-top-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <div className="p-3.5 bg-[rgba(10,177,133,0.12)] border border-[#0AB185]/35 rounded-[12px] flex items-center gap-2 text-[#088E6A] dark:text-emerald-200 text-xs font-semibold animate-in fade-in slide-in-from-top-2">
+          <CheckCircle2 className="w-4 h-4 text-[#0AB185] shrink-0" />
           <span>Đã lưu và đồng bộ ma trận phân quyền thành công! Tất cả người dùng sẽ nhận cấu hình mới ngay lập tức.</span>
         </div>
       )}
 
       {/* Mode Switcher Tabs */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700 w-full sm:w-fit gap-1 shadow-2xs">
+        <div className="flex items-center bg-[#F8FAFB] dark:bg-slate-800/80 p-1 rounded-[8px] border border-[#E8E9EF] dark:border-slate-700 w-full sm:w-fit gap-1">
           <button
             type="button"
             onClick={() => setActiveMode('ROLES')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 h-[30px] px-3.5 rounded-[6px] text-xs font-medium transition-all duration-150 active:scale-95 cursor-pointer ${
               activeMode === 'ROLES'
-                ? 'bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-[#1890FF] text-white shadow-xs'
+                : 'text-[#838899] hover:text-[#1890FF]'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>1. Phân Quyền Theo Vai Trò (Role Matrix)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveMode('USERS')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-150 active:scale-95 cursor-pointer ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 h-[30px] px-3.5 rounded-[6px] text-xs font-medium transition-all duration-150 active:scale-95 cursor-pointer ${
               activeMode === 'USERS'
-                ? 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 shadow-sm'
+                ? 'bg-[#1890FF] text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
@@ -544,31 +509,25 @@ export const SystemPermissionsMatrixView: React.FC = () => {
                                   className="py-3 px-3 text-center border-l border-slate-100 dark:border-slate-800/60 align-middle"
                                 >
                                   <div className="flex items-center justify-center">
-                                    <button
-                                      type="button"
-                                      disabled={!isAdmin || isRoleAdmin}
-                                      onClick={() => handleToggleRoleFeature(role, feat.key)}
-                                      className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all ${
-                                        isChecked
-                                          ? 'bg-purple-600 text-white shadow-2xs shadow-purple-600/20'
-                                          : 'bg-slate-100 dark:bg-slate-800 text-slate-300 hover:text-slate-400 border border-slate-200 dark:border-slate-700'
-                                      } ${!isAdmin || isRoleAdmin ? 'cursor-default opacity-90' : 'cursor-pointer active:scale-90 hover:scale-105'}`}
-                                      title={
-                                        isRoleAdmin
-                                          ? 'Admin luôn có toàn quyền'
-                                          : isChecked
-                                          ? `Bỏ quyền "${feat.name}" cho Role ${role}`
-                                          : `Cấp quyền "${feat.name}" cho Role ${role}`
-                                      }
-                                    >
-                                      {isRoleAdmin ? (
-                                        <Lock className="w-3.5 h-3.5 text-white" />
-                                      ) : isChecked ? (
-                                        <Check className="w-4 h-4 stroke-[3]" />
-                                      ) : (
-                                        <X className="w-3.5 h-3.5 opacity-30" />
-                                      )}
-                                    </button>
+                                    {isRoleAdmin ? (
+                                      <span
+                                        className="w-[35px] h-[20px] rounded-[6px] bg-[#1890FF]/80 text-white flex items-center justify-center cursor-default"
+                                        title="Admin luôn có toàn quyền"
+                                      >
+                                        <Lock className="w-3 h-3" />
+                                      </span>
+                                    ) : (
+                                      <SahoToggle
+                                        checked={isChecked}
+                                        disabled={!isAdmin}
+                                        onChange={() => handleToggleRoleFeature(role, feat.key)}
+                                        title={
+                                          isChecked
+                                            ? `Bỏ quyền "${feat.name}" cho Role ${role}`
+                                            : `Cấp quyền "${feat.name}" cho Role ${role}`
+                                        }
+                                      />
+                                    )}
                                   </div>
                                 </td>
                               );
@@ -600,18 +559,18 @@ export const SystemPermissionsMatrixView: React.FC = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Tìm nhân sự theo tên, @account, vai trò..."
-                  className="w-full pl-9 pr-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full h-[32px] pl-9 pr-3.5 bg-white dark:bg-slate-800/80 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] text-[13px] text-[#1D202A] dark:text-white placeholder-[#838899] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF]"
                 />
               </div>
 
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-semibold shrink-0 gap-1 overflow-x-auto no-scrollbar">
+              <div className="flex items-center bg-[#F3F4F7] dark:bg-slate-800 p-1 rounded-[8px] text-xs font-medium shrink-0 gap-1 overflow-x-auto no-scrollbar">
                 <button
                   type="button"
                   onClick={() => setUserFilterTab('ALL')}
-                  className={`px-3 py-1.5 rounded-lg transition ${
+                  className={`px-3 py-1 rounded-[6px] transition cursor-pointer ${
                     userFilterTab === 'ALL'
-                      ? 'bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-300 font-bold shadow-2xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      ? 'bg-[#1890FF] text-white font-semibold'
+                      : 'text-[#838899] dark:text-slate-400 hover:text-[#1D202A] dark:hover:text-white'
                   }`}
                 >
                   Tất cả ({activeUsers.length})
@@ -811,30 +770,30 @@ export const SystemPermissionsMatrixView: React.FC = () => {
                           <div
                             key={feat.key}
                             onClick={() => handleToggleUserFeature(user.account, feat.key, user.role)}
-                            className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all select-none ${
+                            className={`p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-all select-none ${
                               isEnabled
-                                ? 'bg-white dark:bg-slate-800/90 border-purple-300/80 dark:border-purple-700/80 shadow-2xs'
-                                : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-400 opacity-60'
-                            } ${!isUserAdmin && isAdmin ? 'cursor-pointer hover:border-purple-500 hover:shadow-xs active:scale-98' : 'cursor-default'}`}
+                                ? 'bg-white dark:bg-slate-800/90 border-[#1890FF]/40 dark:border-sky-700/80 shadow-2xs'
+                                : 'bg-[#F8FAFB] dark:bg-slate-900/60 border-[#E8E9EF] dark:border-slate-800 text-[#A2A6B4] opacity-70'
+                            } ${!isUserAdmin && isAdmin ? 'cursor-pointer hover:border-[#1890FF] active:scale-98' : 'cursor-default'}`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5">
                                 {feat.category === 'ai' && (
-                                  <Sparkles className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                                  <Sparkles className="w-3 h-3 text-[#1890FF] dark:text-sky-400 shrink-0" />
                                 )}
                                 <span
                                   className={`text-xs font-bold truncate ${
                                     isEnabled
-                                      ? 'text-slate-900 dark:text-slate-100'
-                                      : 'text-slate-400 dark:text-slate-500'
+                                      ? 'text-[#1D202A] dark:text-slate-100'
+                                      : 'text-[#838899] dark:text-slate-500'
                                   }`}
                                 >
                                   {feat.name}
                                 </span>
                               </div>
-                              <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                              <div className="text-[10px] text-[#838899] truncate mt-0.5">
                                 {isOverridden ? (
-                                  <span className="text-purple-600 dark:text-purple-400 font-semibold">
+                                  <span className="text-[#1890FF] dark:text-sky-400 font-semibold">
                                     ★ Tùy biến riêng
                                   </span>
                                 ) : (
@@ -843,19 +802,19 @@ export const SystemPermissionsMatrixView: React.FC = () => {
                               </div>
                             </div>
 
-                            <div
-                              className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 text-white ${
-                                isEnabled ? 'bg-purple-600' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'
-                              }`}
-                            >
-                              {isUserAdmin ? (
+                            {isUserAdmin ? (
+                              <span className="w-5 h-5 rounded-[6px] flex items-center justify-center shrink-0 text-white bg-[#1890FF]">
                                 <Lock className="w-3 h-3" />
-                              ) : isEnabled ? (
-                                <Check className="w-3.5 h-3.5 stroke-[3]" />
-                              ) : (
-                                <X className="w-3 h-3" />
-                              )}
-                            </div>
+                              </span>
+                            ) : (
+                              <SahoToggle
+                                size="sm"
+                                checked={isEnabled}
+                                disabled={!isAdmin}
+                                stopPropagation
+                                onChange={() => handleToggleUserFeature(user.account, feat.key, user.role)}
+                              />
+                            )}
                           </div>
                         );
                       })}

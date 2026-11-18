@@ -10,7 +10,7 @@ import { TaskShareButton } from './common/TaskShareButton';
 import { TaskSupportersBadge } from './common/TaskSupportersBadge';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
-import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
+import { calculateTaskAccumulatedEffort, getTaskForWeekView, getWeeklyHistoryKey } from '../lib/taskEffortHelper';
 import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import {
   History,
@@ -228,27 +228,87 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
   // Determine tasks list for selected archive (Only assigned tasks with work done are in history logs)
   const archivedTasksSnapshot: Task[] = React.useMemo(() => {
     if (!activeArchive) return [];
+    const archiveYear = activeArchive.year || 2026;
+    const weekKey = getWeeklyHistoryKey(activeArchive.weekNumber, archiveYear);
     const snapshot = activeArchive.tasksSnapshot || [];
-    
-    // Also include tasks currently assigned to this week
-    const currentWeekTasks = tasks.filter(
-      (t) =>
-        t.weekNumber === activeArchive.weekNumber &&
-        t.year === activeArchive.year &&
-        ((t.assigneeAccount && t.assigneeAccount.trim() !== '') ||
-          (t.supporterAccounts && t.supporterAccounts.length > 0))
-    );
+
+    const findMatchingLiveTask = (snapTask: Task): Task | undefined => {
+      // 1. Exact ID match
+      const byId = tasks.find((t) => t.id === snapTask.id);
+      if (byId) return byId;
+
+      // 2. Consolidated parentTaskId chain match
+      if (snapTask.parentTaskId) {
+        const byParentChain = tasks.find((t) => t.id === snapTask.parentTaskId);
+        if (byParentChain) return byParentChain;
+      }
+
+      // 3. Canonical code match (for consolidated legacy clones with different clone IDs)
+      const snapCode = (snapTask.code || '').trim().toLowerCase();
+      if (snapCode) {
+        const byCode = tasks.find(
+          (t) =>
+            t.code &&
+            t.code.trim().toLowerCase() === snapCode &&
+            Boolean(t.subtaskParentId || t.isSubtask) === Boolean(snapTask.subtaskParentId || snapTask.isSubtask)
+        );
+        if (byCode) return byCode;
+      }
+
+      // 4. Normalized (title + role + assigneeAccount) match when task has weeklyHistory entry for this week
+      const snapTitle = (snapTask.title || '').trim().toLowerCase();
+      const snapRole = (snapTask.role || '').trim().toLowerCase();
+      const snapAssignee = (snapTask.assigneeAccount || '').trim().toLowerCase();
+      if (snapTitle) {
+        const bySignature = tasks.find((t) => {
+          if (!t.weeklyHistory?.[weekKey]) return false;
+          const tTitle = (t.title || '').trim().toLowerCase();
+          const tRole = (t.role || '').trim().toLowerCase();
+          const tAssignee = (t.assigneeAccount || '').trim().toLowerCase();
+          return tTitle === snapTitle && tRole === snapRole && tAssignee === snapAssignee;
+        });
+        if (bySignature) return bySignature;
+      }
+
+      return undefined;
+    };
 
     const map = new Map<string, Task>();
-    // 1. Load snapshot items, but if live task exists in `tasks`, use the up-to-date task from `tasks`
+    // 1. Seed frozen snapshot items keyed by canonical task ID; NEVER overwrite snapshot week metrics with moved live task state.
+    // Only pick structural metadata (code, subtask links) or Admin-edited `weeklyHistory[weekKey]` if present.
     snapshot.forEach((snapTask) => {
-      const liveTask = tasks.find((t) => t.id === snapTask.id);
-      map.set(snapTask.id, liveTask || snapTask);
+      const liveTask = findMatchingLiveTask(snapTask);
+      const lockedEntry = liveTask?.weeklyHistory?.[weekKey];
+      if (liveTask && lockedEntry) {
+        const projected = getTaskForWeekView(liveTask, activeArchive.weekNumber, archiveYear);
+        if (projected) {
+          map.set(liveTask.id, projected);
+          return;
+        }
+      }
+      const canonicalKey = liveTask?.id || snapTask.id;
+      if (!map.has(canonicalKey)) {
+        map.set(canonicalKey, {
+          ...snapTask,
+          id: canonicalKey,
+          code: liveTask?.code || snapTask.code,
+          subtaskParentId: liveTask?.subtaskParentId ?? snapTask.subtaskParentId,
+          subtaskParentTitle: liveTask?.subtaskParentTitle ?? snapTask.subtaskParentTitle,
+        });
+      }
     });
 
-    // 2. Add or update with tasks currently assigned to this week
-    currentWeekTasks.forEach((t) => {
-      map.set(t.id, t);
+    // 2. Also include any task in `tasks` whose `weeklyHistory[weekKey]` or active week matches activeArchive
+    tasks.forEach((t) => {
+      const projected = getTaskForWeekView(t, activeArchive.weekNumber, archiveYear);
+      if (!projected) return;
+      const isAssigned =
+        (projected.assigneeAccount && projected.assigneeAccount.trim() !== '') ||
+        (projected.supporterAccounts && projected.supporterAccounts.length > 0);
+      if (!isAssigned) return;
+      if (t.weeklyHistory?.[weekKey] || !map.has(t.id)) {
+        map.set(t.id, projected);
+      }
     });
 
     // EXCLUDE 0% & 0h unworked tasks from historical log display
@@ -366,20 +426,20 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-sm space-y-4">
+      <div className="saho-hero-card border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-5 sm:p-6 space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                <History className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600" />
+              <h2 className="text-base sm:text-xl font-bold text-[#1D202A] dark:text-slate-100 tracking-tight flex items-center gap-2">
+                <History className="w-5 h-5 sm:w-6 sm:h-6 text-[#1890FF]" />
                 <span className="sm:hidden">Lịch Sử Công Việc</span>
                 <span className="hidden sm:inline">Lịch Sử Công Việc & Nhật Ký Hoạt Động Tuần</span>
               </h2>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-[12px] bg-[rgba(24,144,255,0.14)] text-[#1890FF]">
                 Log Đã Lưu
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-[#838899] dark:text-slate-400 mt-1">
               Quản lý và tra cứu toàn bộ log bảng công việc đã lưu trữ của nhóm theo từng tuần cho tất cả các Role (BA, Design, FE, BE, QA).
             </p>
           </div>
@@ -388,7 +448,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
           {canFinalizeWeek && (
             <button
               onClick={handleRollover}
-              className="flex items-center gap-2 px-4 py-2 sm:py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition active:scale-95 shrink-0"
+              className="flex items-center gap-2 h-[36px] px-4 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-xs font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition active:scale-95 shrink-0 cursor-pointer"
               title="Chốt dữ liệu tuần hiện tại, lưu vào lịch sử và chuyển task dở sang tuần tiếp theo"
             >
               <RefreshCw className="w-4 h-4" />
@@ -398,22 +458,22 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
         </div>
 
         {/* Informational Workflow Cards */}
-        <div className="bg-gradient-to-r from-slate-50 via-indigo-50/40 to-slate-50 dark:from-slate-900 dark:via-indigo-950/40 dark:to-slate-900 p-4 rounded-xl border border-indigo-100 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 space-y-2">
-          <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-300 font-bold">
-            <Info className="w-4 h-4 text-indigo-600 dark:text-sky-400 shrink-0" />
+        <div className="bg-white/80 dark:bg-slate-900/90 p-4 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800 text-xs text-[#838899] dark:text-slate-300 space-y-2">
+          <div className="flex items-center gap-2 text-[#1D202A] dark:text-sky-300 font-bold">
+            <Info className="w-4 h-4 text-[#1890FF] dark:text-sky-400 shrink-0" />
             Quy trình tổng kết tuần và lưu lịch sử công việc (Weekly Rollover Workflow):
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-            <div className="bg-white/80 dark:bg-slate-900/90 p-3 rounded-lg border border-indigo-100/60 dark:border-slate-800 shadow-2xs text-slate-700 dark:text-slate-300">
-              <span className="font-bold text-indigo-700 dark:text-sky-400 block mb-1">1. Báo cáo & Kiểm tra tuần</span>
+            <div className="bg-[#F8FAFB] dark:bg-slate-900 p-3 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800 text-[#1D202A] dark:text-slate-300">
+              <span className="font-bold text-[#1890FF] dark:text-sky-400 block mb-1">1. Báo cáo & Kiểm tra tuần</span>
               Đến hạn 22:00 Chủ Nhật, thành viên hoàn thành báo cáo số giờ & % tiến độ. Admin/Leader kiểm tra công việc trong tuần.
             </div>
-            <div className="bg-white/80 dark:bg-slate-900/90 p-3 rounded-lg border border-indigo-100/60 dark:border-slate-800 shadow-2xs text-slate-700 dark:text-slate-300">
-              <span className="font-bold text-indigo-700 dark:text-sky-400 block mb-1">2. Chốt & Lưu lịch sử</span>
+            <div className="bg-[#F8FAFB] dark:bg-slate-900 p-3 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800 text-[#1D202A] dark:text-slate-300">
+              <span className="font-bold text-[#1890FF] dark:text-sky-400 block mb-1">2. Chốt & Lưu lịch sử</span>
               Nhấn <strong>Chốt Tuần</strong>: Toàn bộ bảng log công việc tuần sẽ được đưa vào phần Lịch Sử này để lưu trữ vĩnh viễn.
             </div>
-            <div className="bg-white/80 dark:bg-slate-900/90 p-3 rounded-lg border border-indigo-100/60 dark:border-slate-800 shadow-2xs text-slate-700 dark:text-slate-300">
-              <span className="font-bold text-indigo-700 dark:text-sky-400 block mb-1">3. Chuyển task dở & Tuần mới</span>
+            <div className="bg-[#F8FAFB] dark:bg-slate-900 p-3 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800 text-[#1D202A] dark:text-slate-300">
+              <span className="font-bold text-[#1890FF] dark:text-sky-400 block mb-1">3. Chuyển task dở & Tuần mới</span>
               Công việc dở dang tự động đẩy sang tuần mới. Leader define/assign thêm task mới cho cả team làm tiếp.
             </div>
           </div>
@@ -421,12 +481,12 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
       </div>
 
       {/* Integrated Week Archive Section Container */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm relative">
+      <div className="bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] relative">
         {/* Header & Controls Toolbar */}
-        <div className="p-4 sm:p-5 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-30">
+        <div className="p-4 sm:p-5 border-b border-[#E8E9EF] dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 relative z-30">
           <div className="flex items-center gap-2">
-            <FolderArchive className="w-5 h-5 text-amber-500 shrink-0" />
-            <h3 className="text-sm font-bold text-slate-800">
+            <FolderArchive className="w-5 h-5 text-[#FFA940] shrink-0" />
+            <h3 className="text-sm font-bold text-[#1D202A] dark:text-slate-100">
               <span className="sm:hidden">Nhật Ký Tuần ({uniqueArchives.length})</span>
               <span className="hidden sm:inline">Danh Sách Nhật Ký Các Tuần Đã Lưu Trữ ({uniqueArchives.length})</span>
             </h3>
@@ -434,14 +494,14 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
 
           {/* Search, Week Selector Dropdown & Role Filter */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="relative min-w-[180px]">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+            <div className="relative min-w-[200px]">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#838899]" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm task trong lịch sử..."
-                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:bg-white focus:outline-none focus:border-indigo-500"
+                className="w-full h-[32px] pl-8 pr-3 bg-[#F8FAFB] dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] text-xs text-[#1D202A] dark:text-slate-200 focus:bg-white focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF]"
               />
             </div>
 
@@ -457,7 +517,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                     label: `Tuần ${archive.weekNumber} (${range.startDate} - ${range.endDate})`,
                   };
                 })}
-                buttonClassName="py-1.5 px-3 text-xs bg-indigo-50 border-indigo-200 text-indigo-700 font-bold"
+                buttonClassName="font-semibold text-[#1890FF]"
               />
             )}
 
@@ -469,50 +529,49 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                 { value: 'ALL', label: 'Tất cả Role' },
                 ...roles.map((r) => ({ value: r.code, label: `Role: ${r.code}` })),
               ]}
-              buttonClassName="py-1.5 px-3 text-xs bg-slate-50 border-slate-200"
             />
           </div>
         </div>
 
         {/* Content Body Wrapper (overflow-hidden ONLY on bottom content) */}
-        <div className="overflow-hidden rounded-b-2xl">
+        <div className="overflow-hidden rounded-b-[12px]">
           {uniqueArchives.length === 0 ? (
-          <div className="py-12 text-center bg-slate-50 text-xs text-slate-500 space-y-2">
-            <History className="w-8 h-8 text-slate-300 mx-auto" />
-            <p className="font-semibold text-slate-700">Chưa có bản lưu lịch sử tuần nào</p>
-            <p className="text-[11px] max-w-md mx-auto text-slate-400">
+          <div className="py-12 text-center bg-[#F8FAFB] dark:bg-slate-900 text-xs text-[#838899] space-y-2">
+            <History className="w-8 h-8 text-[#A2A6B4] mx-auto" />
+            <p className="font-semibold text-[#1D202A] dark:text-slate-200">Chưa có bản lưu lịch sử tuần nào</p>
+            <p className="text-[11px] max-w-md mx-auto text-[#A2A6B4]">
               Vào Chủ Nhật cuối tuần, sau khi thành viên hoàn tất báo cáo, PO hoặc Admin hãy nhấn <strong>"Chốt Tuần & Lưu Lịch Sử"</strong> ở trên để tổng kết và lưu trữ vĩnh viễn.
             </p>
           </div>
         ) : activeArchive ? (
           <div>
-            {/* Integrated Color Summary Banner */}
-            <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 text-white p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Integrated Saho Azure Summary Banner */}
+            <div className="bg-gradient-to-r from-[#096DD9] via-[#1890FF] to-[#1D202A] text-white p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2.5 py-0.5 rounded-md bg-white/20 text-white font-mono font-bold text-xs uppercase tracking-wider">
+                  <span className="px-2.5 py-0.5 rounded-[4px] bg-white/20 text-white font-mono font-bold text-xs uppercase tracking-wider">
                     NHẬT KÝ LỊCH SỬ TUẦN {activeArchive.weekNumber} ({activeArchive.year})
                   </span>
-                  <span className="text-xs text-indigo-200 font-medium">
+                  <span className="text-xs text-sky-100 font-medium">
                     Thời gian: {activeRangeStr.startDate} đến {activeRangeStr.endDate}
                   </span>
                 </div>
-                <p className="text-xs text-indigo-100/90 mt-1">
+                <p className="text-xs text-sky-100/90 mt-1">
                   Đã lưu trữ lúc: {new Date(activeArchive.archivedAt).toLocaleString('vi-VN')}
                 </p>
               </div>
 
               <div className="flex items-center gap-3 shrink-0">
-                <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/10 text-center min-w-[90px]">
-                  <span className="text-[10px] text-indigo-200 block uppercase font-medium">Hoàn thành</span>
-                  <span className="text-xs sm:text-sm font-extrabold text-emerald-400">
+                <div className="bg-white/12 px-3.5 py-1.5 rounded-[8px] border border-white/15 text-center min-w-[90px]">
+                  <span className="text-[10px] text-sky-100 block uppercase font-medium">Hoàn thành</span>
+                  <span className="text-xs sm:text-sm font-bold text-emerald-300">
                     {completedCount} Task
                   </span>
                 </div>
 
-                <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/10 text-center min-w-[90px]">
-                  <span className="text-[10px] text-indigo-200 block uppercase font-medium">Chuyển tuần sau</span>
-                  <span className="text-xs sm:text-sm font-extrabold text-amber-300">
+                <div className="bg-white/12 px-3.5 py-1.5 rounded-[8px] border border-white/15 text-center min-w-[90px]">
+                  <span className="text-[10px] text-sky-100 block uppercase font-medium">Chuyển tuần sau</span>
+                  <span className="text-xs sm:text-sm font-bold text-amber-300">
                     {rolledOverCount} Task
                   </span>
                 </div>
@@ -521,7 +580,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
                   <button
                     type="button"
                     onClick={() => rollbackWeekArchive(activeArchive.weekNumber, activeArchive.year || 2026)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 cursor-pointer shrink-0 border border-rose-400"
+                    className="flex items-center gap-1.5 h-[34px] px-3 bg-[#FF4D4F] hover:bg-[#ff7875] text-white text-xs font-medium rounded-[8px] transition active:scale-95 cursor-pointer shrink-0"
                     title={`Hoàn tác / Rollback Tuần ${activeArchive.weekNumber}, khôi phục lại toàn bộ dữ liệu vào bảng công việc`}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -535,16 +594,16 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
             <div>
 
             {filteredArchivedTasks.length === 0 ? (
-              <div className="py-12 text-center text-slate-400 text-xs italic">
+              <div className="py-12 text-center text-[#A2A6B4] text-xs italic">
                 Không tìm thấy công việc nào phù hợp trong bản lưu Tuần {activeArchive.weekNumber}.
               </div>
             ) : (
               <>
                 {/* DESKTOP VIEW: Table */}
                 <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
+                  <table className="w-full text-left text-[13px] border-collapse">
                     <thead>
-                      <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      <tr className="h-[40px] bg-[rgba(73,82,106,0.03)] dark:bg-slate-800/80 border-b border-[#E8E9EF] dark:border-slate-700 text-[12px] font-semibold text-[#838899] uppercase tracking-wide">
                         <th className="py-3 px-4 w-12 text-center">STT</th>
                         <th className="py-3 px-4 min-w-[240px]">TASK NAME</th>
                         <th className="py-3 px-3 text-center">ROLE</th>
@@ -1154,6 +1213,8 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
           task={viewingDetailTask}
           isOpen={!!viewingDetailTask}
           onClose={() => setViewingDetailTask(null)}
+          initialViewedWeek={activeArchive?.weekNumber}
+          initialViewedYear={activeArchive?.year || 2026}
           onEditTask={(t) => {
             setViewingDetailTask(null);
             onOpenTaskModal?.(

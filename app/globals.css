@@ -15,7 +15,7 @@
 
 html {
   scrollbar-gutter: stable;
-  overflow-y: scroll;
+  overflow-y: auto;
 }
 
 body {
@@ -23,7 +23,7 @@ body {
   color: var(--foreground);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   transition: background-color 0.2s ease, color 0.2s ease;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* Sleek modern scrollbar */
@@ -455,21 +455,215 @@ html.modal-scroll-locked {
 }
 
 /* Smooth modal open & close transitions */
+/* Saho Figma Design System — Modal Frosted Glass Tokens & Surfaces */
+:root {
+  --saho-modal-backdrop: rgba(73, 82, 106, 0.15);
+  --saho-modal-surface: rgba(248, 250, 251, 0.64);
+  --saho-modal-header-bg: rgba(248, 250, 251, 0.30);
+  --saho-modal-footer-bg: rgba(248, 250, 251, 0.38);
+  --saho-modal-border: rgba(255, 255, 255, 0.76);
+  --saho-modal-divider: rgba(232, 233, 239, 0.78);
+  --saho-modal-close-bg: rgba(248, 250, 251, 0.64);
+  --saho-modal-close-hover: #ffffff;
+  --saho-modal-close-text: #838899;
+  --saho-modal-close-hover-text: #1d202a;
+  --saho-modal-card-bg: rgba(255, 255, 255, 0.88);
+  --saho-modal-card-border: #e8e9ef;
+  --saho-modal-subtle-bg: rgba(73, 82, 106, 0.03);
+  --saho-modal-shadow:
+    0 12px 25.2px 0 rgba(76, 85, 143, 0.14),
+    0 4px 12px 0 rgba(29, 32, 42, 0.06),
+    0 0 0 1px rgba(232, 233, 239, 0.65),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.85);
+}
+
+html.dark {
+  --saho-modal-backdrop: rgba(8, 12, 20, 0.56);
+  --saho-modal-surface: rgba(15, 23, 42, 0.72);
+  --saho-modal-header-bg: rgba(15, 23, 42, 0.36);
+  --saho-modal-footer-bg: rgba(15, 23, 42, 0.46);
+  --saho-modal-border: rgba(148, 163, 184, 0.20);
+  --saho-modal-divider: rgba(148, 163, 184, 0.14);
+  --saho-modal-close-bg: rgba(30, 41, 59, 0.64);
+  --saho-modal-close-hover: rgba(51, 65, 85, 0.88);
+  --saho-modal-close-text: #94a3b8;
+  --saho-modal-close-hover-text: #f8fafc;
+  --saho-modal-card-bg: rgba(30, 41, 59, 0.66);
+  --saho-modal-card-border: rgba(51, 65, 85, 0.82);
+  --saho-modal-subtle-bg: rgba(148, 163, 184, 0.06);
+  --saho-modal-shadow:
+    0 20px 44px 0 rgba(0, 0, 0, 0.48),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+.saho-modal-backdrop {
+  background-color: var(--saho-modal-backdrop);
+  -webkit-backdrop-filter: blur(25px);
+  backdrop-filter: blur(25px);
+}
+
+.saho-modal-surface {
+  background-color: var(--saho-modal-surface);
+  border-color: var(--saho-modal-border);
+  box-shadow: var(--saho-modal-shadow);
+  -webkit-backdrop-filter: blur(25px) saturate(140%);
+  backdrop-filter: blur(25px) saturate(140%);
+  color: var(--saho-text-primary);
+}
+
+.saho-modal-header {
+  background-color: var(--saho-modal-header-bg);
+  border-color: var(--saho-modal-divider);
+}
+
+.saho-modal-footer {
+  background-color: var(--saho-modal-footer-bg);
+  border-color: var(--saho-modal-divider);
+}
+
+.saho-modal-close {
+  background-color: var(--saho-modal-close-bg);
+  color: var(--saho-modal-close-text);
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.saho-modal-close:hover {
+  background-color: var(--saho-modal-close-hover);
+  color: var(--saho-modal-close-hover-text);
+}
+
+.saho-modal-card {
+  background-color: var(--saho-modal-card-bg);
+  border-color: var(--saho-modal-card-border);
+}
+
+.saho-modal-subtle {
+  background-color: var(--saho-modal-subtle-bg);
+  border-color: var(--saho-modal-divider);
+}
+
+.saho-modal-input {
+  height: 38px;
+  padding-left: 0.875rem;
+  padding-right: 0.875rem;
+  border-radius: 8px;
+  border: 1px solid #e8e9ef;
+  background-color: #ffffff;
+  color: #1d202a;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.saho-modal-input::placeholder {
+  color: #838899;
+}
+
+.saho-modal-input:hover {
+  border-color: #40a9ff;
+}
+
+.saho-modal-input:focus {
+  outline: none;
+  border-color: #1890ff;
+  box-shadow: 0 0 0 3px #e6f7ff;
+}
+
+html.dark .saho-modal-input {
+  background-color: rgba(30, 41, 59, 0.9);
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+html.dark .saho-modal-input:hover {
+  border-color: #40a9ff;
+}
+
+html.dark .saho-modal-input:focus {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.22);
+}
+
+.saho-modal-btn-primary {
+  height: 36px;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  border-radius: 8px;
+  background-color: #1890ff;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.28);
+  transition: background-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+}
+
+.saho-modal-btn-primary:hover:not(:disabled) {
+  background-color: #40a9ff;
+}
+
+.saho-modal-btn-primary:active:not(:disabled) {
+  background-color: #096dd9;
+  transform: scale(0.95);
+}
+
+.saho-modal-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.saho-modal-btn-secondary {
+  height: 36px;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  border-radius: 8px;
+  background-color: #ffffff;
+  border: 1px solid #e8e9ef;
+  color: #1d202a;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+}
+
+.saho-modal-btn-secondary:hover:not(:disabled) {
+  background-color: #f8fafb;
+  border-color: #a2a6b4;
+}
+
+.saho-modal-btn-secondary:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.saho-modal-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+html.dark .saho-modal-btn-secondary {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+html.dark .saho-modal-btn-secondary:hover:not(:disabled) {
+  background-color: #334155;
+}
+
 .modal-backdrop-transition {
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), backdrop-filter 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, backdrop-filter;
   overscroll-behavior: contain;
 }
 
 .modal-dialog-transition {
   transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
   overscroll-behavior: contain;
 }
 
 .modal-backdrop-open {
   opacity: 1;
-  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(25px);
+  backdrop-filter: blur(25px);
   pointer-events: auto;
 }
 
@@ -481,7 +675,7 @@ html.modal-scroll-locked {
 
 .modal-dialog-open {
   opacity: 1;
-  transform: scale(1) translateY(0);
+  transform: none;
 }
 
 .modal-dialog-closed {
@@ -821,10 +1015,143 @@ pre.code-block-content *::selection,
 pre.code-block-content::selection,
 pre.code-block-content code *::selection,
 pre.code-block-content code::selection {
-  background-color: #4f46e5 !important;
+  background-color: #1890ff !important;
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
   text-shadow: none !important;
+}
+
+/* ==========================================================================
+   SAHO DESIGN SYSTEM TOKENS & COMPONENT FOUNDATIONS
+   ========================================================================== */
+:root {
+  --saho-surface-primary: #f3f4f7;
+  --saho-surface-second: #f8fafb;
+  --saho-surface-muse: #ffffff;
+  --saho-surface-inverse: #49526a;
+  --saho-surface-strong: #1d202a;
+  --saho-surface-overlay-light: rgba(248, 250, 251, 0.64);
+  --saho-surface-overlay-dark: rgba(73, 82, 106, 0.03);
+
+  --saho-brand-primary: #1890ff;
+  --saho-brand-hover: #40a9ff;
+  --saho-brand-accent: #096dd9;
+  --saho-brand-muse: rgba(64, 169, 255, 0.08);
+  --saho-brand-tint: rgba(24, 144, 255, 0.16);
+  --saho-brand-ring: #e6f7ff;
+
+  --saho-state-success: #0ab185;
+  --saho-state-success-bg: rgba(10, 177, 133, 0.16);
+  --saho-state-success-stroke: #088e6a;
+  --saho-state-warning: #ff7a45;
+  --saho-state-warning-bg: rgba(255, 169, 64, 0.16);
+  --saho-state-warning-stroke: #ffa940;
+  --saho-state-danger: #ff4d4f;
+  --saho-state-danger-bg: rgba(255, 77, 79, 0.16);
+  --saho-state-info: #1890ff;
+  --saho-state-info-bg: rgba(24, 144, 255, 0.16);
+  --saho-state-disabled: #a2a6b4;
+  --saho-state-disabled-bg: rgba(162, 166, 180, 0.16);
+  --saho-state-freelancer: #b37feb;
+
+  --saho-text-primary: #1d202a;
+  --saho-text-second: #838899;
+  --saho-text-muse: #a2a6b4;
+  --saho-text-brand: #1890ff;
+
+  --saho-stroke-default: #e8e9ef;
+  --saho-stroke-hover: #a2a6b4;
+  --saho-stroke-brand: #1890ff;
+
+  --saho-radius-sm: 4px;
+  --saho-radius-md: 6px;
+  --saho-radius-lg: 8px;
+  --saho-radius-xl: 12px;
+
+  --font-sans: var(--font-roboto), "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dark {
+  --saho-surface-primary: #080c14;
+  --saho-surface-second: #0d1424;
+  --saho-surface-muse: #111827;
+  --saho-surface-inverse: #cbd5e1;
+  --saho-surface-strong: #f8fafc;
+  --saho-surface-overlay-light: rgba(17, 24, 39, 0.72);
+  --saho-surface-overlay-dark: rgba(148, 163, 184, 0.06);
+
+  --saho-brand-muse: rgba(24, 144, 255, 0.14);
+  --saho-brand-tint: rgba(24, 144, 255, 0.22);
+  --saho-brand-ring: rgba(24, 144, 255, 0.25);
+
+  --saho-text-primary: #f1f5f9;
+  --saho-text-second: #94a3b8;
+  --saho-text-muse: #64748b;
+
+  --saho-stroke-default: #1e293b;
+  --saho-stroke-hover: #334155;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--saho-surface-primary);
+    color: var(--saho-text-primary);
+  }
+}
+
+/* Saho Focus Halo Override for Light & Dark Modes */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+/* Hide Edge/IE duplicate native password reveal eye icon */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #1890ff !important;
+  box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.22) !important;
+}
+
+/* Saho Active Sidebar Gradient */
+.saho-nav-active {
+  background-image: linear-gradient(90deg, rgba(204, 244, 255, 0.48) 6.35%, rgba(229, 229, 229, 0.28) 97.23%),
+    linear-gradient(90deg, rgba(64, 169, 255, 0.08) 0%, rgba(64, 169, 255, 0.08) 100%);
+  color: #1890ff;
+}
+
+.dark .saho-nav-active {
+  background-image: linear-gradient(90deg, rgba(24, 144, 255, 0.22) 0%, rgba(64, 169, 255, 0.08) 100%);
+  color: #40a9ff;
+}
+
+/* Saho Hero Card Gradient (from Page-Employee-Profile) */
+.saho-hero-card {
+  background-image: linear-gradient(218deg, rgba(184, 240, 255, 0.72) 0%, rgba(248, 250, 251, 0.92) 58%, #ffffff 100%);
+}
+
+.dark .saho-hero-card {
+  background-image: linear-gradient(218deg, rgba(24, 144, 255, 0.16) 0%, rgba(17, 24, 39, 0.94) 60%, #0f172a 100%);
+}
+
+/* Saho Focus Halo Utility */
+.saho-focus-ring:focus,
+.saho-focus-ring:focus-within {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 3px #e6f7ff;
+}
+
+.dark .saho-focus-ring:focus,
+.dark .saho-focus-ring:focus-within {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.22);
 }
 
 /* ==========================================================================
@@ -832,18 +1159,18 @@ pre.code-block-content code::selection {
    ========================================================================== */
 .driver-popover.saho-tour-popover {
   background-color: #ffffff;
-  color: #0f172a;
-  border-radius: 1.25rem !important; /* rounded-2xl */
+  color: #1d202a;
+  border-radius: 12px !important;
   padding: 1.25rem 1.4rem !important;
-  box-shadow: 0 20px 30px -10px rgba(15, 23, 42, 0.18), 0 10px 15px -3px rgba(15, 23, 42, 0.08) !important;
-  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 30px -10px rgba(29, 32, 42, 0.16), 0 10px 15px -3px rgba(29, 32, 42, 0.08) !important;
+  border: 1px solid #e8e9ef !important;
   font-family: inherit !important;
   max-width: 380px !important;
   z-index: 1000000 !important;
 }
 
 .dark .driver-popover.saho-tour-popover {
-  background-color: #0b0f19 !important;
+  background-color: #0f172a !important;
   color: #f8fafc !important;
   border-color: #1e293b !important;
   box-shadow: 0 25px 40px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
@@ -851,8 +1178,8 @@ pre.code-block-content code::selection {
 
 .driver-popover.saho-tour-popover .driver-popover-title {
   font-size: 0.975rem !important;
-  font-weight: 800 !important;
-  color: #1e1b4b !important;
+  font-weight: 700 !important;
+  color: #1d202a !important;
   margin-bottom: 0.4rem !important;
   display: flex !important;
   align-items: center !important;
@@ -860,13 +1187,13 @@ pre.code-block-content code::selection {
 }
 
 .dark .driver-popover.saho-tour-popover .driver-popover-title {
-  color: #818cf8 !important;
+  color: #40a9ff !important;
 }
 
 .driver-popover.saho-tour-popover .driver-popover-description {
   font-size: 0.8125rem !important;
   line-height: 1.55 !important;
-  color: #475569 !important;
+  color: #838899 !important;
   margin-bottom: 0.85rem !important;
 }
 
@@ -881,7 +1208,7 @@ pre.code-block-content code::selection {
   gap: 0.5rem !important;
   margin-top: 0.75rem !important;
   padding-top: 0.75rem !important;
-  border-top: 1px solid #f1f5f9 !important;
+  border-top: 1px solid #e8e9ef !important;
 }
 
 .dark .driver-popover.saho-tour-popover .driver-popover-footer {
@@ -891,15 +1218,15 @@ pre.code-block-content code::selection {
 .driver-popover.saho-tour-popover .driver-popover-progress-text {
   font-size: 0.75rem !important;
   font-weight: 700 !important;
-  color: #4f46e5 !important;
-  background: #eef2ff !important;
+  color: #1890ff !important;
+  background: rgba(24, 144, 255, 0.12) !important;
   padding: 0.25rem 0.6rem !important;
   border-radius: 9999px !important;
 }
 
 .dark .driver-popover.saho-tour-popover .driver-popover-progress-text {
-  color: #a5b4fc !important;
-  background: rgba(99, 102, 241, 0.2) !important;
+  color: #40a9ff !important;
+  background: rgba(24, 144, 255, 0.2) !important;
 }
 
 .driver-popover.saho-tour-popover .driver-popover-navigation-btns {
@@ -910,35 +1237,35 @@ pre.code-block-content code::selection {
 
 .driver-popover.saho-tour-popover .driver-popover-btn {
   font-size: 0.75rem !important;
-  font-weight: 700 !important;
+  font-weight: 500 !important;
   padding: 0.45rem 0.95rem !important;
-  border-radius: 0.75rem !important;
+  border-radius: 8px !important;
   cursor: pointer !important;
   transition: all 0.15s ease !important;
   text-shadow: none !important;
 }
 
 .driver-popover.saho-tour-popover .driver-popover-next-btn {
-  background-color: #4f46e5 !important;
+  background-color: #1890ff !important;
   color: #ffffff !important;
   border: none !important;
-  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.3) !important;
+  box-shadow: 0 4px 10px rgba(24, 144, 255, 0.28) !important;
 }
 
 .driver-popover.saho-tour-popover .driver-popover-next-btn:hover {
-  background-color: #4338ca !important;
+  background-color: #40a9ff !important;
   transform: translateY(-1px) !important;
 }
 
 .driver-popover.saho-tour-popover .driver-popover-prev-btn {
-  background-color: #f8fafc !important;
-  color: #475569 !important;
-  border: 1px solid #e2e8f0 !important;
+  background-color: #f8fafb !important;
+  color: #1d202a !important;
+  border: 1px solid #e8e9ef !important;
 }
 
 .driver-popover.saho-tour-popover .driver-popover-prev-btn:hover {
-  background-color: #f1f5f9 !important;
-  color: #1e293b !important;
+  background-color: #f3f4f7 !important;
+  border-color: #a2a6b4 !important;
 }
 
 .dark .driver-popover.saho-tour-popover .driver-popover-prev-btn {
@@ -953,14 +1280,14 @@ pre.code-block-content code::selection {
 }
 
 .driver-popover.saho-tour-popover .driver-popover-close-btn {
-  color: #94a3b8 !important;
+  color: #a2a6b4 !important;
   font-size: 1.25rem !important;
   top: 1rem !important;
   right: 1.1rem !important;
 }
 
 .driver-popover.saho-tour-popover .driver-popover-close-btn:hover {
-  color: #ef4444 !important;
+  color: #ff4d4f !important;
 }
 
 .driver-popover.saho-tour-popover .driver-popover-arrow {
@@ -968,12 +1295,12 @@ pre.code-block-content code::selection {
 }
 
 .dark .driver-popover.saho-tour-popover .driver-popover-arrow {
-  border-color: #0b0f19 !important;
+  border-color: #0f172a !important;
 }
 
 /* Highlight Stage animated ring */
 .driver-stage {
-  border-radius: 0.85rem !important;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.6), 0 0 25px rgba(99, 102, 241, 0.35) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.55), 0 0 24px rgba(24, 144, 255, 0.3) !important;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }

@@ -298,6 +298,26 @@ export interface TaskActivityLog {
   summary: string; // Tóm tắt nội dung thay đổi
 }
 
+export interface TaskWeeklyHistoryEntry {
+  weekKey: string; // e.g. "2026-W98"
+  weekNumber: number;
+  year: number;
+  actualEffort: number;
+  estimatedEffort: number;
+  completionPercentage: number;
+  status: TaskStatus;
+  assigneeAccount: string;
+  supporterAccounts?: string[];
+  memberEfforts?: Record<string, number>;
+  lastSubmittedAt?: string;
+  isSubmittedLate?: boolean;
+  notes?: string;
+  archivedAt: string;
+  archivedBy?: string;
+  updatedByAdminAt?: string;
+  updatedByAdminAccount?: string;
+}
+
 export interface Task {
   id: string;
   code?: string; // Mã phân cấp trực quan: [SCOPE]-[ROLE]-[NUMBER][.SUB] (VD: MS01-FE-015, MS01-FE-015.01, ADH-BE-008)
@@ -329,6 +349,7 @@ export interface Task {
   assignmentRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED'; // Trạng thái phê duyệt của Leader
   requestedWeekNumber?: number; // Mốc tuần yêu cầu phân công
   parentTaskId?: string; // ID của task gốc khi rolled over sang tuần mới
+  weeklyHistory?: Record<string, TaskWeeklyHistoryEntry>; // Bảng map bất biến lưu dữ liệu lịch sử chốt từng tuần (chỉ Admin được sửa)
   activityLogs?: TaskActivityLog[]; // Nhật ký lịch sử các lần cập nhật task
   ticketId?: string; // ID của request ticket liên kết nếu task được sinh ra từ ticket
   // --- SUBTASK HIERARCHY SYSTEM ---

@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { useModalAnimation } from '../hooks/useModalAnimation';
+import { Modal } from './common/Modal';
+import { useSyncModalUrl } from '../lib/sahoUrl';
 import { Ticket, TicketStatus, TicketPriority, TicketActivityLog, getUserRoleColorClass, getUserRoleInSpec, isUserPM, isUserAdminOrPM } from '../types/task';
 import { Dropdown, DropdownOption } from './common/Dropdown';
 import {
@@ -284,8 +285,6 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
     return logs;
   }, [ticket]);
 
-  const forceCloseRef = useRef<() => void>(() => {});
-
   const isEditDirty = isEditing && (
     editTitle.trim() !== (ticket?.title || '').trim() ||
     editDescription.trim() !== (ticket?.description || '').trim() ||
@@ -311,28 +310,22 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
           setIsResolving(false);
           setCommentContent('');
           setCommentAttachment('');
-          forceCloseRef.current();
+          onClose();
         },
       });
       return false;
     }
     return true;
-  }, [isEditDirty, isCommentDirty, isResolveDirty, confirmDialog]);
+  }, [isEditDirty, isCommentDirty, isResolveDirty, confirmDialog, onClose]);
 
-  const {
-    isRendered,
-    isVisible,
-    handleClose,
-    forceClose,
-    handleBackdropMouseDown,
-    handleBackdropClick,
-  } = useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
+  useSyncModalUrl(
+    isOpen && Boolean(ticket),
+    ticket ? `/requests/${encodeURIComponent(ticket.code || ticket.id)}` : null,
+    onClose,
+    ticket ? `Request ${ticket.code || ticket.title}` : undefined
+  );
 
-  React.useEffect(() => {
-    forceCloseRef.current = forceClose;
-  }, [forceClose]);
-
-  if (!isRendered || !ticket || !currentUser) return null;
+  if (!ticket || !currentUser) return null;
 
   const isMatchSpec = (specA?: string, specB?: string) => {
     if (!specA || !specB) return false;
@@ -633,7 +626,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
       type: 'danger',
       onConfirm: async () => {
         await deleteTicket(ticket.id);
-        handleClose();
+        onClose();
       },
     });
   };
@@ -708,51 +701,49 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 pointer-events-auto">
-      {/* Backdrop */}
-      <div
-        className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-200 ${
-          isVisible ? 'opacity-100' : 'opacity-0'
-        }`}
-        onMouseDown={handleBackdropMouseDown}
-        onClick={handleBackdropClick}
-      />
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      onRequestClose={checkDirtyAndConfirmClose}
+      size="5xl"
+      className="h-[92vh]"
+      noBodyPadding
+      noBodyScroll
+      headerClassName="py-3.5 sm:py-3.5"
+      title={
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-[6px] bg-[#1890FF] text-white">
+            {ticket.code}
+          </span>
+          {getStatusBadge(ticket.status)}
+          {getPriorityBadge(ticket.priority)}
 
-      {/* Modal Dialog */}
-      <div
-        className={`relative w-full max-w-5xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col h-[92vh] max-h-[92vh] transition-all duration-200 ${
-          isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
-        }`}
-      >
-        {/* TOP HEADER */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 shrink-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-xs font-black px-2.5 py-1 rounded-lg bg-indigo-600 text-white shadow-2xs">
-              {ticket.code}
+          {/* Team Flow Banner */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 text-[#1D202A] dark:text-slate-300">
+            <span className="text-[#FF7A45] dark:text-amber-400">Team {ticket.fromRole}</span>
+            <span className="text-[#A2A6B4]">➔</span>
+            <span className="text-[#1890FF] dark:text-sky-400 font-bold">
+              Team {ticket.toRole}
             </span>
-            {getStatusBadge(ticket.status)}
-            {getPriorityBadge(ticket.priority)}
-
-            {/* Team Flow Banner */}
-            <div className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
-              <span className="text-amber-700 dark:text-amber-400">Team {ticket.fromRole}</span>
-              <span className="text-slate-400">➔</span>
-              <span className="text-purple-700 dark:text-purple-400 font-extrabold">
-                Team {ticket.toRole}
-              </span>
-            </div>
           </div>
-
-          <button
-            onClick={handleClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
-
-        {/* MAIN BODY: 2 COLUMN RESPONSIVE LAYOUT */}
-        <div className="flex-1 min-h-0 overflow-hidden grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-slate-800">
+      }
+      afterModal={
+        <ImageLightbox
+          isOpen={!!lightboxImage}
+          imageUrl={lightboxImage?.url || null}
+          altText={lightboxImage?.alt}
+          onClose={() => setLightboxImage(null)}
+          onDelete={
+            canEdit && lightboxImage?.url
+              ? () => handleRemoveImageFromTicket(lightboxImage.url)
+              : undefined
+          }
+        />
+      }
+    >
+      {/* MAIN BODY: 2 COLUMN RESPONSIVE LAYOUT */}
+      <div className="flex-1 min-h-0 overflow-hidden grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-[var(--saho-modal-divider)]">
           {/* LEFT PANE: TICKET DETAILS & STATUS/ASSIGNEE (7 cols on lg) */}
           <div className="lg:col-span-7 p-5 overflow-y-auto space-y-4 min-h-0 custom-scrollbar">
             {/* Title & Creator Info */}
@@ -1432,7 +1423,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
             {/* Comment Input Footer */}
             <form
               onSubmit={handleSendComment}
-              className="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5 shrink-0"
+              className="p-3.5 border-t saho-modal-footer space-y-2.5 shrink-0"
             >
               <div className="relative">
                 <MentionInput
@@ -1500,20 +1491,6 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
             </form>
           </div>
         </div>
-      </div>
-
-      {/* Lightbox Image Preview Modal with Pan, Zoom & Delete */}
-      <ImageLightbox
-        isOpen={!!lightboxImage}
-        imageUrl={lightboxImage?.url || null}
-        altText={lightboxImage?.alt}
-        onClose={() => setLightboxImage(null)}
-        onDelete={
-          canEdit && lightboxImage?.url
-            ? () => handleRemoveImageFromTicket(lightboxImage.url)
-            : undefined
-        }
-      />
-    </div>
+    </Modal>
   );
 };

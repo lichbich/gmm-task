@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { useSyncModalUrl } from '../lib/sahoUrl';
 import {
-  X,
   User as UserIcon,
   Key,
   Lock,
@@ -24,7 +24,7 @@ import {
   Loader2,
   Trash2,
 } from 'lucide-react';
-import { useModalAnimation } from '../hooks/useModalAnimation';
+import { Modal } from './common/Modal';
 import { UserAvatar } from './common/UserAvatar';
 import { uploadImageToCatbox } from '../lib/imageUploadHelper';
 
@@ -97,7 +97,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
         confirmText: 'Rời khỏi & Hủy',
         cancelText: 'Tiếp tục chỉnh sửa',
         type: 'warning',
-        onConfirm: () => forceClose(),
+        onConfirm: () => onClose(),
       });
       return false;
     }
@@ -117,10 +117,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     newPassword,
     confirmPassword,
     confirmDialog,
+    onClose,
   ]);
 
-  const { isRendered, isVisible, handleClose, forceClose, handleBackdropMouseDown, handleBackdropClick } =
-    useModalAnimation(isOpen, onClose, checkDirtyAndConfirmClose);
+  const handleRequestClose = useCallback(() => {
+    if (checkDirtyAndConfirmClose()) {
+      onClose();
+    }
+  }, [checkDirtyAndConfirmClose, onClose]);
+
+  useSyncModalUrl(
+    isOpen && Boolean(currentUser),
+    isOpen && currentUser ? '/profile' : null,
+    onClose,
+    'Hồ Sơ Cá Nhân'
+  );
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -133,7 +144,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
-  if (!isRendered || !currentUser || !userRecord) return null;
+  if (!currentUser || !userRecord) return null;
 
   // Calculate user's current week stats
   const userCurrentTasks = tasks.filter(
@@ -331,35 +342,53 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   };
 
   return (
-    <div
-      onMouseDown={handleBackdropMouseDown}
-      onClick={handleBackdropClick}
-      className={`fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
-        isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
-      }`}
-    >
-      <div
-        className={`bg-white border border-slate-200/90 rounded-2xl sm:rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-slate-800 relative max-h-[92vh] flex flex-col modal-dialog-transition ${
-          isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
-        }`}
-      >
-        {/* Modal Top Bar */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <UserIcon className="w-4 h-4 text-indigo-600" />
-            Hồ Sơ & Bảo Mật Nhân Viên
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      onRequestClose={checkDirtyAndConfirmClose}
+      size="lg"
+      icon={<UserIcon className="w-4 h-4 text-[#1890FF]" />}
+      title="Hồ Sơ & Bảo Mật Nhân Viên"
+      bodyClassName="space-y-4 sm:space-y-5"
+      footer={
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (checkDirtyAndConfirmClose()) {
+                  onClose();
+                  setTimeout(() => {
+                    logout();
+                  }, 200);
+                }
+              }}
+              className="px-3.5 h-[36px] text-[#FF4D4F] hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200/80 dark:border-red-900/60 rounded-[8px] text-xs font-semibold transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              title="Đăng xuất khỏi phiên làm việc"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Đăng xuất
+            </button>
           </div>
-          <button
-            onClick={handleClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition active:scale-95 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
 
-        {/* Modal Main Content Container with custom-scrollbar */}
-        <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 flex-1 overflow-y-auto custom-scrollbar min-h-0 overscroll-contain">
-          {/* User Profile Header (Sleek Dark Gradient Card) */}
+          <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-sans font-medium text-[10px]">
+              <Sparkles className="w-3 h-3 text-[#1890FF]" />
+              v{appVersion || '3.0.0'}
+            </span>
+
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              className="saho-modal-btn-secondary"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      }
+    >
+      {/* User Profile Header (Sleek Dark Gradient Card) */}
           <div className="flex items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-slate-800 rounded-2xl p-4 shadow-md">
             <div className="flex items-center gap-3.5">
               {/* Avatar with Camera Button & Hover overlay */}
@@ -460,14 +489,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
             </div>
           )}
 
-          {/* Tab Navigation Controls (Animated Segments) */}
-          <div className="flex items-center bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/90 gap-1.5">
+          {/* Tab Navigation Controls (Saho Tabs) */}
+          <div className="flex items-center bg-[#F8FAFB] dark:bg-slate-800 p-1 rounded-[8px] border border-[#E8E9EF] dark:border-slate-700 gap-1">
             <button
               onClick={() => setActiveTab('INFO')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 ${
+              className={`flex-1 h-[32px] px-3 rounded-[6px] text-xs font-medium transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer ${
                 activeTab === 'INFO'
-                  ? 'bg-white text-indigo-600 shadow-sm shadow-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  ? 'bg-[#1890FF] text-white shadow-xs'
+                  : 'text-[#838899] hover:text-[#1890FF] hover:bg-white/60'
               }`}
             >
               <UserIcon className="w-3.5 h-3.5" />
@@ -475,10 +504,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
             </button>
             <button
               onClick={() => setActiveTab('PASSWORD')}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 ${
+              className={`flex-1 h-[32px] px-3 rounded-[6px] text-xs font-medium transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer ${
                 activeTab === 'PASSWORD'
-                  ? 'bg-white text-indigo-600 shadow-sm shadow-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                  ? 'bg-[#1890FF] text-white shadow-xs'
+                  : 'text-[#838899] hover:text-[#1890FF] hover:bg-white/60'
               }`}
             >
               <Key className="w-3.5 h-3.5" />
@@ -491,9 +520,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
             <div className="space-y-4 animate-in fade-in duration-200">
               {/* 4 Stats Cards Grid Including Total Effort */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <div className="bg-indigo-50/80 border border-indigo-200/80 rounded-2xl p-3 text-center space-y-0.5">
-                  <div className="text-[10px] text-indigo-600 font-extrabold uppercase tracking-wider">Tổng Effort Lũy Kế</div>
-                  <div className="text-base sm:text-lg font-black text-indigo-700 font-mono">
+                <div className="bg-[rgba(24,144,255,0.08)] border border-[#1890FF]/20 rounded-[8px] p-3 text-center space-y-0.5">
+                  <div className="text-[10px] text-[#1890FF] font-bold uppercase tracking-wider">Tổng Effort Lũy Kế</div>
+                  <div className="text-base sm:text-lg font-bold text-[#096DD9] dark:text-sky-300 font-mono">
                     {totalEffortCumulative}h
                   </div>
                 </div>
@@ -936,41 +965,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
               </div>
             </form>
           )}
-        </div>
-
-        {/* Fixed Modal Footer Controls */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 shrink-0 bg-slate-50/60 rounded-b-2xl sm:rounded-b-3xl">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                handleClose();
-                setTimeout(() => {
-                  logout();
-                }, 200);
-              }}
-              className="px-3.5 py-2 text-red-600 hover:bg-red-50 border border-red-200/80 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 active:scale-95"
-              title="Đăng xuất khỏi phiên làm việc"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              Đăng xuất
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-slate-200/60 text-slate-600 font-sans font-medium text-[10px]">
-              <Sparkles className="w-3 h-3 text-indigo-500" />
-              v{appVersion || '2.5.1'}
-            </span>
-
-            <button
-              onClick={handleClose}
-              className="px-5 py-2 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-medium transition active:scale-95 shadow-2xs"
-            >
-              Đóng
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };

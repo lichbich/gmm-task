@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useModalAnimation } from '../../hooks/useModalAnimation';
 
@@ -9,13 +10,22 @@ export interface ModalProps {
   onClose: () => void;
   title?: React.ReactNode;
   description?: React.ReactNode;
+  eyebrow?: React.ReactNode;
   icon?: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
+  headerExtra?: React.ReactNode;
+  subHeader?: React.ReactNode;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl' | '7xl' | 'full';
   showCloseButton?: boolean;
+  hideHeader?: boolean;
+  noBodyPadding?: boolean;
+  noBodyScroll?: boolean;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  afterModal?: React.ReactNode;
   className?: string;
+  headerClassName?: string;
   bodyClassName?: string;
+  footerClassName?: string;
   containerClassName?: string;
   zIndex?: string;
   closeOnBackdropClick?: boolean;
@@ -27,25 +37,40 @@ export const Modal: React.FC<ModalProps> = ({
   onClose,
   title,
   description,
+  eyebrow,
   icon,
+  headerExtra,
+  subHeader,
   size = 'md',
   showCloseButton = true,
+  hideHeader = false,
+  noBodyPadding = false,
+  noBodyScroll = false,
   children,
   footer,
+  afterModal,
   className = '',
+  headerClassName = '',
   bodyClassName = '',
+  footerClassName = '',
   containerClassName = '',
-  zIndex = 'z-50',
+  zIndex = 'z-[140]',
   closeOnBackdropClick = true,
   onRequestClose,
 }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const { isRendered, isVisible, handleClose, handleBackdropMouseDown, handleBackdropClick } = useModalAnimation(
     isOpen,
     onClose,
     onRequestClose
   );
 
-  if (!isRendered) return null;
+  if (!mounted || !isRendered || typeof document === 'undefined') return null;
 
   const sizeClasses = {
     sm: 'max-w-sm',
@@ -53,10 +78,17 @@ export const Modal: React.FC<ModalProps> = ({
     lg: 'max-w-lg',
     xl: 'max-w-xl',
     '2xl': 'max-w-2xl',
+    '3xl': 'max-w-3xl',
+    '4xl': 'max-w-4xl',
+    '5xl': 'max-w-5xl',
+    '6xl': 'max-w-5xl xl:max-w-6xl',
+    '7xl': 'max-w-7xl',
     full: 'max-w-5xl',
   }[size];
 
-  return (
+  const hasHeaderContent = Boolean(title || eyebrow || description || icon || headerExtra || showCloseButton);
+
+  return createPortal(
     <div
       onMouseDown={handleBackdropMouseDown}
       onClick={(e) => {
@@ -64,57 +96,90 @@ export const Modal: React.FC<ModalProps> = ({
           handleBackdropClick(e);
         }
       }}
-      className={`fixed inset-0 ${zIndex} bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
+      className={`fixed inset-0 ${zIndex} saho-modal-backdrop flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto modal-backdrop-transition ${
         isVisible ? 'modal-backdrop-open' : 'modal-backdrop-closed'
       } ${containerClassName}`}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl w-full ${sizeClasses} max-h-[92vh] flex flex-col p-4 sm:p-6 shadow-2xl text-slate-800 dark:text-slate-100 relative modal-dialog-transition overflow-hidden ${
+        className={`my-auto saho-modal-surface border rounded-[12px] w-full ${sizeClasses} max-h-[92vh] flex flex-col p-0 relative modal-dialog-transition overflow-hidden ${
           isVisible ? 'modal-dialog-open' : 'modal-dialog-closed'
         } ${className}`}
       >
-        {/* Header if title or icon provided */}
-        {(title || icon || showCloseButton) && (
-          <div className="flex items-start justify-between gap-3 mb-3 sm:mb-4 shrink-0">
+        {/* Full-bleed Header */}
+        {!hideHeader && hasHeaderContent && (
+          <div
+            className={`flex items-start justify-between gap-3 px-5 py-4 sm:px-6 sm:py-4 border-b saho-modal-header shrink-0 ${headerClassName}`}
+          >
             <div className="flex items-start gap-3 flex-1 min-w-0">
               {icon && <div className="shrink-0 mt-0.5">{icon}</div>}
               <div className="flex-1 min-w-0">
+                {eyebrow && <div className="mb-1">{eyebrow}</div>}
                 {title && (
-                  <h3 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-snug break-words">
+                  <div className="text-sm sm:text-base font-bold text-[#1D202A] dark:text-slate-100 tracking-tight leading-snug break-words">
                     {title}
-                  </h3>
+                  </div>
                 )}
                 {description && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                  <div className="text-xs text-[#838899] dark:text-slate-400 mt-0.5 leading-relaxed">
                     {description}
-                  </p>
+                  </div>
                 )}
               </div>
             </div>
 
-            {showCloseButton && (
-              <button
-                type="button"
-                onClick={handleClose}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center justify-center transition active:scale-95 shrink-0 -mr-1 -mt-1 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
+            {(headerExtra || showCloseButton) && (
+              <div className="flex items-center gap-2 shrink-0">
+                {headerExtra}
+                {showCloseButton && (
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="w-8 h-8 rounded-[8px] saho-modal-close flex items-center justify-center active:scale-95 shrink-0 cursor-pointer"
+                    title="Đóng cửa sổ"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}
 
-        {/* Modal Body */}
-        <div className={`overflow-y-auto flex-1 min-h-0 overscroll-contain ${bodyClassName}`}>{children}</div>
+        {/* Optional Sub-Header (e.g. mobile tabs) */}
+        {subHeader}
 
-        {/* Modal Footer */}
+        {/* Modal Body */}
+        {noBodyScroll ? (
+          <div
+            className={`flex-1 min-h-0 overflow-hidden flex flex-col ${
+              noBodyPadding ? '' : 'px-5 py-5 sm:px-6 sm:py-6'
+            } ${bodyClassName}`}
+          >
+            {children}
+          </div>
+        ) : (
+          <div
+            className={`overflow-y-auto overflow-x-hidden custom-scrollbar flex-1 min-h-0 overscroll-contain ${
+              noBodyPadding ? '' : 'px-5 py-5 sm:px-6 sm:py-6'
+            } ${bodyClassName}`}
+          >
+            {children}
+          </div>
+        )}
+
+        {/* Full-bleed Footer */}
         {footer && (
-          <div className="mt-3 pt-3 sm:mt-5 sm:pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0">
+          <div
+            className={`px-5 py-3.5 sm:px-6 sm:py-4 border-t saho-modal-footer shrink-0 rounded-b-[12px] ${footerClassName}`}
+          >
             {footer}
           </div>
         )}
       </div>
-    </div>
+
+      {afterModal}
+    </div>,
+    document.body
   );
 };

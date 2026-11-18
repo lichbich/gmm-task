@@ -237,9 +237,9 @@ export function Dropdown<T extends string | number>({
     : options;
 
   const sizeClasses = {
-    sm: 'text-[11px] py-1.5 px-2.5 rounded-lg',
-    md: 'text-xs py-2 px-3 rounded-xl',
-    lg: 'text-sm py-2.5 px-3.5 rounded-xl',
+    sm: 'text-[12px] h-[28px] px-2.5 rounded-[8px]',
+    md: 'text-[13px] h-[32px] px-3 rounded-[8px]',
+    lg: 'text-[14px] h-[38px] px-3.5 rounded-[8px]',
   }[size];
 
   const renderMenuContent = () => {
@@ -248,7 +248,7 @@ export function Dropdown<T extends string | number>({
     return (
       <div
         ref={menuRef}
-        className={`fixed z-[999999] bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-2xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md ${menuClassName}`}
+        className={`fixed z-[999999] bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] shadow-[0_12px_32px_rgba(29,32,42,0.12)] p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md ${menuClassName}`}
         style={{
           top: coords.top !== undefined ? `${coords.top}px` : undefined,
           bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
@@ -260,22 +260,22 @@ export function Dropdown<T extends string | number>({
       >
         {/* Search box if enabled */}
         {shouldEnableSearch && (
-          <div className="p-1.5 pb-1 border-b border-slate-100 dark:border-slate-800">
+          <div className="p-1.5 pb-1 border-b border-[#E8E9EF] dark:border-slate-800">
             <div className="relative flex items-center">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 text-[#838899] absolute left-2 pointer-events-none" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm kiếm..."
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-lg pl-7 pr-6 py-1 text-xs text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition"
+                className="w-full h-[30px] bg-[#F8FAFB] dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] pl-7 pr-6 py-1 text-xs text-[#1D202A] dark:text-slate-200 placeholder:text-[#838899] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] focus:bg-white dark:focus:bg-slate-900 transition"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  className="absolute right-2 p-0.5 text-[#A2A6B4] hover:text-[#1D202A] dark:hover:text-slate-200 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -292,7 +292,7 @@ export function Dropdown<T extends string | number>({
           }}
         >
           {filteredOptions.length === 0 ? (
-            <div className="py-4 text-center text-xs text-slate-400 italic">
+            <div className="py-4 text-center text-xs text-[#A2A6B4] italic">
               Không tìm thấy kết quả phù hợp
             </div>
           ) : (
@@ -309,12 +309,12 @@ export function Dropdown<T extends string | number>({
                       setIsOpen(false);
                     }
                   }}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs text-left transition-colors duration-150 select-none ${
+                  className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-[8px] text-[13px] text-left transition-colors duration-150 select-none ${
                     opt.disabled
                       ? 'opacity-40 cursor-not-allowed'
                       : isSelected
-                      ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-800 dark:text-indigo-300 font-semibold'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white cursor-pointer'
+                      ? 'bg-[rgba(24,144,255,0.10)] dark:bg-sky-950/70 text-[#1890FF] dark:text-sky-300 font-semibold'
+                      : 'text-[#1D202A] dark:text-slate-300 hover:bg-[#F8FAFB] dark:hover:bg-slate-800/80 hover:text-[#1890FF] dark:hover:text-white cursor-pointer'
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -325,7 +325,7 @@ export function Dropdown<T extends string | number>({
                         {opt.badge && <span className="shrink-0">{opt.badge}</span>}
                       </div>
                       {opt.subLabel && (
-                        <span className="text-[10px] text-slate-400 block truncate">
+                        <span className="text-[11px] text-[#838899] block truncate">
                           {opt.subLabel}
                         </span>
                       )}
@@ -333,7 +333,7 @@ export function Dropdown<T extends string | number>({
                   </div>
 
                   {isSelected && (
-                    <Check className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0 font-bold" />
+                    <Check className="w-3.5 h-3.5 text-[#1890FF] dark:text-sky-400 shrink-0 font-bold" />
                   )}
                 </button>
               );
@@ -347,7 +347,7 @@ export function Dropdown<T extends string | number>({
   return (
     <div className={`relative inline-block text-left ${className}`} ref={dropdownRef}>
       {label && (
-        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+        <label className="block text-[13px] font-medium text-[#1D202A] dark:text-slate-300 mb-1">
           {label}
         </label>
       )}
@@ -358,16 +358,30 @@ export function Dropdown<T extends string | number>({
         type="button"
         disabled={disabled}
         onClick={handleToggle}
-        className={`w-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 flex items-center justify-between gap-2 shadow-2xs transition-all duration-150 active:scale-[0.99] text-left select-none ${sizeClasses} ${
-          disabled ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-slate-800' : 'cursor-pointer'
-        } ${isOpen ? 'ring-2 ring-indigo-500/20 border-indigo-500 z-10' : ''} ${buttonClassName}`}
+        className={`w-full border transition-all duration-150 flex items-center justify-between gap-2 active:scale-[0.99] text-left select-none focus:outline-none ${sizeClasses} ${
+          disabled
+            ? 'opacity-50 cursor-not-allowed bg-[#F8FAFB] dark:bg-slate-800 border-[#E8E9EF] dark:border-slate-700'
+            : isOpen
+            ? 'bg-[rgba(64,169,255,0.08)] dark:bg-sky-950/40 border-[#1890FF] shadow-[0_0_0_3px_#E6F7FF] dark:shadow-[0_0_0_3px_rgba(24,144,255,0.22)] z-10 cursor-pointer'
+            : 'bg-white dark:bg-slate-900 border-[#E8E9EF] dark:border-slate-700 hover:bg-[rgba(64,169,255,0.06)] hover:border-[#A2A6B4] dark:hover:border-slate-600 cursor-pointer'
+        } ${buttonClassName}`}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          {icon && <span className="shrink-0 text-slate-400">{icon}</span>}
+          {icon && (
+            <span className={`shrink-0 ${isOpen ? 'text-[#1890FF]' : 'text-[#838899]'}`}>{icon}</span>
+          )}
           {selectedOption?.icon && <span className="shrink-0">{selectedOption.icon}</span>}
           
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <span className={`truncate font-medium ${selectedOption ? 'text-slate-800 dark:text-slate-100' : 'text-slate-400'}`}>
+            <span
+              className={`truncate font-medium ${
+                isOpen
+                  ? 'text-[#1890FF] dark:text-sky-300'
+                  : selectedOption
+                  ? 'text-[#1D202A] dark:text-slate-100'
+                  : 'text-[#838899]'
+              }`}
+            >
               {selectedOption ? selectedOption.label : placeholder}
             </span>
             {selectedOption?.badge && <span className="shrink-0">{selectedOption.badge}</span>}
@@ -375,8 +389,8 @@ export function Dropdown<T extends string | number>({
         </div>
 
         <ChevronDown
-          className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-indigo-600 dark:text-indigo-400' : ''
+          className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${
+            isOpen ? 'rotate-180 text-[#1890FF] dark:text-sky-400' : 'text-[#838899]'
           }`}
         />
       </button>

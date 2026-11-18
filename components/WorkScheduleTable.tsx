@@ -23,7 +23,7 @@ import { WeeklyReportModal } from './WeeklyReportModal';
 import { TaskDetailModal } from './TaskDetailModal';
 import { TaskDiscussionModal } from './TaskDiscussionModal';
 import { TicketDetailModal } from './TicketDetailModal';
-import { calculateTaskAccumulatedEffort } from '../lib/taskEffortHelper';
+import { calculateTaskAccumulatedEffort, getTaskForWeekView } from '../lib/taskEffortHelper';
 import { getEffectiveTaskCode } from '../lib/taskCodeHelper';
 import {
   Search,
@@ -58,6 +58,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { Dropdown, DropdownOption } from './common/Dropdown';
+import { SahoProgressLine, SahoStatusTag } from './common/SahoControls';
 import { NextWeekDefineView } from './NextWeekDefineView';
 import { UserAvatar } from './common/UserAvatar';
 import { TaskShareButton } from './common/TaskShareButton';
@@ -67,7 +68,7 @@ import { AssignTaskToMemberModal } from './common/AssignTaskToMemberModal';
 import { FormattedTaskTitle } from './common/FormattedTaskTitle';
 import { stripMarkdownForSearch } from '../lib/textFormattingHelper';
 import { getWeekDeadline, getWeekSundayNoon } from './WorkHistoryView';
-import { useModalAnimation } from '../hooks/useModalAnimation';
+import { Modal } from './common/Modal';
 import { AIWeeklySummaryModal } from './AIWeeklySummaryModal';
 import { isAIFeatureEnabled } from '../lib/geminiService';
 import { isSubtask, isParentTask, getSubtasksOfParent, calculateParentMetrics } from '../lib/subtaskHelper';
@@ -133,15 +134,6 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const [selectedMilestone, setSelectedMilestone] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
-
-  // Smooth Bottom Sheet animation hook
-  const {
-    isRendered: isFilterRendered,
-    isVisible: isFilterVisible,
-    handleClose: handleCloseFilter,
-    handleBackdropMouseDown: handleFilterBackdropMouseDown,
-    handleBackdropClick: handleFilterBackdropClick,
-  } = useModalAnimation(isMobileFilterOpen, () => setIsMobileFilterOpen(false));
 
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [viewingDetailTask, setViewingDetailTask] = useState<Task | null>(null);
@@ -261,9 +253,9 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   // Precompute unassigned members and unassigned tasks for all roles in selectedWeek & selectedYear
   const roleUnassignedDataMap = useMemo(() => {
     const map = new Map<string, { unassignedMembers: User[]; unassignedTasks: Task[] }>();
-    const weekTasks = tasks.filter(
-      (t) => (t.weekNumber || selectedWeek) === selectedWeek && (t.year || selectedYear) === selectedYear
-    );
+    const weekTasks = tasks
+      .map((t) => getTaskForWeekView(t, selectedWeek, selectedYear))
+      .filter((t): t is Task => Boolean(t));
     const busyAccountsSet = new Set<string>();
     weekTasks.forEach((t) => {
       if (t.assigneeAccount) {
@@ -502,28 +494,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   // Filter & Sort Tasks by Priority (High -> Medium -> Low)
   const filteredTasks = useMemo(() => {
     return tasks
+      .map((t) => getTaskForWeekView(t, selectedWeek, selectedYear))
+      .filter((t): t is Task => Boolean(t))
       .filter((t) => {
-        // Only show tasks belonging to current selected week & year
-        if (t.weekNumber !== selectedWeek || (t.year && t.year !== selectedYear)) {
+        if (t.year && t.year !== selectedYear) {
           return false;
-        }
-
-        // Ẩn task 0% và 0h nếu đã được chuyển tiếp sang tuần tới (để tuần cũ mất hoàn toàn)
-        const isZeroWork =
-          (!t.completionPercentage || t.completionPercentage === 0) &&
-          (!t.actualEffort || t.actualEffort === 0);
-        if (isZeroWork) {
-          const nextWeek = selectedWeek + 1;
-          const rootId = t.parentTaskId || t.id;
-          const alreadyTransferredToNext = tasks.some(
-            (nt) =>
-              nt.weekNumber === nextWeek &&
-              nt.year === (t.year || selectedYear) &&
-              (nt.parentTaskId === rootId || nt.id === rootId)
-          );
-          if (alreadyTransferredToNext) {
-            return false;
-          }
         }
 
         // Sub-tab filter: My Tasks default (includes primary assignee and supporters)
@@ -669,10 +644,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         border: 'border-rose-200/80 dark:border-rose-900/40',
       },
       indigo: {
-        bg: 'bg-indigo-50/95 dark:bg-indigo-950/90',
-        text: 'text-indigo-900 dark:text-indigo-200',
-        badgeBg: 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-900/60 dark:text-indigo-300 dark:border-indigo-700',
-        border: 'border-indigo-200/80 dark:border-indigo-900/40',
+        bg: 'bg-[rgba(24,144,255,0.06)] dark:bg-sky-950/90',
+        text: 'text-[#096DD9] dark:text-sky-200',
+        badgeBg: 'bg-[rgba(24,144,255,0.14)] text-[#1890FF] border-[#1890FF]/30 dark:bg-sky-900/60 dark:text-sky-300 dark:border-sky-700',
+        border: 'border-[#1890FF]/20 dark:border-sky-900/40',
       },
       cyan: {
         bg: 'bg-cyan-50/95 dark:bg-cyan-950/90',
@@ -1186,11 +1161,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
   const getStatusBadge = (status: TaskStatus) => {
     switch (status) {
       case 'Done':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/80 font-semibold';
+        return 'bg-[rgba(10,177,133,0.16)] text-[#0AB185] border-transparent dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800/80 font-medium';
       case 'In Progress':
-        return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800/80 font-semibold';
+        return 'bg-[rgba(24,144,255,0.16)] text-[#1890FF] border-transparent dark:bg-sky-950/80 dark:text-sky-300 dark:border-sky-800/80 font-medium';
       default:
-        return 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+        return 'bg-[rgba(162,166,180,0.16)] text-[#838899] border-transparent dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 font-medium';
     }
   };
 
@@ -1278,20 +1253,20 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         onClick={() => {
           handleTaskClick(t);
         }}
-        className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/70 transition cursor-pointer group ${
+        className={`hover:bg-[rgba(64,169,255,0.04)] dark:hover:bg-slate-800/70 transition cursor-pointer group ${
           isOverdue
-            ? 'bg-red-50/30 dark:bg-red-950/20'
+            ? 'bg-[rgba(255,77,79,0.05)] dark:bg-red-950/20'
             : isNestedSubtask
-            ? 'bg-slate-50/40 dark:bg-slate-900/40 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/30'
+            ? 'bg-[#F8FAFB] dark:bg-slate-900/40 hover:bg-[rgba(24,144,255,0.06)] dark:hover:bg-sky-950/30'
             : ''
         }`}
       >
         {/* STT */}
         <td className="py-3 px-4 text-center font-mono font-medium">
           {isNestedSubtask ? (
-            <span className="text-indigo-400 dark:text-indigo-400 font-bold text-xs select-none">↳</span>
+            <span className="text-[#1890FF] dark:text-sky-400 font-bold text-xs select-none">↳</span>
           ) : (
-            <span className="text-slate-400 dark:text-slate-400">{displayIdx}</span>
+            <span className="text-[#838899] dark:text-slate-400">{displayIdx}</span>
           )}
         </td>
 
@@ -1333,37 +1308,37 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                       handleTaskClick(t);
                     }
                   }}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] shrink-0 cursor-pointer hover:bg-indigo-100"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[rgba(24,144,255,0.12)] dark:bg-sky-950/80 text-[#1890FF] dark:text-sky-300 font-medium text-[10px] shrink-0 cursor-pointer hover:bg-[rgba(24,144,255,0.2)]"
                   title={
                     hasVisibleSubtasks !== false
                       ? `${taskSubtasks.length} subtask trực thuộc. Bấm để ${isCollapsed ? 'mở rộng' : 'thu gọn'}`
                       : `${taskSubtasks.length} subtask trực thuộc (giao cho thành viên khác). Bấm để xem chi tiết task cha`
                   }
                 >
-                  <Layers className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <Layers className="w-3 h-3 text-[#1890FF] dark:text-sky-400 shrink-0" />
                   {taskSubtasks.length} Subtask{hasVisibleSubtasks !== false && isCollapsed ? ' (đang ẩn)' : ''}
                 </span>
               )}
               {isSub && !isNestedSubtask && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold shrink-0">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-[4px] bg-[rgba(24,144,255,0.10)] dark:bg-sky-950/80 text-[#1890FF] dark:text-sky-300 font-medium shrink-0">
                   ↳ Thuộc: {t.subtaskParentTitle || 'Task lớn'}
                 </span>
               )}
               {isTicketTask && (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/80 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold text-[10px] shrink-0 shadow-2xs"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[rgba(179,127,235,0.16)] dark:bg-purple-950/80 text-[#9254DE] dark:text-purple-300 font-medium text-[10px] shrink-0"
                   title="Nhiệm vụ được tạo từ Ticket yêu cầu liên team"
                 >
-                  <TicketIcon className="w-3 h-3 text-purple-600 dark:text-purple-400 shrink-0" />
+                  <TicketIcon className="w-3 h-3 text-[#9254DE] dark:text-purple-400 shrink-0" />
                   Ticket yêu cầu
                 </span>
               )}
               {t.priority === 'High' && (
                 <span
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 dark:bg-red-950/80 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 font-bold text-[10px] shrink-0 shadow-2xs"
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[rgba(255,77,79,0.16)] dark:bg-red-950/80 text-[#FF4D4F] dark:text-red-300 font-medium text-[10px] shrink-0"
                   title="Mức độ ưu tiên: Cao"
                 >
-                  <Flame className="w-3 h-3 text-red-500 fill-red-500" />
+                  <Flame className="w-3 h-3 text-[#FF4D4F] fill-[#FF4D4F]" />
                   Ưu tiên cao
                 </span>
               )}
@@ -1373,18 +1348,18 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                 const milestone = t.milestoneId ? milestoneByIdMap.get(t.milestoneId) : undefined;
                 return milestone ? (
                   <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/90 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] shadow-2xs"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[rgba(24,144,255,0.10)] dark:bg-sky-950/80 text-[#096DD9] dark:text-sky-300 font-medium text-[10px]"
                     title={`Thuộc Milestone: ${milestone.title}`}
                   >
-                    <Flag className="w-2.5 h-2.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                    <Flag className="w-2.5 h-2.5 text-[#1890FF] dark:text-sky-400 shrink-0" />
                     {milestone.title}
                   </span>
                 ) : (
                   <span
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-[10px]"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#F3F4F7] dark:bg-slate-800 text-[#838899] dark:text-slate-400 text-[10px]"
                     title="Task độc lập, không gắn vào Milestone cụ thể"
                   >
-                    <FolderOpen className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                    <FolderOpen className="w-2.5 h-2.5 text-[#A2A6B4] shrink-0" />
                     Ngoài Milestone
                   </span>
                 );
@@ -1396,7 +1371,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         {/* Role Badge */}
         <td className="py-3 px-3">
           <span
-            className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded border ${getRoleStyle(
+            className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-[4px] border ${getRoleStyle(
               t.role
             )}`}
           >
@@ -1415,7 +1390,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               if (isReported) {
                 return (
                   <>
-                    <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                    <span className="font-bold text-[#1890FF] dark:text-sky-400">
                       {currentEffort}h
                     </span>
                     {displayEst !== undefined && currentEffort !== displayEst && (
@@ -1456,7 +1431,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
             {accEffort.hasMultiWeekHistory && (
               <span
-                className="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/90 dark:bg-indigo-950/80 dark:text-indigo-300 dark:border-indigo-800 cursor-default"
+                className="inline-block mt-0.5 px-1.5 py-0.2 rounded-[4px] text-[9px] font-bold bg-[rgba(24,144,255,0.12)] text-[#1890FF] dark:bg-sky-950/80 dark:text-sky-300 cursor-default"
                 title={`Tổng Effort qua ${accEffort.chainTaskCount} tuần: ${accEffort.totalEffort}h (${accEffort.weeklyBreakdown.map(wb => `T${wb.weekNumber}: ${wb.effort}h`).join(' + ')})`}
               >
                 Tổng: {accEffort.totalEffort}h
@@ -1467,13 +1442,12 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
         {/* Status */}
         <td className="py-3 px-3 text-center">
-          <span
-            className={`inline-block whitespace-nowrap px-3 py-1 text-[11px] font-semibold rounded-full border ${getStatusBadge(
-              effStatus
-            )}`}
+          <SahoStatusTag
+            variant={effStatus === 'Done' ? 'success' : effStatus === 'In Progress' ? 'info' : 'neutral'}
+            showDot
           >
             {effStatus}
-          </span>
+          </SahoStatusTag>
         </td>
 
         {/* Account & Supporters */}
@@ -1537,23 +1511,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
         {/* Completion Progress Bar */}
         <td className="py-3 px-3">
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px]">
-              <span className="text-slate-500 font-medium">{displayPct}%</span>
-            </div>
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  displayPct === 100
-                    ? 'bg-emerald-500'
-                    : displayPct > 0
-                    ? 'bg-indigo-600'
-                    : 'bg-slate-300'
-                }`}
-                style={{ width: `${displayPct}%` }}
-              />
-            </div>
-          </div>
+          <SahoProgressLine
+            value={displayPct}
+            size="md"
+            status={displayPct === 100 ? 'success' : displayPct > 0 ? 'normal' : 'normal'}
+          />
         </td>
 
         {/* End Date (Hạn hoàn thành) */}
@@ -1638,12 +1600,12 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             {isAssignedToMe && (
               <button
                 onClick={() => setReportingTask(t)}
-                className={`whitespace-nowrap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shadow-xs hover:shadow-md active:scale-95 transition-all ${
+                className={`whitespace-nowrap inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-[8px] text-xs font-medium active:scale-95 transition-all cursor-pointer ${
                   isReported
-                    ? 'bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-600 dark:hover:bg-emerald-600 text-emerald-700 dark:text-emerald-300 hover:text-white dark:hover:text-white border border-emerald-200/90 dark:border-emerald-800'
+                    ? 'bg-[rgba(10,177,133,0.14)] hover:bg-[#0AB185] text-[#088E6A] dark:text-emerald-300 hover:text-white'
                     : isReportWindowOpen
-                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
-                    : 'bg-indigo-50 dark:bg-indigo-950/80 hover:bg-indigo-600 dark:hover:bg-indigo-600 text-indigo-700 dark:text-indigo-300 hover:text-white dark:hover:text-white border border-indigo-200/90 dark:border-indigo-800'
+                    ? 'bg-[#1890FF] hover:bg-[#40A9FF] text-white'
+                    : 'bg-[rgba(24,144,255,0.10)] dark:bg-sky-950/80 hover:bg-[#1890FF] text-[#1890FF] dark:text-sky-300 hover:text-white'
                 }`}
                 title={
                   isReported
@@ -1668,7 +1630,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   e.stopPropagation();
                   onOpenTaskModal?.(undefined, t.weekNumber || selectedWeek, undefined, t.role, t);
                 }}
-                className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/80 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-500 dark:text-slate-400 rounded-xl transition-all shadow-xs"
+                className="p-1.5 bg-[#F3F4F7] dark:bg-slate-800 hover:bg-[rgba(24,144,255,0.12)] hover:text-[#1890FF] dark:hover:text-sky-400 text-[#838899] dark:text-slate-400 rounded-[8px] transition-all cursor-pointer"
                 title="Thêm Subtask trực thuộc cho task này"
               >
                 <CornerDownRight className="w-3.5 h-3.5" />
@@ -1679,7 +1641,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             {(currentUser?.role === 'Leader' || currentUser?.role === 'Advisor' || isUserAdminOrPM(currentUser)) && (
               <button
                 onClick={() => onOpenTaskModal?.(t)}
-                className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-indigo-600 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-300 rounded-xl transition-all shadow-xs"
+                className="p-1.5 bg-[#F3F4F7] dark:bg-slate-800 hover:bg-[rgba(24,144,255,0.12)] hover:text-[#1890FF] dark:hover:text-sky-400 text-[#838899] dark:text-slate-300 rounded-[8px] transition-all cursor-pointer"
                 title="Chỉnh sửa task / Giao việc"
               >
                 <Edit2 className="w-3.5 h-3.5" />
@@ -1698,7 +1660,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                     onConfirm: () => deleteTask(t.id),
                   });
                 }}
-                className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/60 hover:text-red-600 dark:hover:text-red-400 text-slate-400 dark:text-slate-400 rounded-xl transition-all shadow-xs"
+                className="p-1.5 bg-[#F3F4F7] dark:bg-slate-800 hover:bg-[rgba(255,77,79,0.14)] hover:text-[#FF4D4F] dark:hover:text-red-400 text-[#A2A6B4] dark:text-slate-400 rounded-[8px] transition-all cursor-pointer"
                 title="Xóa đầu việc này"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -1776,11 +1738,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 flex-wrap">
             {isNestedSubtask ? (
-              <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/80 px-2 py-0.5 rounded-md">
+              <span className="font-mono text-xs font-bold text-[#1890FF] bg-[rgba(24,144,255,0.12)] px-2 py-0.5 rounded-[4px]">
                 ↳ Subtask
               </span>
             ) : (
-              <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+              <span className="font-mono text-xs font-bold text-[#838899] bg-[#F3F4F7] dark:bg-slate-800 px-2 py-0.5 rounded-[4px]">
                 #{displayIdx}
               </span>
             )}
@@ -1795,19 +1757,19 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                     handleTaskClick(t);
                   }
                 }}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold text-[10px]"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[rgba(24,144,255,0.12)] text-[#1890FF] font-semibold text-[10px]"
                 title={
                   hasVisibleSubtasks !== false
                     ? `${taskSubtasks.length} subtask trực thuộc. Bấm để ${isCollapsed ? 'mở rộng' : 'thu gọn'}`
                     : `${taskSubtasks.length} subtask trực thuộc (giao cho thành viên khác). Bấm để xem chi tiết task cha`
                 }
               >
-                <Layers className="w-3 h-3 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <Layers className="w-3 h-3 text-[#1890FF] shrink-0" />
                 {taskSubtasks.length} Subtask{hasVisibleSubtasks !== false ? (isCollapsed ? ' ▶' : ' ▼') : ''}
               </button>
             )}
             {isSub && !isNestedSubtask && (
-              <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-semibold">
+              <span className="text-[10px] px-2 py-0.5 rounded-[4px] bg-[rgba(24,144,255,0.10)] text-[#1890FF] font-semibold">
                 ↳ Thuộc: {t.subtaskParentTitle || 'Task lớn'}
               </span>
             )}
@@ -1845,7 +1807,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         <div>
           <button
             onClick={() => handleTaskClick(t)}
-            className="text-left font-bold text-slate-800 dark:text-slate-100 text-sm hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors block w-full leading-snug cursor-pointer"
+            className="text-left font-bold text-[#1D202A] dark:text-slate-100 text-sm hover:text-[#1890FF] dark:hover:text-sky-400 transition-colors block w-full leading-snug cursor-pointer"
           >
             <FormattedTaskTitle title={t.title} />
           </button>
@@ -1853,8 +1815,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
           {/* Milestone Info */}
           <div className="mt-1.5 flex items-center gap-2">
             {milestone ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200/80 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 text-[10px] font-medium">
-                <Flag className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[rgba(24,144,255,0.10)] text-[#096DD9] dark:text-sky-300 text-[10px] font-medium">
+                <Flag className="w-3 h-3 text-[#1890FF] shrink-0" />
                 {milestone.title}
               </span>
             ) : (
@@ -1917,8 +1879,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
             {/* Effort */}
             <div className="text-right">
-              <span className="text-[11px] text-slate-400 dark:text-slate-400 mr-1">Effort:</span>
-              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-xs">
+              <span className="text-[11px] text-[#838899] mr-1">Effort:</span>
+              <span className="font-mono font-bold text-[#1890FF] dark:text-sky-400 text-xs">
                 {(() => {
                   const currentEffort = forAccount
                     ? getMemberTaskEffort(t, forAccount)
@@ -1927,12 +1889,12 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                 })()}
               </span>
               {displayEst !== undefined && (
-                <span className="text-[10px] text-slate-400 ml-1 font-mono">
+                <span className="text-[10px] text-[#A2A6B4] ml-1 font-mono">
                   (est: {displayEst}h)
                 </span>
               )}
               {accEffort.hasMultiWeekHistory && (
-                <div className="text-[9.5px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                <div className="text-[9.5px] font-bold text-[#1890FF] dark:text-sky-400 font-mono">
                   (Tổng: {accEffort.totalEffort}h)
                 </div>
               )}
@@ -1940,24 +1902,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
           </div>
 
           {/* Progress Bar */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px]">
-              <span className="text-slate-500 dark:text-slate-400 font-medium">Tiến độ</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300 font-mono">{displayPct}%</span>
-            </div>
-            <div className="w-full bg-slate-200/80 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  displayPct === 100
-                    ? 'bg-emerald-500'
-                    : displayPct > 0
-                    ? 'bg-blue-500'
-                    : 'bg-slate-300 dark:bg-slate-600'
-                }`}
-                style={{ width: `${displayPct}%` }}
-              />
-            </div>
-          </div>
+          <SahoProgressLine value={displayPct} size="sm" status={displayPct === 100 ? 'success' : 'normal'} />
 
           {/* End Date row */}
           <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100 dark:border-slate-800">
@@ -2057,12 +2002,12 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             {isAssignedToMe && (
               <button
                 onClick={() => setReportingTask(t)}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 h-[32px] px-3 rounded-[8px] text-xs font-medium active:scale-95 transition-all cursor-pointer ${
                   isReported
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20'
+                    ? 'bg-[#0AB185] text-white hover:bg-[#088E6A]'
                     : isReportWindowOpen
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-600/20'
-                    : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                    ? 'bg-[#1890FF] text-white hover:bg-[#40A9FF]'
+                    : 'bg-[rgba(24,144,255,0.12)] text-[#1890FF]'
                 }`}
               >
                 <Clock className="w-3.5 h-3.5" />
@@ -2124,16 +2069,16 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                     <span className={`text-xs font-bold ${cfg.text} leading-tight truncate max-w-[200px]`}>
                       {cfg.label}
                     </span>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                    <span className="text-[10px] text-[#838899] font-medium">
                       {activeGroup.tasks.length} đầu việc •{' '}
-                      <strong className="text-indigo-600 dark:text-indigo-400 font-mono">
+                      <strong className="text-[#1890FF] font-mono">
                         {displayEffort}h
                       </strong>
                     </span>
                   </div>
-                  <span className="sm:hidden text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                  <span className="sm:hidden text-[11px] font-bold text-[#1D202A] dark:text-slate-200">
                     {activeGroup.tasks.length} task •{' '}
-                    <strong className="text-indigo-600 dark:text-indigo-400 font-mono">
+                    <strong className="text-[#1890FF] font-mono">
                       {displayEffort}h
                     </strong>
                   </span>
@@ -2142,7 +2087,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             })()}
 
             {/* Subtle Vertical Divider */}
-            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 shrink-0 mx-0.5" />
+            <div className="h-5 w-px bg-[#E8E9EF] dark:bg-slate-700 shrink-0 mx-0.5" />
 
             {/* Quick Role Switcher Pills */}
             <div className="flex items-center gap-1 min-w-0 overflow-x-auto no-scrollbar">
@@ -2152,10 +2097,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   <button
                     key={`quick-role-${group.role}`}
                     onClick={() => scrollToRole(group.role)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all duration-200 active:scale-95 cursor-pointer whitespace-nowrap shrink-0 ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] text-[11px] font-medium transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0 ${
                       isActive
-                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30 ring-2 ring-indigo-400/30'
-                        : 'bg-slate-100/90 hover:bg-slate-200 dark:bg-slate-800/90 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        ? 'bg-[#1890FF] text-white'
+                        : 'bg-[#F3F4F7] hover:bg-[#E8E9EF] dark:bg-slate-800 text-[#838899] dark:text-slate-300'
                     }`}
                     title={`Nhảy tới nhóm ${group.role}`}
                   >
@@ -2163,8 +2108,8 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                     <span
                       className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold transition-colors ${
                         isActive
-                          ? 'bg-indigo-700/80 text-white'
-                          : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                          ? 'bg-[#096DD9] text-white'
+                          : 'bg-[#E8E9EF] dark:bg-slate-700 text-[#838899]'
                       }`}
                     >
                       {group.tasks.length}
@@ -2175,13 +2120,13 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             </div>
 
             {/* Subtle Vertical Divider */}
-            <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 shrink-0 mx-0.5" />
+            <div className="h-5 w-px bg-[#E8E9EF] dark:bg-slate-700 shrink-0 mx-0.5" />
 
             {/* Quick Scroll to Top button on floating bar */}
             <button
               type="button"
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="flex items-center gap-1 px-2 py-1 rounded-xl text-[11px] font-bold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-300 bg-slate-100/90 hover:bg-indigo-50/80 dark:bg-slate-800/90 dark:hover:bg-indigo-950/40 border border-slate-200/60 dark:border-slate-700/60 transition-all duration-200 active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-[8px] text-[11px] font-medium text-[#838899] hover:text-[#1890FF] bg-[#F8FAFB] hover:bg-[rgba(64,169,255,0.08)] border border-[#E8E9EF] dark:border-slate-700 transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
               title="Cuộn lên đầu trang"
             >
               <ArrowUp className="w-3.5 h-3.5" />
@@ -2191,116 +2136,190 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         </div>
       )}
 
-      {/* Header & Sub-tabs Switcher */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 sm:space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-4">
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-                <span className="sm:hidden">Work Schedules</span>
-                <span className="hidden sm:inline">Work Schedules (Bảng Công Việc Chi Tiết)</span>
-              </h2>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                {filteredTasks.length} đầu việc
-              </span>
+      {/* Header Banner + Saho KPI Stat Strip (inspired by Figma Page-Employee-Profile) */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-3.5 items-stretch">
+        {/* Left Hero Card (6 cols on xl) */}
+        <div className="xl:col-span-6 saho-hero-card border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-4 sm:p-5 flex flex-col justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-bold text-[#1D202A] dark:text-slate-100 tracking-tight">
+                  Work Schedules
+                </h2>
+                <SahoStatusTag variant="info">
+                  Tuần {selectedWeek}
+                </SahoStatusTag>
+              </div>
+              <p className="text-[13px] text-[#838899] dark:text-slate-400 mt-1">
+                Quản lý tiến độ, giờ làm thực tế (Effort) và trao đổi ghi chú công việc.
+              </p>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Quản lý tiến độ, giờ làm thực tế (Effort) và trao đổi ghi chú với Leader.
-            </p>
-          </div>
 
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
-            {/* AI Weekly Summary Button for Allowed Accounts */}
-            {isUserAllowedAI(currentUser, 'weeklyReport') && (
-              <button
-                type="button"
-                onClick={() => setIsAIWeeklySummaryOpen(true)}
-                className="group relative inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:via-indigo-500 hover:to-blue-500 text-white text-xs font-bold rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-md shadow-purple-500/20 hover:shadow-lg hover:shadow-purple-500/30 border border-purple-400/30 dark:border-purple-300/30 tracking-tight"
-                title={`Sử dụng AI Gemini để phân tích toàn bộ tiến độ, hiệu suất và rủi ro Tuần ${selectedWeek}`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-200 group-hover:text-white transition-colors animate-pulse" />
-                <span>AI Báo Cáo Tuần {selectedWeek}</span>
-              </button>
-            )}
-
-            {/* Quick Rollback Button for Admin/PO if current week is finalized */}
-            {(isUserAdminOrPM(currentUser) || currentUser?.specializations?.includes('PO')) &&
-              weeklyArchives.some((a) => a.weekNumber === selectedWeek && (a.year || 2026) === selectedYear) && (
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              {isUserAllowedAI(currentUser, 'weeklyReport') && (
                 <button
                   type="button"
-                  onClick={() => rollbackWeekArchive(selectedWeek, selectedYear)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 text-xs font-bold rounded-xl transition active:scale-95 cursor-pointer"
-                  title={`Rollback / Hoàn tác chốt Tuần ${selectedWeek}, khôi phục lại toàn bộ dữ liệu task để kiểm tra lại`}
+                  onClick={() => setIsAIWeeklySummaryOpen(true)}
+                  className="inline-flex items-center gap-1.5 h-[32px] px-3.5 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-[13px] font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition-all active:scale-95 cursor-pointer"
+                  title={`Sử dụng AI Gemini để phân tích toàn bộ tiến độ, hiệu suất và rủi ro Tuần ${selectedWeek}`}
                 >
-                  <RotateCcw className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                  <span>Rollback Chốt Tuần {selectedWeek}</span>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>AI Báo Cáo Tuần {selectedWeek}</span>
                 </button>
               )}
+
+              {(isUserAdminOrPM(currentUser) || currentUser?.specializations?.includes('PO')) &&
+                weeklyArchives.some((a) => a.weekNumber === selectedWeek && (a.year || 2026) === selectedYear) && (
+                  <button
+                    type="button"
+                    onClick={() => rollbackWeekArchive(selectedWeek, selectedYear)}
+                    className="inline-flex items-center gap-1.5 h-[32px] px-3 bg-white dark:bg-slate-900 hover:bg-[rgba(255,77,79,0.08)] text-[#FF4D4F] border border-[#FF4D4F]/35 text-xs font-medium rounded-[8px] transition active:scale-95 cursor-pointer"
+                    title={`Rollback / Hoàn tác chốt Tuần ${selectedWeek}, khôi phục lại toàn bộ dữ liệu task để kiểm tra lại`}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Rollback Tuần {selectedWeek}</span>
+                  </button>
+                )}
+            </div>
+          </div>
+
+          {/* Saho Tab Navigation Bar */}
+          <div className="flex items-center gap-1 bg-white/85 dark:bg-slate-900/80 p-1 rounded-[8px] border border-[#E8E9EF] dark:border-slate-800 w-full sm:w-fit overflow-x-auto no-scrollbar">
+            <button
+              onClick={() => setSubTab('MY_TASKS')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 h-[30px] px-3 rounded-[6px] text-[13px] font-medium transition-all active:scale-95 whitespace-nowrap cursor-pointer ${
+                subTab === 'MY_TASKS'
+                  ? 'bg-[#1890FF] text-white shadow-xs'
+                  : 'text-[#838899] dark:text-slate-300 hover:text-[#1890FF] hover:bg-[rgba(64,169,255,0.08)]'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Task Của Tôi</span>
+            </button>
+            <button
+              onClick={() => setSubTab('ALL_TASKS')}
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 h-[30px] px-3 rounded-[6px] text-[13px] font-medium transition-all active:scale-95 whitespace-nowrap cursor-pointer ${
+                subTab === 'ALL_TASKS'
+                  ? 'bg-[#1890FF] text-white shadow-xs'
+                  : 'text-[#838899] dark:text-slate-300 hover:text-[#1890FF] hover:bg-[rgba(64,169,255,0.08)]'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>Tất Cả Công Việc</span>
+            </button>
+            {isSunday && (
+              <button
+                onClick={() => setSubTab('DEFINE_NEXT_WEEK')}
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 h-[30px] px-3 rounded-[6px] text-[13px] font-medium transition-all active:scale-95 whitespace-nowrap cursor-pointer ${
+                  subTab === 'DEFINE_NEXT_WEEK'
+                    ? 'bg-[#1890FF] text-white shadow-xs'
+                    : 'text-[#838899] dark:text-slate-300 hover:text-[#1890FF] hover:bg-[rgba(64,169,255,0.08)]'
+                }`}
+              >
+                <CalendarPlus className="w-3.5 h-3.5" />
+                <span>Define Tuần {selectedWeek + 1}</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Navigation Sub-Tabs Switcher */}
-        <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700 w-full sm:w-fit overflow-x-auto no-scrollbar gap-1">
-          <button
-            onClick={() => setSubTab('MY_TASKS')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${
-              subTab === 'MY_TASKS'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-slate-700/60'
-            }`}
-          >
-            <UserCheck className={`w-3.5 h-3.5 ${subTab === 'MY_TASKS' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-            <span>Task Của Tôi</span>
-          </button>
-          <button
-            onClick={() => setSubTab('ALL_TASKS')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${
-              subTab === 'ALL_TASKS'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/50 dark:hover:bg-slate-700/60'
-            }`}
-          >
-            <Globe className={`w-3.5 h-3.5 ${subTab === 'ALL_TASKS' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-            <span>Tất Cả Công Việc</span>
-          </button>
-          {isSunday && (
-            <button
-              onClick={() => setSubTab('DEFINE_NEXT_WEEK')}
-              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${
-                subTab === 'DEFINE_NEXT_WEEK'
-                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-white/60 dark:hover:bg-slate-700/60'
-              }`}
-            >
-              <CalendarPlus className={`w-3.5 h-3.5 ${subTab === 'DEFINE_NEXT_WEEK' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
-              <span className="sm:hidden">Define Tuần {selectedWeek + 1}</span>
-              <span className="hidden sm:inline">Define Tuần {selectedWeek + 1}</span>
-            </button>
-          )}
-        </div>
+        {/* Right KPI Cards (4 Saho Stat Cards matching Card-Analyze-EmployeeProfile) */}
+        {(() => {
+          const doneCount = filteredTasks.filter((t) => getEffectiveTaskStatus(t) === 'Done').length;
+          const inProgCount = filteredTasks.filter((t) => getEffectiveTaskStatus(t) === 'In Progress').length;
+          const hasAnyReported = filteredTasks.some((t) => !!t.lastSubmittedAt);
+          const displayEffort = hasAnyReported ? totalActualEffort : totalEstimatedEffort;
+          const pctDone = filteredTasks.length > 0 ? Math.round((doneCount / filteredTasks.length) * 100) : 0;
+
+          return (
+            <div className="xl:col-span-6 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4 gap-3">
+              <div className="bg-[#F8FAFB] dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[8px] p-3 flex flex-col justify-between min-h-[104px]">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 truncate">
+                    Tổng đầu việc
+                  </span>
+                  <Layers className="w-4 h-4 text-[#1890FF] shrink-0" />
+                </div>
+                <div>
+                  <p className="text-[26px] font-bold text-[#1D202A] dark:text-white leading-tight tabular-nums">
+                    {filteredTasks.length}
+                  </p>
+                  <p className="text-[11px] text-[#A2A6B4] mt-0.5">Theo bộ lọc</p>
+                </div>
+              </div>
+
+              <div className="bg-[#F8FAFB] dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[8px] p-3 flex flex-col justify-between min-h-[104px]">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 truncate">
+                    Đang làm
+                  </span>
+                  <Clock className="w-4 h-4 text-[#FFA940] shrink-0" />
+                </div>
+                <div>
+                  <p className="text-[26px] font-bold text-[#1D202A] dark:text-white leading-tight tabular-nums">
+                    {inProgCount}
+                  </p>
+                  <p className="text-[11px] text-[#1890FF] font-medium mt-0.5">In Progress</p>
+                </div>
+              </div>
+
+              <div className="bg-[#F8FAFB] dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[8px] p-3 flex flex-col justify-between min-h-[104px]">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 truncate">
+                    Hoàn thành
+                  </span>
+                  <ShieldCheck className="w-4 h-4 text-[#0AB185] shrink-0" />
+                </div>
+                <div>
+                  <p className="text-[26px] font-bold text-[#1D202A] dark:text-white leading-tight tabular-nums">
+                    {doneCount}
+                  </p>
+                  <p className="text-[11px] text-[#0AB185] font-bold mt-0.5">{pctDone}% hoàn tất</p>
+                </div>
+              </div>
+
+              <div className="bg-[#F8FAFB] dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[8px] p-3 flex flex-col justify-between min-h-[104px]">
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 truncate">
+                    Tổng Effort
+                  </span>
+                  <Award className="w-4 h-4 text-[#0AB185] shrink-0" />
+                </div>
+                <div>
+                  <p className="text-[26px] font-bold text-[#1890FF] dark:text-sky-400 leading-tight tabular-nums font-mono">
+                    {displayEffort}h
+                  </p>
+                  <p className="text-[11px] text-[#A2A6B4] mt-0.5 font-mono">
+                    est: {totalEstimatedEffort}h
+                  </p>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {subTab === 'DEFINE_NEXT_WEEK' && isSunday ? (
         <NextWeekDefineView onOpenTaskModal={(t, w, a) => onOpenTaskModal?.(t, w, a)} />
       ) : (
         <>
-          {/* Filter Toolbar */}
-          <div className="bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-5 shadow-sm space-y-3">
+          {/* Filter Toolbar (Figma Input h-[32px] + Dropdowns) */}
+          <div className="bg-[#F8FAFB] dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-3 sm:p-4 space-y-3">
             {/* MOBILE COMPACT SEARCH & FILTER BUTTON ROW (< sm) */}
             <div className="flex sm:hidden items-center gap-2">
               <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <Search className="w-4 h-4 text-[#838899] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Tìm kiếm task, mã task..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
+                  className="w-full h-[34px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] pl-9 pr-8 text-[13px] text-[#1D202A] dark:text-slate-200 placeholder-[#838899] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF]"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A2A6B4] hover:text-[#1D202A] p-0.5"
                     title="Xóa tìm kiếm"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -2311,16 +2330,16 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
               {/* Round Filter Button */}
               <button
                 onClick={() => setIsMobileFilterOpen(true)}
-                className={`relative w-9 h-9 rounded-xl flex items-center justify-center border transition-all shrink-0 cursor-pointer active:scale-95 ${
+                className={`relative w-[34px] h-[34px] rounded-[8px] flex items-center justify-center border transition-all shrink-0 cursor-pointer active:scale-95 ${
                   activeFilterCount > 0
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600'
+                    ? 'bg-[#1890FF] border-[#1890FF] text-white'
+                    : 'bg-white hover:border-[#A2A6B4] border-[#E8E9EF] text-[#838899]'
                 }`}
                 title="Mở bộ lọc tìm kiếm"
               >
                 <SlidersHorizontal className="w-4 h-4" />
                 {activeFilterCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#FF4D4F] text-white text-[9px] font-bold flex items-center justify-center border-2 border-white">
                     {activeFilterCount}
                   </span>
                 )}
@@ -2328,21 +2347,21 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             </div>
 
             {/* DESKTOP INLINE FILTER GRID (>= sm) */}
-            <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
+            <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
               {/* Search */}
               <div className="relative col-span-1 md:col-span-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <Search className="w-4 h-4 text-[#838899] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Tìm kiếm task, mã task..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-800"
+                  className="w-full h-[32px] bg-white dark:bg-slate-800 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] pl-9 pr-8 text-[13px] text-[#1D202A] dark:text-slate-200 placeholder-[#838899] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] transition"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A2A6B4] hover:text-[#1D202A] p-0.5 cursor-pointer"
                     title="Xóa tìm kiếm"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -2357,7 +2376,6 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   onChange={handleRoleChange}
                   options={roleOptions}
                   className="w-full"
-                  buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
                 />
               </div>
 
@@ -2369,7 +2387,6 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                     onChange={setSelectedAccount}
                     options={accountOptions}
                     className="w-full"
-                    buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
                   />
                 </div>
               )}
@@ -2381,7 +2398,6 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   onChange={setSelectedMilestone}
                   options={milestoneOptions}
                   className="w-full"
-                  buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
                 />
               </div>
 
@@ -2392,7 +2408,6 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   onChange={(val) => setSelectedStatus(val as TaskStatus | 'ALL')}
                   options={statusOptions}
                   className="w-full"
-                  buttonClassName="py-2 px-3 text-xs bg-slate-50 border-slate-200"
                 />
               </div>
             </div>
@@ -2400,12 +2415,12 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
           {/* Task List Container (Observed by tableContainerRef for Floating Bar detection) */}
           <div ref={tableContainerRef} className="space-y-4">
-            {/* DESKTOP VIEW: Table Grid */}
+            {/* DESKTOP VIEW: Saho Table Grid */}
             {(deviceType === 'desktop' || deviceType === 'all') && (
-              <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+              <div className="hidden md:block bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] overflow-hidden shadow-[0_1px_2px_rgba(29,32,42,0.03)]">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-semibold uppercase tracking-wider">
+                  <table className="w-full text-left text-[13px] border-collapse">
+                    <thead className="h-[40px] bg-[rgba(73,82,106,0.03)] dark:bg-slate-800/70 border-b border-[#E8E9EF] dark:border-slate-800 text-[#838899] dark:text-slate-400 text-[12px] font-semibold uppercase tracking-wide">
                       <tr>
                         <th className="py-3.5 px-4 w-12 text-center">STT</th>
                         <th className="py-3.5 px-4 min-w-[280px]">Task Name (Bấm xem chi tiết)</th>
@@ -2538,11 +2553,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
                   {/* Table Footer Totals */}
                   <tfoot>
-                    <tr className="bg-slate-50 border-t border-slate-200 text-slate-700 font-semibold">
-                      <td colSpan={3} className="py-3 px-4 text-right uppercase text-[10px] tracking-wider text-slate-500">
+                    <tr className="bg-[#F8FAFB] dark:bg-slate-800/60 border-t border-[#E8E9EF] dark:border-slate-800 text-[#1D202A] dark:text-slate-200 font-semibold">
+                      <td colSpan={3} className="py-3 px-4 text-right uppercase text-[11px] tracking-wider text-[#838899]">
                         Tổng Cộng ({filteredTasks.length} task):
                       </td>
-                      <td className="py-3 px-3 text-center font-mono text-indigo-600 font-bold">
+                      <td className="py-3 px-3 text-center font-mono text-[#1890FF] font-bold">
                         {filteredTasks.some((t) => !!t.lastSubmittedAt)
                           ? `${totalActualEffort}h`
                           : `${totalEstimatedEffort}h`}
@@ -2684,16 +2699,16 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
 
               {/* Mobile Summary Card */}
               {filteredTasks.length > 0 && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                <div className="bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 rounded-[12px] p-4 flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#838899] dark:text-slate-300">
                     Tổng cộng ({filteredTasks.length} task):
                   </span>
                   <div className="text-right">
-                    <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-sm">
+                    <span className="font-mono font-bold text-[#1890FF] dark:text-sky-400 text-sm">
                       {filteredTasks.some((t) => !!t.lastSubmittedAt) ? `${totalActualEffort}h` : `${totalEstimatedEffort}h`}
                     </span>
                     {filteredTasks.some((t) => !!t.lastSubmittedAt) && totalActualEffort !== totalEstimatedEffort && (
-                      <span className="text-[10px] text-slate-400 font-normal ml-1 font-mono">
+                      <span className="text-[10px] text-[#A2A6B4] font-normal ml-1 font-mono">
                         (est: {totalEstimatedEffort}h)
                       </span>
                     )}
@@ -2707,9 +2722,9 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
           {hasMoreItems && (
             <div
               ref={sentinelRef}
-              className="w-full py-4 flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400 select-none animate-pulse"
+              className="w-full py-4 flex items-center justify-center gap-2 text-xs text-[#838899] dark:text-slate-400 select-none animate-pulse"
             >
-              <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-[#1890FF] border-t-transparent rounded-full animate-spin" />
               <span>Đang hiển thị thêm công việc...</span>
               <button
                 type="button"
@@ -2717,7 +2732,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                   setVisibleRoleCount(preparedScheduleData.roleGroups.length);
                   setVisibleMyTasksCount(preparedScheduleData.myTasks?.rootFilteredTasks.length || 9999);
                 }}
-                className="ml-2 text-indigo-600 dark:text-indigo-400 underline hover:text-indigo-800 font-semibold cursor-pointer"
+                className="ml-2 text-[#1890FF] dark:text-sky-400 underline hover:text-[#40A9FF] font-semibold cursor-pointer"
               >
                 (Tải tất cả ngay)
               </button>
@@ -2728,131 +2743,97 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       )}
 
       {/* MOBILE FILTER MODAL / BOTTOM SHEET */}
-      {isFilterRendered && (
-        <div
-          onMouseDown={handleFilterBackdropMouseDown}
-          onClick={handleFilterBackdropClick}
-          className={`fixed inset-0 bg-slate-900/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bottomsheet-backdrop-transition ${
-            isFilterVisible ? 'bottomsheet-backdrop-open' : 'bottomsheet-backdrop-closed'
-          }`}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] flex flex-col shadow-2xl overflow-hidden text-slate-800 dark:text-slate-100 bottomsheet-dialog-transition ${
-              isFilterVisible ? 'bottomsheet-dialog-open' : 'bottomsheet-dialog-closed'
-            }`}
-          >
-            {/* Drag Handle on Mobile */}
-            <div className="sm:hidden w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-2.5 mb-0.5 shrink-0" />
-
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0 bg-slate-50/50 dark:bg-slate-800/40">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                  <SlidersHorizontal className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                    Bộ Lọc Công Việc
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    {activeFilterCount > 0 ? `Đang chọn ${activeFilterCount} bộ lọc` : 'Tất cả điều kiện mặc định'}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleCloseFilter}
-                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 flex items-center justify-center transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-5 space-y-4 overflow-y-auto text-xs">
-              {/* Role Filter */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-200 block">
-                  Vị Trí Chuyên Môn (Role):
-                </label>
-                <Dropdown
-                  value={selectedRole}
-                  onChange={handleRoleChange}
-                  options={roleOptions}
-                  className="w-full"
-                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
-                />
-              </div>
-
-              {/* Account Filter (if ALL_TASKS) */}
-              {subTab === 'ALL_TASKS' && (
-                <div className="space-y-1.5">
-                  <label className="font-bold text-slate-700 dark:text-slate-200 block">
-                    Thành Viên Phụ Trách:
-                  </label>
-                  <Dropdown
-                    value={selectedAccount}
-                    onChange={setSelectedAccount}
-                    options={accountOptions}
-                    className="w-full"
-                    buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
-                  />
-                </div>
-              )}
-
-              {/* Milestone Filter */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-200 block">
-                  Cột Mốc (Milestone):
-                </label>
-                <Dropdown
-                  value={selectedMilestone}
-                  onChange={setSelectedMilestone}
-                  options={milestoneOptions}
-                  className="w-full"
-                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-200 block">
-                  Trạng Thái Task:
-                </label>
-                <Dropdown
-                  value={selectedStatus}
-                  onChange={(val) => setSelectedStatus(val as TaskStatus | 'ALL')}
-                  options={statusOptions}
-                  className="w-full"
-                  buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
-                />
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition cursor-pointer active:scale-95"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Đặt lại
-              </button>
-
-              <button
-                type="button"
-                onClick={handleCloseFilter}
-                className="flex-1 py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/20 transition cursor-pointer active:scale-95 text-center"
-              >
-                Áp Dụng ({filteredTasks.length} task)
-              </button>
-            </div>
+      <Modal
+        isOpen={isMobileFilterOpen}
+        onClose={() => setIsMobileFilterOpen(false)}
+        size="md"
+        bodyClassName="space-y-4 text-xs"
+        icon={
+          <div className="w-8 h-8 rounded-[8px] bg-[rgba(24,144,255,0.12)] dark:bg-sky-950/60 text-[#1890FF] dark:text-[#40A9FF] flex items-center justify-center">
+            <SlidersHorizontal className="w-4 h-4" />
           </div>
+        }
+        title="Bộ Lọc Công Việc"
+        description={activeFilterCount > 0 ? `Đang chọn ${activeFilterCount} bộ lọc` : 'Tất cả điều kiện mặc định'}
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="saho-modal-btn-secondary flex items-center gap-1.5"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Đặt lại
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileFilterOpen(false)}
+              className="saho-modal-btn-primary flex-1 text-center"
+            >
+              Áp Dụng ({filteredTasks.length} task)
+            </button>
+          </div>
+        }
+      >
+        {/* Role Filter */}
+        <div className="space-y-1.5">
+          <label className="font-bold text-slate-700 dark:text-slate-200 block">
+            Vị Trí Chuyên Môn (Role):
+          </label>
+          <Dropdown
+            value={selectedRole}
+            onChange={handleRoleChange}
+            options={roleOptions}
+            className="w-full"
+            buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+          />
         </div>
-      )}
+
+        {/* Account Filter (if ALL_TASKS) */}
+        {subTab === 'ALL_TASKS' && (
+          <div className="space-y-1.5">
+            <label className="font-bold text-slate-700 dark:text-slate-200 block">
+              Thành Viên Phụ Trách:
+            </label>
+            <Dropdown
+              value={selectedAccount}
+              onChange={setSelectedAccount}
+              options={accountOptions}
+              className="w-full"
+              buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+            />
+          </div>
+        )}
+
+        {/* Milestone Filter */}
+        <div className="space-y-1.5">
+          <label className="font-bold text-slate-700 dark:text-slate-200 block">
+            Cột Mốc (Milestone):
+          </label>
+          <Dropdown
+            value={selectedMilestone}
+            onChange={setSelectedMilestone}
+            options={milestoneOptions}
+            className="w-full"
+            buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+          />
+        </div>
+
+        {/* Status Filter */}
+        <div className="space-y-1.5">
+          <label className="font-bold text-slate-700 dark:text-slate-200 block">
+            Trạng Thái Task:
+          </label>
+          <Dropdown
+            value={selectedStatus}
+            onChange={(val) => setSelectedStatus(val as TaskStatus | 'ALL')}
+            options={statusOptions}
+            className="w-full"
+            buttonClassName="py-2.5 px-3 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium"
+          />
+        </div>
+      </Modal>
 
       {/* Task Discussion Modal (Only Notes & Stream) */}
       <TaskDiscussionModal
