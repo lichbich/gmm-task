@@ -474,7 +474,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           ? `cột mốc "${milestones.find((m) => m.id === milestoneId)?.title || 'Milestone'}"`
           : 'dự án'
       } (Tuần ${defaultWeek || selectedWeek}). Bạn có muốn tiếp tục?`,
-      confirmText: `Tạo ngay ${tasksToCreate.length} task`,
+      confirmText: `Tạo ${tasksToCreate.length} task`,
       cancelText: 'Hủy',
       type: 'info',
       onConfirm: () => {
@@ -1060,8 +1060,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       confirmDialog({
         title: 'Nhắc nhở cập nhật % tiến độ',
         message: `Bạn đang nhập ${rawActualEffort}h làm việc nhưng phần trăm tiến độ vẫn để 0%.\n\n• Theo quy định, nếu tiến độ 0% (coi như chưa làm) thì số giờ làm việc thực tế sẽ tự động chuyển về 0h và trạng thái là "To do" (không thể đánh Done).\n• Bạn có muốn quay lại điều chỉnh % tiến độ không? Hoặc bấm "Vẫn lưu 0%" để lưu task chưa làm (số giờ sẽ tự động về 0h).`,
-        confirmText: 'Vẫn lưu 0% (Giờ = 0h)',
-        cancelText: 'Cập nhật lại tiến độ',
+        confirmText: 'Vẫn lưu 0%',
+        cancelText: 'Cập nhật lại',
         type: 'warning',
         onConfirm: () => {
           executeSave(0, 0, 'To do');

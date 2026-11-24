@@ -1,6 +1,7 @@
 /** =========================================================================
  * SAHO TASK SYSTEM - GOOGLE APPS SCRIPT SYNC TOOL
- * - Đồng bộ danh sách công việc từ Firebase DB (/tasks.json) vào Google Sheet
+ * - Đồng bộ danh sách công việc từ Firebase DB (/tasks.json, weeklyHistory và /weeklyArchives.json) vào Google Sheet
+ * - Hỗ trợ đầy đủ cả mô hình Task hợp nhất (Single-Task với weeklyHistory) lẫn dữ liệu lịch sử tuần cũ (/weeklyArchives.json)
  * - Không ghi đè hay can thiệp vào Data Validation của Google Sheet để bảo tồn 100% kiểu "Khối" (Chip)
  * - Nghiệp vụ đồng bộ chuẩn xác:
  *   + Xử lý chuyển giao tuần (Rollover):
@@ -218,6 +219,153 @@ function calculateParentExtraEffort(parentTask, allSubtasksOfT, accName, isPastW
 }
 
 /**
+ * Chuẩn hóa số tuần về hệ tuần cộng dồn Saho (Week 95, 96, ..., 102)
+ */
+function normalizeSahoWeekNum(rawWeek) {
+    const n = Number(rawWeek) || 38;
+    return n > 50 ? n : n + 55;
+}
+
+/**
+ * Trích xuất số tuần cộng dồn Saho từ key (VD: "2026-W101") hoặc value của weeklyHistory entry
+ */
+function parseWeeklyHistoryWeekNum(histKey, entry) {
+    if (entry && entry.weekNumber !== undefined && entry.weekNumber !== null && entry.weekNumber !== '') {
+        return normalizeSahoWeekNum(entry.weekNumber);
+    }
+    const m = String(histKey || '').match(/W(\d+)$/i);
+    if (m) {
+        return normalizeSahoWeekNum(Number(m[1]));
+    }
+    return 0;
+}
+
+function normalizeTaskDedupeText(val) {
+    return String(val || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * Chiếu dữ liệu một task hợp nhất (single-task + weeklyHistory) về đúng trạng thái của tuần `targetSahoWeek`
+ */
+function projectTaskForSahoWeek(baseTask, entry, targetSahoWeek, fallbackYear) {
+    const safeEntry = entry || {};
+    return {
+        ...baseTask,
+        weekNumber: targetSahoWeek,
+        year: safeEntry.year || baseTask.year || fallbackYear || 2026,
+        actualEffort: safeEntry.actualEffort !== undefined ? safeEntry.actualEffort : baseTask.actualEffort,
+        estimatedEffort: safeEntry.estimatedEffort !== undefined ? safeEntry.estimatedEffort : baseTask.estimatedEffort,
+        completionPercentage: safeEntry.completionPercentage !== undefined ? safeEntry.completionPercentage : baseTask.completionPercentage,
+        status: safeEntry.status || baseTask.status,
+        assigneeAccount: safeEntry.assigneeAccount !== undefined ? safeEntry.assigneeAccount : baseTask.assigneeAccount,
+        supporterAccounts: safeEntry.supporterAccounts !== undefined ? safeEntry.supporterAccounts : baseTask.supporterAccounts,
+        memberEfforts: safeEntry.memberEfforts !== undefined ? safeEntry.memberEfforts : baseTask.memberEfforts,
+        lastSubmittedAt: safeEntry.lastSubmittedAt !== undefined ? safeEntry.lastSubmittedAt : baseTask.lastSubmittedAt,
+        isSubmittedLate: safeEntry.isSubmittedLate !== undefined ? safeEntry.isSubmittedLate : baseTask.isSubmittedLate
+    };
+}
+
+/**
+ * Mở rộng và hợp nhất toàn bộ task theo từng tuần Saho (>= 95) từ 3 nguồn:
+ * 1. Task live trên /tasks.json ở đúng tuần `t.weekNumber`
+ * 2. Các tuần trước lưu trong `t.weeklyHistory` (do nghiệp vụ mới chỉ giữ 1 task duy nhất rollover qua các tuần)
+ * 3. Các task lịch sử từ /weeklyArchives.json (bù những task tuần cũ không còn trong /tasks.json hoặc chưa có weeklyHistory)
+ * Có chống trùng lặp trong từng tuần theo id, parentTaskId, code và (title + assigneeAccount).
+ */
+function buildExpandedWeeklyTasks(taskList, archiveList) {
+    const tasksBySahoWeek = {};
+    const weekSeenMeta = {};
+
+    const ensureWeekBucket = (w) => {
+        if (!tasksBySahoWeek[w]) {
+            tasksBySahoWeek[w] = [];
+            weekSeenMeta[w] = {
+                ids: new Set(),
+                parentIds: new Set(),
+                codes: new Set(),
+                titleAccs: new Set()
+            };
+        }
+        return weekSeenMeta[w];
+    };
+
+    const registerTaskInWeek = (w, taskObj, checkDuplicate) => {
+        if (!taskObj || w < 95) return;
+        const titleClean = String(taskObj.title || '').trim();
+        if (!titleClean) return;
+
+        const meta = ensureWeekBucket(w);
+        const tid = String(taskObj.id || '').trim();
+        const pid = String(taskObj.parentTaskId || '').trim();
+        const code = normalizeTaskDedupeText(taskObj.code);
+        const titleAccKey = `${normalizeTaskDedupeText(titleClean)}|${normalizeTaskDedupeText(taskObj.assigneeAccount)}`;
+
+        if (checkDuplicate) {
+            if (tid && meta.ids.has(tid)) return;
+            if (pid && meta.ids.has(pid)) return;
+            if (tid && meta.parentIds.has(tid)) return;
+            if (code && meta.codes.has(code)) return;
+            if (meta.titleAccs.has(titleAccKey)) return;
+        }
+
+        if (tid) meta.ids.add(tid);
+        if (pid) meta.parentIds.add(pid);
+        if (code) meta.codes.add(code);
+        meta.titleAccs.add(titleAccKey);
+
+        tasksBySahoWeek[w].push({
+            ...taskObj,
+            sahoWeekNum: w
+        });
+    };
+
+    // Nguồn 1: Task trực tiếp trên /tasks.json theo t.weekNumber
+    (taskList || []).forEach(t => {
+        if (!t) return;
+        const w = normalizeSahoWeekNum(t.weekNumber);
+        if (w < 95) return;
+        registerTaskInWeek(w, { ...t, weekNumber: w }, false);
+    });
+
+    // Nguồn 2: Các tuần trước nằm trong t.weeklyHistory của từng task hợp nhất
+    (taskList || []).forEach(t => {
+        if (!t || !t.weeklyHistory || typeof t.weeklyHistory !== 'object') return;
+        Object.entries(t.weeklyHistory).forEach(([histKey, entry]) => {
+            if (!entry || typeof entry !== 'object') return;
+            const hw = parseWeeklyHistoryWeekNum(histKey, entry);
+            if (hw < 95) return;
+            const projected = projectTaskForSahoWeek(t, entry, hw, t.year || 2026);
+            registerTaskInWeek(hw, projected, true);
+        });
+    });
+
+    // Nguồn 3: Dữ liệu snapshot trong /weeklyArchives.json cho các tuần cũ bị thiếu trong /tasks.json
+    (archiveList || []).forEach(arch => {
+        if (!arch || !Array.isArray(arch.tasksSnapshot)) return;
+        const aw = normalizeSahoWeekNum(arch.weekNumber);
+        if (aw < 95) return;
+        arch.tasksSnapshot.forEach(st => {
+            if (!st) return;
+            registerTaskInWeek(aw, {
+                ...st,
+                weekNumber: aw,
+                year: st.year || arch.year || 2026
+            }, true);
+        });
+    });
+
+    const expandedTaskList = [];
+    Object.keys(tasksBySahoWeek)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .forEach(w => {
+            tasksBySahoWeek[w].forEach(item => expandedTaskList.push(item));
+        });
+
+    return { expandedTaskList, tasksBySahoWeek };
+}
+
+/**
  * 2. Hàm đồng bộ tất cả các tuần từ Firebase vào Google Sheet
  */
 function syncTasksFormattedToSheet() {
@@ -265,7 +413,7 @@ function syncTasksFormattedToSheet() {
         Logger.log("Chưa lấy được danh sách roles: " + err.toString());
     }
 
-    // B. Lấy dữ liệu Task từ Firebase RTDB /tasks.json
+    // B. Lấy dữ liệu Task từ Firebase RTDB /tasks.json và lịch sử tuần từ /weeklyArchives.json
     let firebaseTasks = {};
     try {
         const response = UrlFetchApp.fetch(`${FIREBASE_URL}/tasks.json`);
@@ -278,8 +426,22 @@ function syncTasksFormattedToSheet() {
         return;
     }
 
-    const taskList = Object.values(firebaseTasks);
-    if (taskList.length === 0) {
+    let archiveList = [];
+    try {
+        const archiveRes = UrlFetchApp.fetch(`${FIREBASE_URL}/weeklyArchives.json`);
+        const archiveContent = archiveRes.getContentText();
+        if (archiveContent && archiveContent !== 'null') {
+            const archiveData = JSON.parse(archiveContent);
+            archiveList = Object.values(archiveData).filter(Boolean);
+        }
+    } catch (err) {
+        Logger.log("Chưa lấy được weeklyArchives: " + err.toString());
+    }
+
+    const taskList = Object.values(firebaseTasks).filter(Boolean);
+    const { expandedTaskList, tasksBySahoWeek } = buildExpandedWeeklyTasks(taskList, archiveList);
+
+    if (expandedTaskList.length === 0) {
         safeAlert("ℹ️ Chưa có Task nào trên Hệ thống.");
         return;
     }
@@ -287,13 +449,11 @@ function syncTasksFormattedToSheet() {
     // C. Nhóm toàn bộ Task theo từng Tuần khác nhau (Tuần 95, Tuần 96...)
     const tasksByWeekAndRole = {};
 
-    taskList.forEach(t => {
+    expandedTaskList.forEach(t => {
         const titleClean = String(t.title || '').trim();
         if (!titleClean) return;
 
-        const rawWeek = Number(t.weekNumber) || 38;
-        // Task weekNumber trên hệ thống Saho đã là số tuần cộng dồn (VD: 93, 94, 95, 96). Nếu <= 53 mới cần + 55.
-        const sahoWeekNum = rawWeek > 50 ? rawWeek : rawWeek + 55;
+        const sahoWeekNum = t.sahoWeekNum || normalizeSahoWeekNum(t.weekNumber);
 
         // BỎ QUA CÁC TUẦN < 95: Tuần 94 trở xuống chỉ lưu trong Lịch Sử Công Việc, đồng bộ từ Tuần 95 trở đi làm chuẩn
         if (sahoWeekNum < 95) return;
@@ -465,7 +625,7 @@ function syncTasksFormattedToSheet() {
         const clean = String((u && u.account) || '').trim();
         if (clean) dynamicAccountSet.add(clean);
     });
-    taskList.forEach(t => {
+    expandedTaskList.forEach(t => {
         if (t && t.assigneeAccount) {
             const clean = String(t.assigneeAccount).trim();
             if (clean) dynamicAccountSet.add(clean);
@@ -498,7 +658,7 @@ function syncTasksFormattedToSheet() {
         if (r && r.code) dynamicRoleSet.add(String(r.code).trim());
         if (r && r.name) dynamicRoleSet.add(String(r.name).trim());
     });
-    taskList.forEach(t => {
+    expandedTaskList.forEach(t => {
         if (t && t.role) dynamicRoleSet.add(String(t.role).trim());
     });
     const dynamicRoleList = Array.from(dynamicRoleSet).filter(Boolean);
@@ -584,24 +744,43 @@ function syncTasksFormattedToSheet() {
                     }
                 });
 
-                // Kiểm tra xem task này đã được chuyển/cắt sang tuần sau hay chưa
+                const weekTasksList = tasksBySahoWeek[weekData.sahoWeekNum] || expandedTaskList;
+                const findWeekSubtasksOf = (parentTask) => {
+                    const pId = String((parentTask && parentTask.id) || '').trim();
+                    const pParentId = String((parentTask && parentTask.parentTaskId) || '').trim();
+                    return weekTasksList.filter(st => {
+                        const subPid = String((st && st.subtaskParentId) || '').trim();
+                        if (!subPid) return false;
+                        return (pId && subPid === pId) || (pParentId && subPid === pParentId);
+                    });
+                };
+
+                // Kiểm tra xem task này đã được chuyển/cắt sang tuần sau hay chưa (bao gồm cả weeklyHistory và weeklyArchives)
                 const isTransferredToFutureWeek = (taskItem) => {
                     const rootId = taskItem.parentTaskId || taskItem.id;
-                    const tTitle = String(taskItem.title || '').trim().toLowerCase();
-                    const tAcc = String(accName || taskItem.syncAccount || taskItem.assigneeAccount || '').trim().toLowerCase();
+                    const tCode = normalizeTaskDedupeText(taskItem.code);
+                    const tTitle = normalizeTaskDedupeText(taskItem.title);
+                    const tAcc = normalizeTaskDedupeText(accName || taskItem.syncAccount || taskItem.assigneeAccount);
 
-                    return taskList.some(nt => {
-                        const ntRawWeek = Number(nt.weekNumber) || 38;
-                        const ntWeekNum = ntRawWeek > 50 ? ntRawWeek : ntRawWeek + 55;
+                    return expandedTaskList.some(nt => {
+                        const ntWeekNum = nt.sahoWeekNum || normalizeSahoWeekNum(nt.weekNumber);
                         if (ntWeekNum <= weekData.sahoWeekNum) return false;
 
                         // 1. Khớp theo parentTaskId hoặc id
                         if (rootId && (nt.parentTaskId === rootId || nt.id === rootId)) return true;
 
-                        // 2. Khớp theo Title và Account
-                        const ntTitle = String(nt.title || '').trim().toLowerCase();
-                        const ntAcc = String(nt.assigneeAccount || nt.syncAccount || '').trim().toLowerCase();
-                        if (ntTitle === tTitle && ntAcc === tAcc) return true;
+                        // 2. Khớp theo Mã Task (nếu cùng người phụ trách hoặc task hợp nhất)
+                        const ntCode = normalizeTaskDedupeText(nt.code);
+                        const ntPrimaryAcc = normalizeTaskDedupeText(nt.assigneeAccount || nt.syncAccount);
+                        const ntSupporters = Array.isArray(nt.supporterAccounts)
+                            ? nt.supporterAccounts.map(s => normalizeTaskDedupeText(s))
+                            : [];
+                        const sameAccount = (ntPrimaryAcc && ntPrimaryAcc === tAcc) || (tAcc && ntSupporters.indexOf(tAcc) !== -1);
+                        if (tCode && ntCode && tCode === ntCode && (sameAccount || nt.id === taskItem.id)) return true;
+
+                        // 3. Khớp theo Title và Account
+                        const ntTitle = normalizeTaskDedupeText(nt.title);
+                        if (ntTitle === tTitle && sameAccount) return true;
 
                         return false;
                     });
@@ -643,7 +822,7 @@ function syncTasksFormattedToSheet() {
 
                 personTasksList.forEach(t => {
                     if (!subtasksNestedSet.has(t.id)) {
-                        const allSubtasksOfT = taskList.filter(st => st.subtaskParentId === t.id);
+                        const allSubtasksOfT = findWeekSubtasksOf(t);
                         if (allSubtasksOfT.length > 0) {
                             const extraEffort = calculateParentExtraEffort(t, allSubtasksOfT, accName, isPastWeek);
                             // Chỉ đưa task cha vào danh sách hiển thị khi có effort điền thêm riêng biệt (> tổng effort các task con)
@@ -652,7 +831,7 @@ function syncTasksFormattedToSheet() {
                             }
                             // Các subtask con thuộc về thành viên này vẫn luôn được đưa vào hiển thị đầy đủ
                             personTasksList.forEach(st => {
-                                if (st.subtaskParentId === t.id) {
+                                if (st.subtaskParentId === t.id || (t.parentTaskId && st.subtaskParentId === t.parentTaskId)) {
                                     arrangedTasks.push(st);
                                 }
                             });
@@ -674,6 +853,7 @@ function syncTasksFormattedToSheet() {
             allRowsToInsert.push([bannerName, "", "", "", "", "", "", "", "", ""]);
             rowFormats.push({ type: 'BANNER', name: bannerName });
 
+            const weekTasksForRole = tasksBySahoWeek[weekData.sahoWeekNum] || expandedTaskList;
             validAssignees.forEach((assigneeItem, accIdx) => {
                 const { accName, arrangedTasks } = assigneeItem;
 
@@ -683,7 +863,13 @@ function syncTasksFormattedToSheet() {
                         : 0;
 
                     const isSub = Boolean(t.isSubtask || (t.subtaskParentId && String(t.subtaskParentId).trim() !== ''));
-                    const allSubtasksOfT = taskList.filter(st => st.subtaskParentId === t.id);
+                    const tId = String((t && t.id) || '').trim();
+                    const tParentId = String((t && t.parentTaskId) || '').trim();
+                    const allSubtasksOfT = weekTasksForRole.filter(st => {
+                        const subPid = String((st && st.subtaskParentId) || '').trim();
+                        if (!subPid) return false;
+                        return (tId && subPid === tId) || (tParentId && subPid === tParentId);
+                    });
                     const isParent = Boolean(t.isParentTask || allSubtasksOfT.length > 0);
 
                     // Nếu là task cha và không ghi đè thủ công, tự động tổng hợp số liệu từ các subtask

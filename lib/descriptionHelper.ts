@@ -17,8 +17,8 @@ export interface ParsedDescription {
   hasCheckboxes: boolean;
 }
 
-const IMAGE_EXTENSION_REGEX = /\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i;
-const CATBOX_URL_REGEX = /^https?:\/\/files\.catbox\.moe\/[a-zA-Z0-9._-]+$/i;
+const IMAGE_EXTENSION_REGEX = /\.(png|jpg|jpeg|gif|webp|svg|enc)(\?.*)?$/i;
+const CATBOX_URL_REGEX = /^https?:\/\/(?:files\.catbox\.moe|[a-z0-9-]+\.public\.blob\.vercel-storage\.com)\/[^\s]+$/i;
 const MARKDOWN_IMAGE_REGEX = /^!\[(.*?)\]\((https?:\/\/[^\s\)]+)\)$/;
 
 /**

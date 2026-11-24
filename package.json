@@ -12,6 +12,7 @@
     "@doan-labs/peek": "^1.0.0",
     "@figma/expressive-components": "^0.2.0",
     "@google/genai": "^2.25.0",
+    "@vercel/blob": "^2.9.0",
     "docx": "^9.8.1",
     "driver.js": "^1.9.0",
     "firebase": "^12.19.0",

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
+import { DB_ROOT_NODE, FIREBASE_DATABASE_URL } from './firebase';
 
-const FIREBASE_REST_URL = 'https://docugen-676bf-default-rtdb.asia-southeast1.firebasedatabase.app/gmm-task';
+const FIREBASE_REST_URL = `${FIREBASE_DATABASE_URL}/${DB_ROOT_NODE}`;
 
 export interface TaskSummaryForMeta {
   id: string;

@@ -403,8 +403,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         title: 'Nội dung chưa được lưu',
         message:
           'Bạn đang có nội dung chỉnh sửa mô tả hoặc ghi chú chưa được lưu. Nếu thoát ra ngoài, các thay đổi này sẽ bị mất. Bạn có chắc chắn muốn thoát không?',
-        confirmText: 'Rời đi & Hủy thay đổi',
-        cancelText: 'Tiếp tục chỉnh sửa',
+        confirmText: 'Hủy thay đổi',
+        cancelText: 'Tiếp tục sửa',
         type: 'warning',
         onConfirm: () => {
           setIsEditingDesc(false);
@@ -459,8 +459,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         title: 'Nội dung chưa được lưu',
         message:
           'Bạn đang có nội dung chỉnh sửa mô tả hoặc ghi chú chưa được lưu. Nếu tiếp tục chuyển màn hình, các thay đổi này sẽ bị mất. Bạn có chắc chắn muốn tiếp tục không?',
-        confirmText: 'Rời đi & Chuyển màn hình',
-        cancelText: 'Tiếp tục chỉnh sửa',
+        confirmText: 'Rời khỏi',
+        cancelText: 'Tiếp tục sửa',
         type: 'warning',
         onConfirm: () => {
           setIsEditingDesc(false);
@@ -1260,7 +1260,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                         confirmDialog({
                           title: `Chuyển task sang Tuần ${selectedWeek}`,
                           message: `Bạn có muốn chuyển công việc "${liveTask.title}" từ ${liveTask.weekNumber ? `Tuần ${liveTask.weekNumber}` : 'Kho Backlog'} sang Tuần ${selectedWeek} (Hiện tại) để tiếp tục làm việc không?`,
-                          confirmText: `Chuyển sang Tuần ${selectedWeek}`,
+                          confirmText: `Chuyển Tuần ${selectedWeek}`,
                           type: 'info',
                           onConfirm: () => {
                             updateTask(liveTask.id, {

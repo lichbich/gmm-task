@@ -2890,14 +2890,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const normalizeRoleToken = (role?: string): string => {
       if (!role) return '';
       const r = role.toLowerCase().trim();
-      if (r === 'designer' || r === 'design' || r.includes('thiết kế')) return 'design';
+      if (r === 'des' || r === 'designer' || r === 'design' || r.includes('thiết kế')) return 'design';
       if (r === 'fe' || r === 'frontend' || r.includes('front-end') || r.includes('giao diện')) return 'fe';
       if (r === 'be' || r === 'backend' || r.includes('back-end') || r.includes('máy chủ')) return 'be';
       if (r === 'ba' || r.includes('business analyst') || r.includes('nghiệp vụ')) return 'ba';
-      if (r === 'devops' || r.includes('hạ tầng') || r.includes('cloud')) return 'devops';
+      if (r === 'devops' || r === 'ops' || r.includes('hạ tầng') || r.includes('cloud')) return 'devops';
       if (r === 'ai' || r.includes('trí tuệ') || r.includes('machine learning')) return 'ai';
       if (r === 'po' || r.includes('product owner')) return 'po';
-      if (r === 'qa' || r.includes('kiểm thử') || r.includes('tester')) return 'qa';
+      if (r === 'qc' || r.includes('qc') || r.includes('tester') || r.includes('kiểm thử')) return 'qc';
+      if (r === 'qa') return 'qa';
       if (r === 'sa' || r.includes('kiến trúc')) return 'sa';
       return r;
     };
@@ -2912,7 +2913,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
     if (!targetRole && task?.title) {
-      const prefixMatch = task.title.trim().match(/^(FE|BE|BA|Design|Designer|DevOps|AI|PO|QA|SA)\b/i);
+      const prefixMatch = task.title.trim().match(/^(FE|BE|BA|DES|Design|Designer|DevOps|OPS|AI|PO|QA|QC|SA)\b/i);
       if (prefixMatch) {
         targetRole = normalizeRoleToken(prefixMatch[1]);
       }
@@ -2952,23 +2953,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         type: 'TASK_ASSIGNED',
       });
     });
+
+    // Bắn thông báo sang đúng Topic Role trên Telegram kèm nút Duyệt / Từ chối (chạy nền, không chặn UI)
+    fetch('/api/telegram/notify-claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        taskId,
+        requesterAccount: memberAccount,
+        targetWeek: targetW,
+        dbRootNode: DB_ROOT_NODE,
+      }),
+    }).catch((err) => console.warn('[Telegram notify-claim] skip:', err));
   };
 
   // Approve task assignment request (For Leader / Admin)
   const approveTaskAssignment = (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    const requestedBy = task.assignmentRequestedBy;
     updateTask(taskId, {
-      assigneeAccount: task.assignmentRequestedBy || task.assigneeAccount,
+      assigneeAccount: requestedBy || task.assigneeAccount,
       assignmentRequestStatus: 'APPROVED',
       weekNumber: task.requestedWeekNumber || selectedWeek,
       requestedWeekNumber: undefined,
       updatedAt: new Date().toISOString(),
     });
 
-    if (task.assignmentRequestedBy) {
+    if (requestedBy) {
       sendPushNotification({
-        targetAccount: task.assignmentRequestedBy,
+        targetAccount: requestedBy,
         title: `✅ Yêu cầu nhận task đã được duyệt!`,
         body: `Leader đã duyệt cho bạn nhận task: ${task.title}`,
         taskId: taskId,
@@ -2977,15 +2991,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         type: 'TASK_APPROVED',
       });
     }
+
+    // Đồng bộ gỡ nút duyệt trên tin nhắn Telegram (nếu có)
+    if (task.telegramClaimMessage?.messageId) {
+      fetch('/api/telegram/sync-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId,
+          status: 'APPROVED',
+          requesterAccount: requestedBy || task.assigneeAccount,
+          actorAccount: authSession?.account,
+          actorName: authSession?.name,
+          dbRootNode: DB_ROOT_NODE,
+        }),
+      }).catch((err) => console.warn('[Telegram sync-status] skip:', err));
+    }
   };
 
   // Reject task assignment request (For Leader / Admin)
   const rejectTaskAssignment = (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    const requestedBy = task?.assignmentRequestedBy;
     updateTask(taskId, {
       assignmentRequestStatus: 'REJECTED',
       assignmentRequestedBy: undefined,
       updatedAt: new Date().toISOString(),
     });
+
+    // Đồng bộ gỡ nút duyệt trên tin nhắn Telegram (nếu có)
+    if (task?.telegramClaimMessage?.messageId) {
+      fetch('/api/telegram/sync-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId,
+          status: 'REJECTED',
+          requesterAccount: requestedBy,
+          actorAccount: authSession?.account,
+          actorName: authSession?.name,
+          dbRootNode: DB_ROOT_NODE,
+        }),
+      }).catch((err) => console.warn('[Telegram sync-status] skip:', err));
+    }
   };
 
   // Finish Week & Rollover Unfinished Tasks to Next Week (Admin, PM & PO only)
@@ -3440,7 +3488,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       title: `Rollback / Hoàn tác Chốt Tuần ${targetWeek}`,
       message: `Bạn có chắc chắn muốn Rollback (Hoàn tác chốt tuần) cho Tuần ${targetWeek}? Toàn bộ dữ liệu task và báo cáo của Tuần ${targetWeek} sẽ được khôi phục nguyên vẹn 100% từ bản lưu trữ snapshot (${targetArchive.tasksSnapshot?.length || 0} task) về chính các task duy nhất ban đầu.`,
       type: 'warning',
-      confirmText: `Xác nhận Rollback Tuần ${targetWeek}`,
+      confirmText: 'Rollback',
       onConfirm: () => {
         const nextWeek = targetWeek + 1;
         const targetWeekKey = getWeeklyHistoryKey(targetWeek, targetYear);

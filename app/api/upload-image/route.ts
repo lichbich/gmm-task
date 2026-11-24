@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { put } from '@vercel/blob';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,8 +9,42 @@ const BROWSER_USER_AGENT =
 
 const DEFAULT_CATBOX_USERHASH = 'e929b9d0999c3be251207c5a9';
 
+function sanitizeFileName(rawName: string): string {
+  const cleaned = String(rawName || 'image.enc')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_');
+  return cleaned || 'image.enc';
+}
+
 /**
- * Upload to primary Catbox host with authenticated userhash
+ * Primary storage: Vercel Blob (Public CDN, encrypted .enc payload safe, never IP-blocked on Vercel)
+ */
+async function uploadToVercelBlob(file: Blob, fileName: string): Promise<string | null> {
+  const token = (process.env.BLOB_READ_WRITE_TOKEN || '').trim();
+  if (!token) return null;
+
+  try {
+    const safeName = sanitizeFileName(fileName);
+    const pathname = `saho-uploads/${safeName}`;
+    const blob = await put(pathname, file, {
+      access: 'public',
+      addRandomSuffix: true,
+      contentType: file.type || 'application/octet-stream',
+      token,
+    });
+
+    if (blob?.url) {
+      return blob.url;
+    }
+  } catch (err) {
+    console.warn('[upload-image] Vercel Blob upload error:', err);
+  }
+  return null;
+}
+
+/**
+ * Fallback storage: Catbox (useful for local dev when BLOB_READ_WRITE_TOKEN is not set in .env.local)
  */
 async function uploadToCatbox(file: Blob, fileName: string): Promise<string | null> {
   try {
@@ -37,10 +72,10 @@ async function uploadToCatbox(file: Blob, fileName: string): Promise<string | nu
       }
     } else {
       const errText = await catboxResponse.text().catch(() => '');
-      console.warn(`Catbox upload returned HTTP ${catboxResponse.status}: ${errText}`);
+      console.warn(`[upload-image] Catbox upload returned HTTP ${catboxResponse.status}: ${errText}`);
     }
   } catch (err) {
-    console.warn('Catbox upload request error:', err);
+    console.warn('[upload-image] Catbox upload request error:', err);
   }
   return null;
 }
@@ -85,8 +120,15 @@ export async function POST(req: NextRequest) {
 
     const fileName = (file as any).name || 'image.png';
 
-    // Upload to Catbox storage
-    const uploadedUrl = await uploadToCatbox(file, fileName);
+    // 1. Prioritize Vercel Blob when BLOB_READ_WRITE_TOKEN is available
+    let uploadedUrl = await uploadToVercelBlob(file, fileName);
+    let provider: 'vercel-blob' | 'catbox' = 'vercel-blob';
+
+    // 2. Fallback to Catbox (e.g. local dev without BLOB_READ_WRITE_TOKEN)
+    if (!uploadedUrl) {
+      uploadedUrl = await uploadToCatbox(file, fileName);
+      provider = 'catbox';
+    }
 
     if (!uploadedUrl) {
       return NextResponse.json(
@@ -101,6 +143,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       url: uploadedUrl,
+      provider,
       fileName,
       fileSize: file.size,
       mimeType: file.type,

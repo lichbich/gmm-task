@@ -22,6 +22,7 @@ import {
   Users,
 } from 'lucide-react';
 import { AppNotification } from '../types/notification';
+import { DB_ROOT_NODE, IS_TEST_DB } from '../lib/firebase';
 
 export type { MainSectionType, TaskTabType, UserSubTabType };
 
@@ -193,6 +194,15 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right: Sheet Week Indicator + Tour + Notification + Theme + Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {IS_TEST_DB && (
+              <span
+                title={`Đang kết nối dữ liệu thử nghiệm Firebase (${DB_ROOT_NODE}) — không ảnh hưởng dữ liệu thật`}
+                className="inline-flex items-center gap-1.5 h-[30px] px-2.5 rounded-[8px] bg-amber-50 dark:bg-amber-950/50 border border-amber-300/80 dark:border-amber-800 text-[11px] font-bold text-amber-700 dark:text-amber-300 font-mono"
+              >
+                <span className="w-[6px] h-[6px] rounded-full bg-amber-500 animate-pulse" />
+                <span>TEST DB</span>
+              </span>
+            )}
             <span className="hidden md:inline-flex items-center gap-1.5 h-[30px] px-2.5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E8E9EF] dark:border-slate-800 text-[12px] font-medium text-[#838899] dark:text-slate-300">
               <span className="w-[6px] h-[6px] rounded-full bg-[#1890FF]" />
               <span>Tuần {currentWeek}</span>

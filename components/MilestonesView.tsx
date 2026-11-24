@@ -502,7 +502,7 @@ export const MilestonesView: React.FC = () => {
     confirmDialog({
       title: 'Xác nhận xóa TẤT CẢ task tự do',
       message: `Bạn có chắc chắn muốn xóa toàn bộ ${adhocList.length} đầu việc tự do & phát sinh trong bộ lọc hiện tại? Thao tác này không thể hoàn tác.`,
-      confirmText: `Xóa toàn bộ ${adhocList.length} task`,
+      confirmText: `Xóa ${adhocList.length} task`,
       type: 'danger',
       onConfirm: () => {
         const allIds = adhocList.map((t) => t.id);
@@ -1239,7 +1239,7 @@ export const MilestonesView: React.FC = () => {
                   confirmDialog({
                     title: `Chuyển sang Tuần ${selectedWeek}`,
                     message: `Bạn có muốn chuyển công việc "${t.title}" từ ${t.weekNumber ? `Tuần ${t.weekNumber}` : 'Kho Backlog'} sang Tuần ${selectedWeek} (Tuần hiện tại) để tiếp tục thực hiện không?`,
-                    confirmText: `Chuyển sang Tuần ${selectedWeek}`,
+                    confirmText: `Chuyển Tuần ${selectedWeek}`,
                     type: 'info',
                     onConfirm: () => {
                       updateTask(t.id, {
@@ -1562,7 +1562,7 @@ export const MilestonesView: React.FC = () => {
                     confirmDialog({
                       title: `Chuyển sang Tuần ${selectedWeek}`,
                       message: `Bạn có muốn chuyển công việc "${t.title}" sang Tuần ${selectedWeek} để tiếp tục thực hiện không?`,
-                      confirmText: `Chuyển sang Tuần ${selectedWeek}`,
+                      confirmText: `Chuyển Tuần ${selectedWeek}`,
                       type: 'info',
                       onConfirm: () => {
                         updateTask(t.id, {

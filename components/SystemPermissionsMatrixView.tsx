@@ -242,7 +242,7 @@ export const SystemPermissionsMatrixView: React.FC<SystemPermissionsMatrixViewPr
     confirmDialog({
       title: 'Khôi phục ma trận phân quyền chuẩn',
       message: 'Hệ thống sẽ đặt lại toàn bộ phân quyền Role và các đặc quyền thành viên về thiết lập chuẩn mặc định (Bao gồm cấp quyền AI cho Admin, LichDT, QuynhNV, NhiHT). Bạn có chắc chắn muốn thực hiện?',
-      confirmText: 'Đặt lại mặc định',
+      confirmText: 'Đặt lại',
       cancelText: 'Hủy bỏ',
       type: 'warning',
       onConfirm: () => {
@@ -367,27 +367,29 @@ export const SystemPermissionsMatrixView: React.FC<SystemPermissionsMatrixViewPr
           <button
             type="button"
             onClick={() => setActiveMode('ROLES')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 h-[30px] px-3.5 rounded-[6px] text-xs font-medium transition-all duration-150 active:scale-95 cursor-pointer ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 min-h-[32px] py-1.5 px-3.5 rounded-[6px] text-xs font-medium leading-snug transition-all duration-150 active:scale-95 cursor-pointer ${
               activeMode === 'ROLES'
                 ? 'bg-[#1890FF] text-white shadow-xs'
                 : 'text-[#838899] hover:text-[#1890FF]'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>1. Phân Quyền Theo Vai Trò (Role Matrix)</span>
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span className="sm:hidden">Theo Vai Trò</span>
+            <span className="hidden sm:inline">1. Phân Quyền Theo Vai Trò (Role Matrix)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveMode('USERS')}
-            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 h-[30px] px-3.5 rounded-[6px] text-xs font-medium transition-all duration-150 active:scale-95 cursor-pointer ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 min-h-[32px] py-1.5 px-3.5 rounded-[6px] text-xs font-medium leading-snug transition-all duration-150 active:scale-95 cursor-pointer ${
               activeMode === 'USERS'
                 ? 'bg-[#1890FF] text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span>2. Phân Quyền Từng Thành Viên (Member Overrides)</span>
+            <Users className={`w-3.5 h-3.5 shrink-0 ${activeMode === 'USERS' ? 'text-white' : 'text-indigo-600 dark:text-indigo-400'}`} />
+            <span className="sm:hidden">Theo Thành Viên</span>
+            <span className="hidden sm:inline">2. Phân Quyền Từng Thành Viên (Member Overrides)</span>
           </button>
         </div>
 

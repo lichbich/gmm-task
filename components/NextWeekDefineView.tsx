@@ -351,7 +351,7 @@ export const NextWeekDefineView: React.FC<NextWeekDefineViewProps> = ({ onOpenTa
       title: 'Hoàn tác chuyển task',
       message: `Bạn có chắc muốn hủy chuyển task "${t.title}" sang Tuần ${nextWeek}? Dữ liệu và báo cáo ở Tuần ${selectedWeek} vẫn được bảo toàn nguyên vẹn trên cùng task này.`,
       type: 'warning',
-      confirmText: `Hủy kế hoạch Tuần ${nextWeek}`,
+      confirmText: `Hủy Tuần ${nextWeek}`,
       onConfirm: () => {
         undoTransferTaskToNextWeek(t.id, selectedWeek, selectedYear);
       },

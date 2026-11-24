@@ -83,18 +83,18 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-2.5 pt-1">
+      <div className="flex items-stretch gap-2.5 pt-1">
         <button
           type="button"
           onClick={onClose}
-          className="flex-1 h-[36px] px-4 bg-white dark:bg-slate-800 hover:bg-[#F8FAFB] dark:hover:bg-slate-700 border border-[#E8E9EF] dark:border-slate-700 text-[#1D202A] dark:text-slate-300 font-medium rounded-[8px] text-[13px] transition active:scale-95 cursor-pointer"
+          className="flex-1 min-h-[38px] py-2 px-3.5 bg-white dark:bg-slate-800 hover:bg-[#F8FAFB] dark:hover:bg-slate-700 border border-[#E8E9EF] dark:border-slate-700 text-[#1D202A] dark:text-slate-300 font-medium rounded-[8px] text-[13px] leading-snug transition active:scale-95 flex items-center justify-center text-center cursor-pointer"
         >
           {cancelText}
         </button>
         <button
           type="button"
           onClick={handleConfirmAction}
-          className={`flex-1 h-[36px] px-4 text-white font-medium rounded-[8px] text-[13px] transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 min-h-[38px] py-2 px-3.5 text-white font-medium rounded-[8px] text-[13px] leading-snug transition active:scale-95 flex items-center justify-center gap-1.5 text-center cursor-pointer ${
             type === 'danger'
               ? 'bg-[#FF4D4F] hover:bg-[#ff7875]'
               : type === 'warning'
@@ -102,8 +102,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               : 'bg-[#1890FF] hover:bg-[#40A9FF]'
           }`}
         >
-          {type === 'danger' && <Trash2 className="w-3.5 h-3.5" />}
-          {confirmText}
+          {type === 'danger' && <Trash2 className="w-3.5 h-3.5 shrink-0" />}
+          <span>{confirmText}</span>
         </button>
       </div>
     </Modal>

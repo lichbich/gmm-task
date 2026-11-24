@@ -574,7 +574,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
         title: 'Hủy chỉnh sửa Ticket',
         message: 'Nội dung ticket đã thay đổi nhưng chưa lưu. Bạn có chắc chắn muốn hủy bỏ các thay đổi này không?',
         confirmText: 'Xác nhận hủy',
-        cancelText: 'Tiếp tục chỉnh sửa',
+        cancelText: 'Tiếp tục sửa',
         type: 'warning',
         onConfirm: () => {
           setEditTitle(ticket.title || '');
@@ -622,7 +622,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
     confirmDialog({
       title: `Xóa Request Ticket ${ticket.code}?`,
       message: `Bạn có chắc chắn muốn xóa ticket "${ticket.title}" này không? Mọi lịch sử thảo luận sẽ bị xóa hoàn toàn.`,
-      confirmText: 'Xác nhận Xóa',
+      confirmText: 'Xác nhận xóa',
       type: 'danger',
       onConfirm: async () => {
         await deleteTicket(ticket.id);

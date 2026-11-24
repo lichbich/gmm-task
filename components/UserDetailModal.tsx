@@ -31,6 +31,7 @@ import {
   Check,
   Edit2,
   FileSpreadsheet,
+  Send,
 } from 'lucide-react';
 import { UserAvatar } from './common/UserAvatar';
 import { Dropdown } from './common/Dropdown';
@@ -51,6 +52,7 @@ interface SavedSnapshot {
   name: string;
   phone: string;
   email: string;
+  telegramAccount: string;
   cccd: string;
   birthDate: string;
   bankAccount: string;
@@ -81,6 +83,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
   const [userName, setUserName] = useState('');
   const [userPhone, setUserPhone] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const [userTelegramAccount, setUserTelegramAccount] = useState('');
   const [userCccd, setUserCccd] = useState('');
   const [userBirthDate, setUserBirthDate] = useState('');
   const [userBankAccount, setUserBankAccount] = useState('');
@@ -97,6 +100,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
       name: liveUser.name || '',
       phone: liveUser.phone || '',
       email: liveUser.email || '',
+      telegramAccount: liveUser.telegramAccount || '',
       cccd: liveUser.cccd || '',
       birthDate: liveUser.birthDate ? String(liveUser.birthDate) : '',
       bankAccount: liveUser.bankAccount || '',
@@ -109,6 +113,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
         userName.trim() !== snapshot.name ||
         userPhone.trim() !== snapshot.phone ||
         userEmail.trim() !== snapshot.email ||
+        userTelegramAccount.trim().replace(/^@+/, '') !== snapshot.telegramAccount ||
         userCccd.trim() !== snapshot.cccd ||
         userBirthDate.trim() !== snapshot.birthDate ||
         userBankAccount.trim() !== snapshot.bankAccount ||
@@ -134,8 +139,8 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
       confirmDialog({
         title: 'Thay đổi chưa được lưu',
         message: 'Bạn đang chỉnh sửa thông tin thành viên chưa lưu. Bạn có chắc chắn muốn hủy và đóng không?',
-        confirmText: 'Rời khỏi & Hủy',
-        cancelText: 'Tiếp tục chỉnh sửa',
+        confirmText: 'Rời khỏi',
+        cancelText: 'Tiếp tục sửa',
         type: 'warning',
         onConfirm: () => onClose(),
       });
@@ -148,6 +153,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     userName,
     userPhone,
     userEmail,
+    userTelegramAccount,
     userCccd,
     userBirthDate,
     userBankAccount,
@@ -223,6 +229,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     const initialName = liveUser.name || '';
     const initialPhone = liveUser.phone || '';
     const initialEmail = liveUser.email || '';
+    const initialTelegramAccount = liveUser.telegramAccount || '';
     const initialCccd = liveUser.cccd || '';
     const initialBirthDate = liveUser.birthDate ? String(liveUser.birthDate) : '';
     const initialBankAccount = liveUser.bankAccount || '';
@@ -231,6 +238,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     setUserName(initialName);
     setUserPhone(initialPhone);
     setUserEmail(initialEmail);
+    setUserTelegramAccount(initialTelegramAccount);
     setUserCccd(initialCccd);
     setUserBirthDate(initialBirthDate);
     setUserBankAccount(initialBankAccount);
@@ -246,6 +254,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
       name: initialName,
       phone: initialPhone,
       email: initialEmail,
+      telegramAccount: initialTelegramAccount,
       cccd: initialCccd,
       birthDate: initialBirthDate,
       bankAccount: initialBankAccount,
@@ -322,7 +331,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     confirmDialog({
       title: 'Xác nhận đặt lại mật khẩu',
       message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${liveUser.name} (${liveUser.account})? Hệ thống sẽ ngay lập tức đăng xuất tài khoản này khỏi tất cả các thiết bị đã đăng nhập và tạo mật khẩu tạm thời mới để bạn gửi cho nhân viên.`,
-      confirmText: 'Đặt lại & Đăng xuất thiết bị',
+      confirmText: 'Đặt lại',
       type: 'warning',
       onConfirm: async () => {
         const res = await resetUserPassword(liveUser.id);
@@ -344,7 +353,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     confirmDialog({
       title: 'Xác nhận vô hiệu hóa tài khoản',
       message: `Bạn có chắc chắn muốn vô hiệu hóa tài khoản ${liveUser.name} (${liveUser.account})? Tài khoản sẽ bị ẩn khỏi giao diện nhưng dữ liệu vẫn được bảo lưu an toàn trong Database. Tất cả task của người này sẽ chuyển thành Task Trống.`,
-      confirmText: 'Xác nhận vô hiệu hóa',
+      confirmText: 'Vô hiệu hóa',
       type: 'danger',
       onConfirm: () => {
         deleteUser(liveUser.id);
@@ -374,6 +383,12 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
     setIsSaving(true);
 
     setTimeout(() => {
+      const cleanTelegramAcc = userTelegramAccount
+        .trim()
+        .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '')
+        .replace(/^@+/, '')
+        .replace(/\s+/g, '');
+
       updateUser(liveUser.id, {
         name: userName.trim(),
         role: effectiveRole,
@@ -381,6 +396,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
         specializationRoles: specRoles,
         phone: userPhone.trim(),
         email: userEmail.trim(),
+        telegramAccount: cleanTelegramAcc,
         cccd: userCccd.trim(),
         birthDate: userBirthDate.trim(),
         bankAccount: userBankAccount.trim(),
@@ -394,6 +410,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
         name: userName.trim(),
         phone: userPhone.trim(),
         email: userEmail.trim(),
+        telegramAccount: cleanTelegramAcc,
         cccd: userCccd.trim(),
         birthDate: userBirthDate.trim(),
         bankAccount: userBankAccount.trim(),
@@ -538,10 +555,10 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                 <button
                   type="button"
                   onClick={() => handleCopyAllInfo(tempCredModal.account, tempCredModal.name, tempCredModal.tempPassword)}
-                  className="flex-1 h-[36px] bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-[8px] shadow-md shadow-purple-600/20 transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  className="flex-1 min-h-[36px] py-2 px-3.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs leading-snug rounded-[8px] shadow-md shadow-purple-600/20 transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
                 >
-                  {copiedField === 'all' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  <span>{copiedField === 'all' ? 'Đã Sao Chép Toàn Bộ!' : 'Sao Chép Gửi Nhân Viên'}</span>
+                  {copiedField === 'all' ? <Check className="w-4 h-4 shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
+                  <span>{copiedField === 'all' ? 'Đã sao chép!' : 'Sao chép thông tin'}</span>
                 </button>
                 <button
                   type="button"
@@ -1032,11 +1049,29 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                     <span className="font-mono font-bold text-slate-800">{userPhone || liveUser.phone || '—'}</span>
                   </div>
 
-                  <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-0.5">
                     <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block flex items-center gap-1">
                       <Mail className="w-3 h-3 text-slate-400" /> Gmail / Email
                     </span>
                     <span className="font-semibold text-slate-800 truncate block">{userEmail || liveUser.email || '—'}</span>
+                  </div>
+
+                  <div className="bg-sky-50/70 p-2.5 rounded-xl border border-sky-200/70 space-y-0.5">
+                    <span className="text-[10px] text-sky-600 uppercase font-bold tracking-wider block flex items-center gap-1">
+                      <Send className="w-3 h-3 text-sky-500" /> Account Telegram
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono font-bold text-sky-700">
+                        {(userTelegramAccount || liveUser.telegramAccount)
+                          ? `@${(userTelegramAccount || liveUser.telegramAccount || '').replace(/^@+/, '')}`
+                          : '—'}
+                      </span>
+                      {liveUser.telegramUserId && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold border border-emerald-200">
+                          Đã gắn ID
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {(isAdmin || currentUser?.account?.toLowerCase() === liveUser.account.toLowerCase()) && (
@@ -1175,7 +1210,7 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                   </div>
 
                   {/* Gmail / Email */}
-                  <div className="sm:col-span-2">
+                  <div>
                     <label className="text-[10px] text-slate-600 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
                       <Mail className="w-3 h-3 text-purple-600" /> Gmail / Email
                     </label>
@@ -1185,6 +1220,20 @@ export const UserDetailModal: React.FC<UserDetailModalProps> = ({ user, isOpen, 
                       onChange={(e) => setUserEmail(e.target.value)}
                       placeholder="email@example.com..."
                       className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
+                    />
+                  </div>
+
+                  {/* Account Telegram */}
+                  <div>
+                    <label className="text-[10px] text-slate-600 uppercase font-bold tracking-wider block mb-1 flex items-center gap-1">
+                      <Send className="w-3 h-3 text-sky-600" /> Account Telegram
+                    </label>
+                    <input
+                      type="text"
+                      value={userTelegramAccount}
+                      onChange={(e) => setUserTelegramAccount(e.target.value)}
+                      placeholder="VD: @lichbich"
+                      className="w-full bg-white border border-purple-300 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono font-semibold focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 shadow-2xs transition"
                     />
                   </div>
 

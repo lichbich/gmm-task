@@ -4,8 +4,9 @@ import { getMessaging } from 'firebase-admin/messaging';
 import webpush from 'web-push';
 import path from 'path';
 import fs from 'fs';
+import { DB_ROOT_NODE, FIREBASE_DATABASE_URL } from '@/lib/firebase';
 
-const RTDB_BASE_URL = "https://docugen-676bf-default-rtdb.asia-southeast1.firebasedatabase.app";
+const RTDB_BASE_URL = FIREBASE_DATABASE_URL;
 
 const VAPID_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
@@ -104,7 +105,7 @@ export async function POST(req: Request) {
       senderAccount,
       senderName,
       type = 'TASK_ASSIGNED',
-      dbRootNode = 'gmm-task',
+      dbRootNode = DB_ROOT_NODE,
       skipDbWrite = false,
     } = body;
 

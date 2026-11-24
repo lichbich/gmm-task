@@ -218,7 +218,7 @@ export const WorkHistoryView: React.FC<WorkHistoryViewProps> = ({ onOpenTaskModa
     confirmDialog({
       title: `Chốt Lịch Sử & Kết Thúc Tuần ${selectedWeek}`,
       message: `Bạn có chắc chắn muốn chốt lịch sử công việc Tuần ${selectedWeek} (${range.startDate} đến ${range.endDate})?\n\n• Tất cả log công việc có tiến độ/effort Tuần ${selectedWeek} sẽ được lưu trữ vào Lịch Sử Công Việc.\n• Các công việc HOÀN THÀNH (100%) và CÔNG VIỆC LÀM DỞ (>0%) sẽ được lưu lại trong lịch sử.\n• Các công việc CHƯA LÀM TÍ NÀO (0% & 0h) sẽ được tự động xóa khỏi tuần cũ và chuyển sang Tuần ${selectedWeek + 1} cho người được phân công (không đưa vào Lịch sử để tránh rác hệ thống).\n• Leader có thể phân công thêm task mới cho Tuần ${selectedWeek + 1}.`,
-      confirmText: `Đồng ý kết thúc Tuần ${selectedWeek}`,
+      confirmText: `Kết thúc Tuần ${selectedWeek}`,
       cancelText: 'Hủy bỏ',
       type: 'warning',
       onConfirm: () => finishWeekAndRollover(),

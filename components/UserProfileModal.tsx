@@ -59,6 +59,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const [editBankAccount, setEditBankAccount] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editTelegramAccount, setEditTelegramAccount] = useState('');
   const [editTechnologies, setEditTechnologies] = useState('');
   const [editBirthDate, setEditBirthDate] = useState('');
   const [editSpecializations, setEditSpecializations] = useState<string[]>(['BA']);
@@ -84,6 +85,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
         editBankAccount.trim() !== (userRecord?.bankAccount || '') ||
         editEmail.trim() !== (userRecord?.email || '') ||
         editPhone.trim() !== (userRecord?.phone || '') ||
+        editTelegramAccount.trim().replace(/^@+/, '') !== (userRecord?.telegramAccount || '') ||
         editTechnologies.trim() !== (userRecord?.technologies || '') ||
         editBirthDate.trim() !== (userRecord?.birthDate ? String(userRecord.birthDate) : '');
     } else if (activeTab === 'PASSWORD') {
@@ -94,8 +96,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
       confirmDialog({
         title: 'Thông tin chưa được lưu',
         message: 'Bạn đang nhập dở thông tin cá nhân / mật khẩu. Bạn có chắc chắn muốn hủy và đóng không?',
-        confirmText: 'Rời khỏi & Hủy',
-        cancelText: 'Tiếp tục chỉnh sửa',
+        confirmText: 'Rời khỏi',
+        cancelText: 'Tiếp tục sửa',
         type: 'warning',
         onConfirm: () => onClose(),
       });
@@ -110,6 +112,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     editBankAccount,
     editEmail,
     editPhone,
+    editTelegramAccount,
     editTechnologies,
     editBirthDate,
     userRecord,
@@ -172,6 +175,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     setEditBankAccount(userRecord.bankAccount || '');
     setEditEmail(userRecord.email || '');
     setEditPhone(userRecord.phone || '');
+    setEditTelegramAccount(userRecord.telegramAccount || '');
     setEditTechnologies(userRecord.technologies || '');
     setEditBirthDate(userRecord.birthDate ? String(userRecord.birthDate) : '');
     setEditSpecializations(
@@ -196,12 +200,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     setIsSavingInfo(true);
 
     setTimeout(() => {
+      const cleanTelegramAcc = editTelegramAccount
+        .trim()
+        .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '')
+        .replace(/^@+/, '')
+        .replace(/\s+/g, '');
+
       updateUser(userRecord.id, {
         name: editName.trim(),
         cccd: editCccd.trim(),
         bankAccount: editBankAccount.trim(),
         email: editEmail.trim(),
         phone: editPhone.trim(),
+        telegramAccount: cleanTelegramAcc,
         technologies: editTechnologies.trim(),
         birthDate: editBirthDate.trim(),
         specializations: editSpecializations,
@@ -609,9 +620,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                       <div className="font-mono font-bold text-slate-800">{userRecord.phone || '—'}</div>
                     </div>
 
-                    <div className="space-y-0.5 sm:col-span-2">
+                    <div className="space-y-0.5">
                       <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Gmail / Email</span>
                       <div className="font-semibold text-slate-800 truncate" title={userRecord.email}>{userRecord.email || '—'}</div>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-sky-500 uppercase font-bold tracking-wider">Account Telegram</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono font-bold text-sky-700">
+                          {userRecord.telegramAccount ? `@${userRecord.telegramAccount.replace(/^@+/, '')}` : '—'}
+                        </span>
+                        {userRecord.telegramUserId && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold border border-emerald-200">
+                            Đã gắn ID
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="sm:col-span-2 space-y-1 pt-2 border-t border-slate-100">
@@ -709,7 +734,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div>
                       <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
                         Gmail / Email:
                       </label>
@@ -718,6 +743,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                         value={editEmail}
                         onChange={(e) => setEditEmail(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-sky-600 uppercase block mb-1">
+                        Account Telegram:
+                      </label>
+                      <input
+                        type="text"
+                        value={editTelegramAccount}
+                        onChange={(e) => setEditTelegramAccount(e.target.value)}
+                        placeholder="VD: @lichbich"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-mono focus:outline-none focus:border-indigo-500 focus:bg-white"
                       />
                     </div>
 

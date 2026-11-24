@@ -23,6 +23,8 @@ export interface User {
   bankAccount?: string; // Tài khoản ngân hàng
   email?: string; // Địa chỉ Gmail / Email
   phone?: string; // Số điện thoại liên hệ
+  telegramAccount?: string; // Account Telegram (username không có @, VD: "lichbich")
+  telegramUserId?: string; // ID số cố định của Telegram (tự động liên kết khi tương tác với Bot)
   technologies?: string; // Công nghệ / Kỹ năng
   birthDate?: string | number; // Năm sinh
   totalEffort?: number; // Tổng giờ Effort tích lũy
@@ -40,7 +42,7 @@ export interface User {
 export const normalizeRoleToken = (role?: string): string => {
   if (!role) return '';
   const r = role.toLowerCase().trim();
-  if (r === 'designer' || r === 'design' || r.includes('thiết kế')) return 'design';
+  if (r === 'des' || r === 'designer' || r === 'design' || r.includes('thiết kế')) return 'design';
   if (r === 'fe' || r === 'frontend' || r.includes('front-end') || r.includes('giao diện')) return 'fe';
   if (r === 'be' || r === 'backend' || r.includes('back-end') || r.includes('máy chủ')) return 'be';
   if (r === 'ba' || r.includes('business analyst') || r.includes('nghiệp vụ')) return 'ba';
@@ -348,6 +350,12 @@ export interface Task {
   assignmentRequestedBy?: string; // Tài khoản member xin nhận task
   assignmentRequestStatus?: 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED'; // Trạng thái phê duyệt của Leader
   requestedWeekNumber?: number; // Mốc tuần yêu cầu phân công
+  telegramClaimMessage?: {
+    chatId: string;
+    threadId?: number;
+    messageId: number;
+    sentAt?: string;
+  }; // Lưu metadata tin nhắn Telegram để tự động đồng bộ gỡ nút khi duyệt/từ chối
   parentTaskId?: string; // ID của task gốc khi rolled over sang tuần mới
   weeklyHistory?: Record<string, TaskWeeklyHistoryEntry>; // Bảng map bất biến lưu dữ liệu lịch sử chốt từng tuần (chỉ Admin được sửa)
   activityLogs?: TaskActivityLog[]; // Nhật ký lịch sử các lần cập nhật task
@@ -359,6 +367,15 @@ export interface Task {
   subtaskParentTitle?: string; // Tên Task lớn (để hiển thị badge ngữ cảnh nhanh)
   subtaskReviewerAccount?: string; // Người review / Leader của Task lớn
   isManualOverride?: boolean; // true nếu Leader chủ động sửa % hoặc effort thủ công trên task lớn
+}
+
+export interface TelegramConfig {
+  enabled: boolean;
+  chatId: string; // ID supergroup Telegram (VD: "-1001234567890")
+  defaultThreadId?: number; // Topic fallback (VD: General) khi role chưa có mapping riêng
+  roleTopicMap: Record<string, number>; // Canonical role token (ba, design, fe, be, sa, qc, devops...) -> message_thread_id
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 /**

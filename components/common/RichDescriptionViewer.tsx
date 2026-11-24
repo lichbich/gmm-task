@@ -13,8 +13,8 @@ interface RichDescriptionViewerProps {
 }
 
 const MARKDOWN_IMAGE_REGEX = /^!\[(.*?)\]\((https?:\/\/[^\s\)]+)\)$/;
-const CATBOX_URL_REGEX = /^https?:\/\/files\.catbox\.moe\/[a-zA-Z0-9._-]+$/i;
-const IMAGE_EXTENSION_REGEX = /\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/i;
+const CATBOX_URL_REGEX = /^https?:\/\/(?:files\.catbox\.moe|[a-z0-9-]+\.public\.blob\.vercel-storage\.com)\/[^\s]+$/i;
+const IMAGE_EXTENSION_REGEX = /\.(png|jpg|jpeg|gif|webp|svg|enc)(\?.*)?$/i;
 
 /**
  * Parses and renders inline markdown formatting (bold, italic, underline, strikethrough, highlight, code)

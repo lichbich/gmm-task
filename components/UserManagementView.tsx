@@ -52,6 +52,7 @@ import {
 import { Dropdown } from './common/Dropdown';
 import { Modal } from './common/Modal';
 import { UserDetailModal } from './UserDetailModal';
+import { TelegramSettingsModal } from './TelegramSettingsModal';
 import { UserAvatar } from './common/UserAvatar';
 import { SystemPermissionsMatrixView } from './SystemPermissionsMatrixView';
 import { SahoCheckbox } from './common/SahoControls';
@@ -505,7 +506,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     confirmDialog({
       title: needNewTempUsers.length > 0 ? 'Cấp mật khẩu tạm cho nhân sự mới' : 'Danh sách mật khẩu tạm',
       message: confirmMsg,
-      confirmText: needNewTempUsers.length > 0 ? `Cấp MK cho ${needNewTempUsers.length} người mới` : 'Xem & Sao Chép DS',
+      confirmText: needNewTempUsers.length > 0 ? `Cấp MK (${needNewTempUsers.length})` : 'Xem danh sách',
       type: 'warning',
       onConfirm: async () => {
         const res = await resetAllUninitializedPasswords();
@@ -532,10 +533,12 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [userBankAccount, setUserBankAccount] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userPhone, setUserPhone] = useState('');
+  const [userTelegramAccount, setUserTelegramAccount] = useState('');
   const [userTechnologies, setUserTechnologies] = useState('');
   const [userBirthDate, setUserBirthDate] = useState('');
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [isTelegramSettingsOpen, setIsTelegramSettingsOpen] = useState(false);
 
   useSyncModalUrl(
     isUserFormOpen && activeSubTab === 'USERS',
@@ -920,6 +923,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setUserBankAccount('');
     setUserEmail('');
     setUserPhone('');
+    setUserTelegramAccount('');
     setUserTechnologies('');
     setUserBirthDate('');
     setSendWelcomeEmail(true);
@@ -951,6 +955,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setUserBankAccount(user.bankAccount || '');
     setUserEmail(user.email || '');
     setUserPhone(user.phone || '');
+    setUserTelegramAccount(user.telegramAccount || '');
     setUserTechnologies(user.technologies || '');
     setUserBirthDate(user.birthDate ? String(user.birthDate) : '');
     setQuickPasteInput('');
@@ -1055,7 +1060,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       confirmDialog({
         title: 'Cảnh báo định mức vai trò (Role Quota)',
         message: quotaCheck.error,
-        confirmText: 'Đã hiểu & Điều chỉnh',
+        confirmText: 'Đã hiểu',
         type: 'warning',
         cancelText: 'Đóng',
         onConfirm: () => {},
@@ -1064,6 +1069,12 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     }
 
     const effectiveRole = userRole === 'Admin' ? 'Admin' : calculateHighestRole(specRoles, userRole);
+
+    const cleanTelegramAcc = userTelegramAccount
+      .trim()
+      .replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '')
+      .replace(/^@+/, '')
+      .replace(/\s+/g, '');
 
     const payload = {
       name: userName.trim(),
@@ -1075,6 +1086,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       bankAccount: userBankAccount.trim(),
       email: userEmail.trim(),
       phone: userPhone.trim(),
+      telegramAccount: cleanTelegramAcc,
       technologies: userTechnologies.trim(),
       birthDate: userBirthDate.trim(),
     };
@@ -1159,6 +1171,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           userBankAccount.trim() !== (orig.bankAccount || '') ||
           userEmail.trim() !== (orig.email || '') ||
           userPhone.trim() !== (orig.phone || '') ||
+          userTelegramAccount.trim().replace(/^@+/, '') !== (orig.telegramAccount || '') ||
           userTechnologies.trim() !== (orig.technologies || '') ||
           userBirthDate.trim() !== (orig.birthDate ? String(orig.birthDate) : '') ||
           JSON.stringify(selectedSpecs) !== JSON.stringify(orig.specializations || ['BA']);
@@ -1171,6 +1184,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         userBankAccount.trim() !== '' ||
         userEmail.trim() !== '' ||
         userPhone.trim() !== '' ||
+        userTelegramAccount.trim() !== '' ||
         userTechnologies.trim() !== '' ||
         userBirthDate.trim() !== '';
     }
@@ -1199,6 +1213,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     userBankAccount,
     userEmail,
     userPhone,
+    userTelegramAccount,
     userTechnologies,
     userBirthDate,
     selectedSpecs,
@@ -1218,7 +1233,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     confirmDialog({
       title: 'Xác nhận vô hiệu hóa tài khoản',
       message: `Bạn có chắc chắn muốn vô hiệu hóa tài khoản ${user.name} (${user.account})? Tài khoản sẽ bị ẩn khỏi giao diện và ngưng hoạt động nhưng dữ liệu vẫn được bảo lưu an toàn trong Database. Tất cả task của thành viên này sẽ chuyển thành Task Trống để Leader giao cho người khác.`,
-      confirmText: 'Xác nhận vô hiệu hóa',
+      confirmText: 'Vô hiệu hóa',
       type: 'danger',
       onConfirm: () => deleteUser(user.id),
     });
@@ -1238,7 +1253,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     confirmDialog({
       title: 'Xác nhận đặt lại mật khẩu',
       message: `Bạn có chắc chắn muốn đặt lại mật khẩu cho tài khoản ${user.name} (${user.account})? Hệ thống sẽ ngay lập tức đăng xuất tài khoản này khỏi tất cả các thiết bị đã đăng nhập và tạo mật khẩu tạm thời mới để bạn gửi cho nhân viên.`,
-      confirmText: 'Đặt lại & Đăng xuất thiết bị',
+      confirmText: 'Đặt lại',
       type: 'warning',
       onConfirm: async () => {
         const res = await resetUserPassword(user.id);
@@ -1531,6 +1546,19 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 </>
               ) : activeSubTab === 'USERS' ? (
                 <>
+                  {currentUser?.account?.trim().toLowerCase() === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsTelegramSettingsOpen(true)}
+                      className="flex items-center gap-1.5 h-[34px] px-3.5 bg-white dark:bg-slate-900 hover:bg-[rgba(24,144,255,0.08)] text-[#1890FF] border border-[#1890FF]/40 text-xs font-medium rounded-[8px] transition shrink-0 active:scale-95 cursor-pointer"
+                      title="Cấu hình Bot Telegram & Mapping Topic theo Role (Chỉ dành cho tài khoản admin)"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span className="sm:hidden">Tele</span>
+                      <span className="hidden sm:inline">Bot Telegram</span>
+                    </button>
+                  )}
+
                   <button
                     onClick={handleBatchReset}
                     className="flex items-center gap-1.5 h-[34px] px-3.5 bg-white dark:bg-slate-900 hover:bg-[rgba(255,169,64,0.12)] text-[#D46B08] border border-[#FFA940]/50 text-xs font-medium rounded-[8px] transition shrink-0 active:scale-95 cursor-pointer"
@@ -1816,7 +1844,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                           </td>
                           <td className="py-3 px-3 text-[11px]">
                             <div className="text-slate-700 font-semibold">{u.email || '—'}</div>
-                            <div className="text-slate-400 font-mono text-[10px]">{u.phone || '—'}</div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-slate-400 font-mono text-[10px]">{u.phone || '—'}</span>
+                              {u.telegramAccount && (
+                                <span
+                                  className="inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/50 px-1.5 py-0.2 rounded border border-sky-200/80 dark:border-sky-800/70"
+                                  title={u.telegramUserId ? `Telegram đã liên kết ID (${u.telegramUserId})` : 'Account Telegram'}
+                                >
+                                  @{u.telegramAccount.replace(/^@+/, '')}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-3 text-center">
                             <div className="flex flex-wrap justify-center gap-1">
@@ -2327,18 +2365,18 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         ) : (
           <div className="space-y-3 pt-1">
             {/* Desktop Table */}
-            <div className="hidden sm:block border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+            <div className="hidden sm:block border border-slate-200 rounded-2xl overflow-x-auto shadow-2xs">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
                     <th className="py-2.5 px-3 w-10 text-center">STT</th>
-                    <th className="py-2.5 px-3">STAFF CODE</th>
-                    <th className="py-2.5 px-4">HỌ VÀ TÊN</th>
-                    <th className="py-2.5 px-3">GMAIL / SĐT</th>
-                    <th className="py-2.5 px-3 text-center">ROLE</th>
-                    <th className="py-2.5 px-3 text-center">LEVEL</th>
-                    <th className="py-2.5 px-3">CÔNG NGHỆ</th>
-                    <th className="py-2.5 px-3 text-right">THAO TÁC</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">STAFF CODE</th>
+                    <th className="py-2.5 px-4 whitespace-nowrap">HỌ VÀ TÊN</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">GMAIL / SĐT</th>
+                    <th className="py-2.5 px-3 text-center whitespace-nowrap">ROLE</th>
+                    <th className="py-2.5 px-3 text-center whitespace-nowrap">LEVEL</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap">CÔNG NGHỆ</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap">THAO TÁC</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
@@ -2423,14 +2461,14 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                         <td className="py-2.5 px-3 text-[11px] text-slate-600 font-semibold">
                           {u.technologies || '—'}
                         </td>
-                        <td className="py-2.5 px-3 text-right">
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => handleRestoreUser(u)}
-                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-2xs"
+                            className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 whitespace-nowrap active:scale-95 cursor-pointer shadow-2xs"
                             title="Khôi phục & Mở khóa tài khoản này"
                           >
-                            <RotateCcw className="w-3.5 h-3.5" />
+                            <RotateCcw className="w-3.5 h-3.5 shrink-0" />
                             <span>Mở Khóa</span>
                           </button>
                         </td>
@@ -2752,21 +2790,21 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                             )}
                           </div>
                         </td>
-                        <td className="py-2.5 px-3 text-right">
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => handleCopyIndividualFromBatch(u.account, u.name, u.tempPassword, u.id)}
-                            className="px-2.5 py-1 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition inline-flex items-center gap-1 active:scale-95 cursor-pointer"
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-purple-50 text-slate-700 hover:text-purple-700 rounded-lg text-[11px] font-semibold border border-slate-200 transition inline-flex items-center gap-1 whitespace-nowrap active:scale-95 cursor-pointer"
                             title="Sao chép nội dung tin nhắn riêng cho thành viên này"
                           >
                             {individualCopiedId === u.id ? (
                               <>
-                                <Check className="w-3 h-3 text-emerald-600" />
+                                <Check className="w-3 h-3 text-emerald-600 shrink-0" />
                                 <span className="text-emerald-700">Đã chép</span>
                               </>
                             ) : (
                               <>
-                                <Copy className="w-3 h-3 text-slate-400" />
+                                <Copy className="w-3 h-3 text-slate-400 shrink-0" />
                                 <span>Chép info</span>
                               </>
                             )}
@@ -2967,8 +3005,21 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               />
             </div>
 
-            {/* Row 5: Bank Account (Full width in 2-col layout) */}
-            <div className="sm:col-span-2">
+            {/* Row 5: Account Telegram | Bank Account */}
+            <div>
+              <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
+                Account Telegram:
+              </label>
+              <input
+                type="text"
+                placeholder="VD: @lichbich (dùng để tag & duyệt task)"
+                value={userTelegramAccount}
+                onChange={(e) => setUserTelegramAccount(e.target.value)}
+                className="w-full h-[38px] bg-white dark:bg-slate-800/90 border border-[#E8E9EF] dark:border-slate-700 rounded-[8px] px-3.5 text-xs text-[#1D202A] dark:text-slate-100 placeholder:text-[#838899] hover:border-[#40A9FF] focus:outline-none focus:border-[#1890FF] focus:shadow-[0_0_0_3px_#E6F7FF] dark:focus:shadow-none font-mono transition"
+              />
+            </div>
+
+            <div>
               <label className="text-[13px] font-medium text-[#1D202A] dark:text-slate-200 block mb-1.5">
                 Tài Khoản Ngân Hàng (Tk Bank):
               </label>
@@ -4005,6 +4056,16 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           setUserDetailEditMode(false);
         }}
       />
+
+      {/* Telegram Bot Settings Modal (Strict Root Admin: staff code 'admin' only) */}
+      {currentUser?.account?.trim().toLowerCase() === 'admin' && (
+        <TelegramSettingsModal
+          isOpen={isTelegramSettingsOpen}
+          onClose={() => setIsTelegramSettingsOpen(false)}
+          roles={roles}
+          currentUserAccount={currentUser?.account}
+        />
+      )}
     </div>
   );
 };
