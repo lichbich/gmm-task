@@ -43,6 +43,7 @@ import {
   uploadAndInsertImage,
   getImageFilesFromClipboard,
   getImageFilesFromDrop,
+  deleteUploadedImages,
 } from '../lib/imageUploadHelper';
 import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
 import { ImageLightbox } from './common/ImageLightbox';
@@ -192,6 +193,7 @@ export const TicketDetailModal: React.FC<TicketDetailModalProps> = ({
       onConfirm: () => {
         const newDesc = removeImageFromDescription(ticket.description, imageUrl);
         updateTicket(ticket.id, { description: newDesc });
+        deleteUploadedImages(imageUrl);
         setEditDescription(newDesc);
         if (lightboxImage?.url === imageUrl) {
           setLightboxImage(null);

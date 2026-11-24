@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { Modal } from './common/Modal';
 import { UserAvatar } from './common/UserAvatar';
-import { uploadImageToCatbox } from '../lib/imageUploadHelper';
+import { uploadImageToCatbox, deleteUploadedImages } from '../lib/imageUploadHelper';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -248,8 +248,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     setSuccessMsg('');
 
     try {
+      const previousAvatarUrl = userRecord.avatarUrl;
       const result = await uploadImageToCatbox(file);
       updateUser(userRecord.id, { avatarUrl: result.url });
+      if (previousAvatarUrl && previousAvatarUrl !== result.url) {
+        deleteUploadedImages(previousAvatarUrl);
+      }
       setSuccessMsg('Cập nhật ảnh đại diện thành công!');
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err: any) {
@@ -264,7 +268,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   };
 
   const handleRemoveAvatar = () => {
+    const previousAvatarUrl = userRecord.avatarUrl;
     updateUser(userRecord.id, { avatarUrl: '' });
+    if (previousAvatarUrl) {
+      deleteUploadedImages(previousAvatarUrl);
+    }
     setSuccessMsg('Đã gỡ ảnh đại diện.');
     setTimeout(() => setSuccessMsg(''), 3000);
   };

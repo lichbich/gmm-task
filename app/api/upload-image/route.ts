@@ -63,6 +63,7 @@ async function uploadToCatbox(file: Blob, fileName: string): Promise<string | nu
         'User-Agent': BROWSER_USER_AGENT,
         Accept: '*/*',
       },
+      signal: AbortSignal.timeout(3500),
     });
 
     if (catboxResponse.ok) {
@@ -120,14 +121,14 @@ export async function POST(req: NextRequest) {
 
     const fileName = (file as any).name || 'image.png';
 
-    // 1. Prioritize Vercel Blob when BLOB_READ_WRITE_TOKEN is available
-    let uploadedUrl = await uploadToVercelBlob(file, fileName);
-    let provider: 'vercel-blob' | 'catbox' = 'vercel-blob';
+    // 1. Thử Catbox trước để tiết kiệm dung lượng miễn phí 1GB trên Vercel Blob (tự cắt timeout 3.5s)
+    let uploadedUrl = await uploadToCatbox(file, fileName);
+    let provider: 'vercel-blob' | 'catbox' = 'catbox';
 
-    // 2. Fallback to Catbox (e.g. local dev without BLOB_READ_WRITE_TOKEN)
+    // 2. Nếu Catbox chặn IP Vercel / lỗi -> tự động fallback ngay sang Vercel Blob
     if (!uploadedUrl) {
-      uploadedUrl = await uploadToCatbox(file, fileName);
-      provider = 'catbox';
+      uploadedUrl = await uploadToVercelBlob(file, fileName);
+      provider = 'vercel-blob';
     }
 
     if (!uploadedUrl) {

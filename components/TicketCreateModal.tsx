@@ -22,6 +22,8 @@ import {
   uploadAndInsertImage,
   getImageFilesFromClipboard,
   getImageFilesFromDrop,
+  extractBlobUrlsFromText,
+  deleteUploadedImages,
 } from '../lib/imageUploadHelper';
 import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
 import { ImageLightbox } from './common/ImageLightbox';
@@ -127,6 +129,10 @@ export const TicketCreateModal: React.FC<TicketCreateModalProps> = ({
         cancelText: 'Tiếp tục điền',
         type: 'warning',
         onConfirm: () => {
+          const unsavedBlobUrls = extractBlobUrlsFromText(description);
+          if (unsavedBlobUrls.length > 0) {
+            deleteUploadedImages(unsavedBlobUrls);
+          }
           onClose();
         },
       });

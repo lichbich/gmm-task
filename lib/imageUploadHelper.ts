@@ -1,12 +1,12 @@
 import { encryptImageFile } from './imageCryptoHelper';
 
 async function compressImageIfNeeded(file: File): Promise<File> {
-  // If not image or is gif / svg or already under 2MB, keep original
+  // If not image or is gif / svg or already small (<= 200KB), keep original
   if (
     !file.type.startsWith('image/') ||
     file.type === 'image/gif' ||
     file.type === 'image/svg+xml' ||
-    file.size <= 2 * 1024 * 1024
+    file.size <= 200 * 1024
   ) {
     return file;
   }
@@ -17,7 +17,7 @@ async function compressImageIfNeeded(file: File): Promise<File> {
     img.onload = () => {
       URL.revokeObjectURL(url);
       let { width, height } = img;
-      const maxDim = 2048;
+      const maxDim = 1920;
       if (width > maxDim || height > maxDim) {
         if (width > height) {
           height = Math.round((height * maxDim) / width);
@@ -50,7 +50,7 @@ async function compressImageIfNeeded(file: File): Promise<File> {
           }
         },
         'image/webp',
-        0.88
+        0.82
       );
     };
     img.onerror = () => {
@@ -59,6 +59,45 @@ async function compressImageIfNeeded(file: File): Promise<File> {
     };
     img.src = url;
   });
+}
+
+const VERCEL_BLOB_URL_EXTRACT_REGEX =
+  /https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\/saho-uploads\/[^\s\)"'<>]+/gi;
+
+export function isVercelBlobUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return false;
+  return /^https:\/\/[a-z0-9-]+\.public\.blob\.vercel-storage\.com\/saho-uploads\//i.test(url.trim());
+}
+
+/**
+ * Trích xuất toàn bộ URL ảnh lưu trên Vercel Blob từ nội dung text / markdown
+ */
+export function extractBlobUrlsFromText(text?: string | null): string[] {
+  if (!text || typeof text !== 'string') return [];
+  const matches = text.match(VERCEL_BLOB_URL_EXTRACT_REGEX);
+  if (!matches) return [];
+  return Array.from(new Set(matches));
+}
+
+/**
+ * Xóa file ảnh trên Vercel Blob Storage khi người dùng xóa ảnh/task/ticket/avatar trên web.
+ * Chạy ngầm an toàn (không chặn UI nếu mất mạng).
+ */
+export async function deleteUploadedImages(urls: string | string[]): Promise<void> {
+  const list = Array.isArray(urls) ? urls : [urls];
+  const blobUrls = Array.from(new Set(list.filter((u) => isVercelBlobUrl(u))));
+  if (blobUrls.length === 0) return;
+
+  try {
+    await fetch('/api/delete-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls: blobUrls }),
+      keepalive: true,
+    });
+  } catch (err) {
+    console.warn('[deleteUploadedImages] skip:', err);
+  }
 }
 
 /**
