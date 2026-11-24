@@ -20,6 +20,7 @@ import {
   History,
   FolderGit2,
   Users,
+  Plus,
 } from 'lucide-react';
 import { AppNotification } from '../types/notification';
 import { DB_ROOT_NODE, IS_TEST_DB } from '../lib/firebase';
@@ -34,6 +35,7 @@ interface HeaderProps {
   activeUserSubTab?: UserSubTabType;
   setActiveUserSubTab?: (tab: UserSubTabType) => void;
   onSelectTask?: (taskId: string, notification?: AppNotification) => void;
+  onCreateTask?: () => void;
   onOpenMobileMenu?: () => void;
   isProfileModalOpenExternal?: boolean;
   setIsProfileModalOpenExternal?: (open: boolean) => void;
@@ -69,6 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
   activeUserSubTab = 'USERS',
   setActiveUserSubTab,
   onSelectTask,
+  onCreateTask,
   onOpenMobileMenu,
   isProfileModalOpenExternal,
   setIsProfileModalOpenExternal,
@@ -192,8 +195,19 @@ export const Header: React.FC<HeaderProps> = ({
             </nav>
           </div>
 
-          {/* Right: Sheet Week Indicator + Tour + Notification + Theme + Profile */}
+          {/* Right: Quick Create Task + Sheet Week Indicator + Notification + Theme + Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {currentUser && onCreateTask && (
+              <button
+                type="button"
+                onClick={onCreateTask}
+                title="Tạo Task Mới"
+                className="inline-flex items-center gap-1.5 h-[30px] px-2.5 sm:px-3 bg-[#1890FF] hover:bg-[#40A9FF] text-white text-[12px] font-medium rounded-[8px] shadow-[0_2px_8px_rgba(24,144,255,0.28)] transition active:scale-95 shrink-0 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline whitespace-nowrap">Tạo Task Mới</span>
+              </button>
+            )}
             {IS_TEST_DB && (
               <span
                 title={`Đang kết nối dữ liệu thử nghiệm Firebase (${DB_ROOT_NODE}) — không ảnh hưởng dữ liệu thật`}

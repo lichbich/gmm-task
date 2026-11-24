@@ -27,7 +27,6 @@ import { extractMentions, extractDiscussionParticipants, parseNoteLine } from '.
 import { AIPermissionsConfig, DEFAULT_AI_ALLOWED_ACCOUNTS, isAIFeatureEnabled } from '../lib/geminiService';
 import { SystemPermissionsMatrix, getDefaultPermissionsMatrix, checkUserSystemPermission } from '../lib/permissionsHelper';
 import { ensureTaskTitlePrefix } from '../lib/taskPrefixHelper';
-import { extractBlobUrlsFromText, deleteUploadedImages } from '../lib/imageUploadHelper';
 import { calculateParentMetrics } from '../lib/subtaskHelper';
 import {
   generateNextTaskCode,
@@ -2413,33 +2412,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveLocalTasksCache(updated);
     if (targetTaskUpdated) {
       saveTaskToFirebase(targetTaskUpdated).catch(console.error);
-
-      // Tự động xóa file ảnh trên Vercel Blob nếu người dùng đã xóa ảnh khỏi mô tả / ghi chú task
-      if (currentTaskBeforeUpdate && (updates.description !== undefined || updates.notes !== undefined)) {
-        const oldBlobUrls = new Set([
-          ...extractBlobUrlsFromText(currentTaskBeforeUpdate.description),
-          ...extractBlobUrlsFromText(currentTaskBeforeUpdate.notes),
-        ]);
-        if (oldBlobUrls.size > 0) {
-          const updatedTarget = targetTaskUpdated as Task;
-          const remainingBlobUrls = new Set<string>([
-            ...extractBlobUrlsFromText(updatedTarget.description),
-            ...extractBlobUrlsFromText(updatedTarget.notes),
-          ]);
-          updated.forEach((other) => {
-            if (other.id === id) return;
-            extractBlobUrlsFromText(other.description).forEach((u) => remainingBlobUrls.add(u));
-            extractBlobUrlsFromText(other.notes).forEach((u) => remainingBlobUrls.add(u));
-          });
-          tickets.forEach((tk) => {
-            extractBlobUrlsFromText(tk.description).forEach((u) => remainingBlobUrls.add(u));
-          });
-          const removedUrls = Array.from(oldBlobUrls).filter((u) => !remainingBlobUrls.has(u));
-          if (removedUrls.length > 0) {
-            deleteUploadedImages(removedUrls);
-          }
-        }
-      }
     }
 
     parentsUpdated.forEach((p) => {
@@ -2644,26 +2616,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saveTaskToFirebase(parentToSync).catch(console.error);
     }
     promotedSubtasks.forEach((p) => saveTaskToFirebase(p).catch(console.error));
-
-    // Tự động dọn file ảnh trên Vercel Blob thuộc task bị xóa (chỉ xóa nếu không còn task/ticket nào khác dùng)
-    const deletedTaskBlobUrls = [
-      ...extractBlobUrlsFromText(taskToDelete.description),
-      ...extractBlobUrlsFromText(taskToDelete.notes),
-    ];
-    if (deletedTaskBlobUrls.length > 0) {
-      const stillReferenced = new Set<string>();
-      updated.forEach((other) => {
-        extractBlobUrlsFromText(other.description).forEach((u) => stillReferenced.add(u));
-        extractBlobUrlsFromText(other.notes).forEach((u) => stillReferenced.add(u));
-      });
-      tickets.forEach((tk) => {
-        extractBlobUrlsFromText(tk.description).forEach((u) => stillReferenced.add(u));
-      });
-      const orphanUrls = deletedTaskBlobUrls.filter((u) => !stillReferenced.has(u));
-      if (orphanUrls.length > 0) {
-        deleteUploadedImages(orphanUrls);
-      }
-    }
   };
 
   const deleteTasks = (ids: string[]) => {
@@ -2711,29 +2663,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks(updated);
     saveLocalTasksCache(updated);
     deleteMultipleTasksFromFirebase(ids, authSession?.account).catch(console.error);
-
-    // Tự động dọn file ảnh trên Vercel Blob của các task bị xóa hàng loạt
-    const deletedTasksBlobUrls = new Set<string>();
-    tasks.forEach((t) => {
-      if (idSet.has(t.id)) {
-        extractBlobUrlsFromText(t.description).forEach((u) => deletedTasksBlobUrls.add(u));
-        extractBlobUrlsFromText(t.notes).forEach((u) => deletedTasksBlobUrls.add(u));
-      }
-    });
-    if (deletedTasksBlobUrls.size > 0) {
-      const stillReferenced = new Set<string>();
-      updated.forEach((other) => {
-        extractBlobUrlsFromText(other.description).forEach((u) => stillReferenced.add(u));
-        extractBlobUrlsFromText(other.notes).forEach((u) => stillReferenced.add(u));
-      });
-      tickets.forEach((tk) => {
-        extractBlobUrlsFromText(tk.description).forEach((u) => stillReferenced.add(u));
-      });
-      const orphanUrls = Array.from(deletedTasksBlobUrls).filter((u) => !stillReferenced.has(u));
-      if (orphanUrls.length > 0) {
-        deleteUploadedImages(orphanUrls);
-      }
-    }
     parentsUpdated.forEach((p) => saveTaskToFirebase(p).catch(console.error));
     promotedSubtasksTotal.forEach((p) => saveTaskToFirebase(p).catch(console.error));
   };
@@ -4044,55 +3973,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await set(ref(database, `${DB_ROOT_NODE}/tasks/${existingTask.id}`), updatedTask);
       }
     }
-    if (updates.description !== undefined || updates.comments !== undefined) {
-      const oldTicketUrls = new Set<string>([
-        ...extractBlobUrlsFromText(currentTicket.description),
-        ...(currentTicket.comments || []).flatMap((c) => extractBlobUrlsFromText(c.content)),
-      ]);
-      if (oldTicketUrls.size > 0) {
-        const nextDesc = updates.description !== undefined ? updates.description : currentTicket.description;
-        const nextComments = updates.comments !== undefined ? updates.comments : currentTicket.comments || [];
-        const stillUsed = new Set<string>([
-          ...extractBlobUrlsFromText(nextDesc),
-          ...nextComments.flatMap((c) => extractBlobUrlsFromText(c.content)),
-        ]);
-        tasks.forEach((t) => {
-          if (t.ticketId === id) return;
-          extractBlobUrlsFromText(t.description).forEach((u) => stillUsed.add(u));
-          extractBlobUrlsFromText(t.notes).forEach((u) => stillUsed.add(u));
-        });
-        const removedTicketUrls = Array.from(oldTicketUrls).filter((u) => !stillUsed.has(u));
-        if (removedTicketUrls.length > 0) {
-          deleteUploadedImages(removedTicketUrls);
-        }
-      }
-    }
   };
 
   const deleteTicket = async (id: string): Promise<void> => {
-    const ticketToDelete = tickets.find((tk) => tk.id === id);
     await remove(ref(database, `${DB_ROOT_NODE}/tickets/${id}`));
-    if (ticketToDelete) {
-      const ticketBlobUrls = new Set<string>([
-        ...extractBlobUrlsFromText(ticketToDelete.description),
-        ...(ticketToDelete.comments || []).flatMap((c) => extractBlobUrlsFromText(c.content)),
-      ]);
-      if (ticketBlobUrls.size > 0) {
-        const stillReferenced = new Set<string>();
-        tasks.forEach((t) => {
-          extractBlobUrlsFromText(t.description).forEach((u) => stillReferenced.add(u));
-          extractBlobUrlsFromText(t.notes).forEach((u) => stillReferenced.add(u));
-        });
-        tickets.forEach((tk) => {
-          if (tk.id === id) return;
-          extractBlobUrlsFromText(tk.description).forEach((u) => stillReferenced.add(u));
-        });
-        const orphanUrls = Array.from(ticketBlobUrls).filter((u) => !stillReferenced.has(u));
-        if (orphanUrls.length > 0) {
-          deleteUploadedImages(orphanUrls);
-        }
-      }
-    }
   };
 
   const assignTicket = async (ticketId: string, assigneeAccount: string): Promise<void> => {

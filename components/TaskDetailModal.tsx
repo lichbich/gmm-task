@@ -70,7 +70,6 @@ import {
   uploadAndInsertImage,
   getImageFilesFromClipboard,
   getImageFilesFromDrop,
-  deleteUploadedImages,
 } from '../lib/imageUploadHelper';
 import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
 import { ImageLightbox } from './common/ImageLightbox';
@@ -533,7 +532,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       onConfirm: () => {
         const newDesc = removeImageFromDescription(task.description, imageUrl);
         updateTask(task.id, { description: newDesc });
-        deleteUploadedImages(imageUrl);
         setDescText(newDesc);
         if (lightboxImage?.url === imageUrl) {
           setLightboxImage(null);

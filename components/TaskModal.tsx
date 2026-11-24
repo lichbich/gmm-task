@@ -8,7 +8,7 @@ import { Dropdown, DropdownOption } from './common/Dropdown';
 import { DatePicker } from './common/DatePicker';
 import { UserAvatar } from './common/UserAvatar';
 import { insertCheckboxToText, removeImageFromDescription } from '../lib/descriptionHelper';
-import { uploadAndInsertImage, getImageFilesFromClipboard, getImageFilesFromDrop, extractBlobUrlsFromText, deleteUploadedImages } from '../lib/imageUploadHelper';
+import { uploadAndInsertImage, getImageFilesFromClipboard, getImageFilesFromDrop } from '../lib/imageUploadHelper';
 import { ImageAttachmentStrip } from './common/ImageAttachmentStrip';
 import { ImageLightbox } from './common/ImageLightbox';
 import { DescriptionEditor } from './common/DescriptionEditor';
@@ -699,19 +699,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         cancelText: 'Tiếp tục điền',
         type: 'warning',
         onConfirm: () => {
-          // Dọn các ảnh mới upload lên Vercel Blob trong phiên soạn thảo nhưng người dùng bấm Hủy không lưu
-          const origBlobSet = new Set<string>(
-            task
-              ? [...extractBlobUrlsFromText(task.description), ...extractBlobUrlsFromText(task.notes)]
-              : []
-          );
-          const unsavedBlobUrls = [
-            ...extractBlobUrlsFromText(description),
-            ...extractBlobUrlsFromText(notes),
-          ].filter((u) => !origBlobSet.has(u));
-          if (unsavedBlobUrls.length > 0) {
-            deleteUploadedImages(unsavedBlobUrls);
-          }
           onClose();
         },
       });

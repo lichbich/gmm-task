@@ -26,7 +26,6 @@ import {
   uploadAndInsertImage,
   getImageFilesFromClipboard,
   getImageFilesFromDrop,
-  deleteUploadedImages,
 } from '../../lib/imageUploadHelper';
 import {
   applyInlineFormatting,
@@ -518,12 +517,6 @@ export const DescriptionEditor: React.FC<DescriptionEditorProps> = ({
   const handleRemoveImageBlock = (blockId: string) => {
     const blockIndex = blocks.findIndex((b) => b.id === blockId);
     if (blockIndex === -1) return;
-
-    const removedBlock = blocks[blockIndex];
-    if (removedBlock.type === 'image' && removedBlock.url) {
-      // Xóa luôn file ảnh tương ứng trên Vercel Blob Storage để không tồn rác dung lượng
-      deleteUploadedImages(removedBlock.url);
-    }
 
     const newBlocks = blocks.filter((b) => b.id !== blockId);
 

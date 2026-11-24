@@ -568,6 +568,7 @@ function MainApp() {
               activeUserSubTab={effectiveUserSubTab}
               setActiveUserSubTab={handleSetActiveUserSubTab}
               onSelectTask={handleSelectTaskFromNotification}
+              onCreateTask={() => handleOpenTaskModal()}
               onOpenMobileMenu={() => setMobileSidebarOpen(true)}
               isProfileModalOpenExternal={isProfileModalOpen}
               setIsProfileModalOpenExternal={setIsProfileModalOpen}
