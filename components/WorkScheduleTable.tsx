@@ -795,11 +795,11 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       if (!container) return;
 
       const isDesktop = window.innerWidth >= 768;
-      const topOffset = isDesktop ? 70 : 60;
+      const topOffset = isDesktop ? 116 : 104;
       const containerRect = container.getBoundingClientRect();
 
       // Show floating bar when scrolling through the table area
-      const isInTableArea = containerRect.top <= topOffset && containerRect.bottom >= topOffset + 100;
+      const isInTableArea = containerRect.top <= 70 && containerRect.bottom >= topOffset + 100;
       setShowFloatingRoleBar(isInTableArea);
 
       // When smooth scrolling programmatically to a selected role, skip updating intermediate active roles to prevent flickering
@@ -838,7 +838,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       const id = isDesktop ? `role-section-${roleCode}` : `mobile-role-section-${roleCode}`;
       const el = document.getElementById(id);
       if (el) {
-        const topOffset = isDesktop ? 65 : 55;
+        const topOffset = isDesktop ? 120 : 110;
         const elementPosition = el.getBoundingClientRect().top + window.scrollY;
         const offsetPosition = Math.max(0, elementPosition - topOffset);
 
@@ -1454,24 +1454,32 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
         <td className="py-3 px-3 font-medium">
           <div className="space-y-1">
             {(() => {
-              const currentAcc = t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
+              const primaryAcc = t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
+              const isForAccountSupporter = Boolean(
+                forAccount &&
+                (t.supporterAccounts || []).some((s) => s.trim().toLowerCase() === forAccount.trim().toLowerCase())
+              );
+              const displayAcc =
+                forAccount && (!isSubtask || isForAccountSupporter || !primaryAcc)
+                  ? forAccount
+                  : primaryAcc;
               const collabs = (parentMetrics && parentMetrics.collaboratorAccounts.length > 0)
                 ? parentMetrics.collaboratorAccounts
                 : (t.supporterAccounts || []);
 
-              if (currentAcc) {
-                const userObj = userByAccountMap.get(currentAcc.toLowerCase());
+              if (displayAcc) {
+                const userObj = userByAccountMap.get(displayAcc.toLowerCase());
                 const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
                 return (
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-1.5">
                       <UserAvatar
                         user={userObj}
-                        account={currentAcc}
+                        account={displayAcc}
                         size="xs"
                         shape="circle"
                       />
-                      <span className={getUserRoleColorClass(userRole)}>{currentAcc}</span>
+                      <span className={getUserRoleColorClass(userRole)}>{displayAcc}</span>
                     </div>
 
                     {collabs.length > 0 && (
@@ -1479,7 +1487,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
                         <TaskSupportersBadge
                           supporterAccounts={collabs}
                           users={users}
-                          primaryAssignee={currentAcc}
+                          primaryAssignee={primaryAcc}
                           currentViewingAccount={forAccount}
                           size="sm"
                         />
@@ -1835,20 +1843,28 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
                 {(() => {
-                  const currentAcc = t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
-                  if (currentAcc) {
-                    const userObj = userByAccountMap.get(currentAcc.toLowerCase());
+                  const primaryAcc = t.assigneeAccount || (hasSub ? t.subtaskReviewerAccount : '');
+                  const isForAccountSupporter = Boolean(
+                    forAccount &&
+                    (t.supporterAccounts || []).some((s) => s.trim().toLowerCase() === forAccount.trim().toLowerCase())
+                  );
+                  const displayAcc =
+                    forAccount && (!isSubtask || isForAccountSupporter || !primaryAcc)
+                      ? forAccount
+                      : primaryAcc;
+                  if (displayAcc) {
+                    const userObj = userByAccountMap.get(displayAcc.toLowerCase());
                     const userRole = userObj ? getUserRoleInSpec(userObj, t.role) : 'Member';
                     return (
                       <>
                         <UserAvatar
                           user={userObj}
-                          account={currentAcc}
+                          account={displayAcc}
                           size="xs"
                           shape="circle"
                         />
                         <span className={`text-xs ${getUserRoleColorClass(userRole)}`}>
-                          {currentAcc}
+                          {displayAcc}
                         </span>
                       </>
                     );
@@ -2025,10 +2041,10 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({ onOpenTask
       {/* Dynamic Floating Sticky Role Bar (Option 2 - Linear / Notion style) */}
       {subTab === 'ALL_TASKS' && groupedTasksByRole.length > 0 && (
         <div
-          className={`fixed top-3 sm:top-4 left-0 right-0 z-40 flex justify-center px-3 transition-all duration-300 ease-out transform ${
+          className={`fixed top-[64px] left-0 right-0 z-30 flex justify-center px-3 pointer-events-none transition-all duration-300 ease-out transform ${
             showFloatingRoleBar && activeRoleInView
-              ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto visible'
-              : 'opacity-0 scale-90 -translate-y-3 pointer-events-none invisible'
+              ? 'opacity-100 scale-100 translate-y-0 visible'
+              : 'opacity-0 scale-90 -translate-y-3 invisible'
           }`}
           aria-hidden={!showFloatingRoleBar}
         >
